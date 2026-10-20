@@ -52,16 +52,17 @@ export function LaunchDrawer({
     // fitViewport: a long list must never push `+ Directory` above the top of
     // the screen, so the drawer is capped at the room above the button and
     // only the rows scroll.
-    <Dropdown isOpen={isOpen} fitViewport className={`min-w-128 ${className}`}>
+    <Dropdown isOpen={isOpen} fitViewport className={`w-[260px] ${className}`}>
       <div data-testid="launch-drawer" className="flex flex-col min-h-0">
-        {/* DropdownItem hard-resets to border-none, so the separator lives on
-            this wrapper. Pinned: it never scrolls away with the rows. */}
-        <div className="shrink-0 border-b-2 border-border">
-          <DropdownItem onClick={onAddDirectory} className="text-base text-accent-bright">
-            + Directory
-          </DropdownItem>
-        </div>
-        <div className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pixel-scrollbar">
+        <p className="m-0 px-10 pt-6 pb-4 text-2xs font-semibold uppercase tracking-wide text-text-muted shrink-0">
+          ¿Dónde va a trabajar?
+        </p>
+        {directories.length === 0 && (
+          <p className="m-0 px-10 pb-6 text-xs text-text-muted">
+            Todavía no agregaste carpetas. Sumá la de tu proyecto y el agente arranca ahí.
+          </p>
+        )}
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain thin-scrollbar">
           {directories.map((directory) => (
             <DirectoryRow
               key={directory.path}
@@ -70,6 +71,17 @@ export function LaunchDrawer({
               onEditDirectory={onEditDirectory}
             />
           ))}
+        </div>
+        {/* Pinned under the list: it never scrolls away with the rows. */}
+        <div className="shrink-0 border-t border-border mt-2 pt-2">
+          <DropdownItem onClick={onAddDirectory} className="text-sm text-accent-bright font-medium">
+            <span className="flex items-center gap-6">
+              <span className="material-symbols-sharp text-sm" aria-hidden="true">
+                create_new_folder
+              </span>
+              Agregar carpeta
+            </span>
+          </DropdownItem>
         </div>
       </div>
     </Dropdown>
@@ -143,18 +155,26 @@ function DirectoryRow({ directory, onSelect, onEditDirectory }: DirectoryRowProp
           }
           onSelect(directory);
         }}
-        className="flex-1 min-w-0 text-base"
+        className="flex-1 min-w-0 text-sm"
       >
         <span className="flex items-center justify-between gap-10">
-          <span className="overflow-hidden text-ellipsis" title={directory.path}>
-            {directory.name}
+          <span className="flex items-center gap-6 min-w-0">
+            <span className="material-symbols-sharp text-sm text-text-muted" aria-hidden="true">
+              folder
+            </span>
+            <span
+              className="overflow-hidden text-ellipsis whitespace-nowrap"
+              title={directory.path}
+            >
+              {directory.name}
+            </span>
           </span>
           {directory.source === 'host' && (
             <span
               aria-hidden="true"
-              className="shrink-0 text-2xs text-text-muted border-2 border-border pl-4 pr-2 leading-none"
+              className="shrink-0 text-2xs text-text-muted rounded-full bg-bg-thumb px-6 py-1 leading-none"
             >
-              host
+              inicio
             </span>
           )}
         </span>
@@ -165,9 +185,9 @@ function DirectoryRow({ directory, onSelect, onEditDirectory }: DirectoryRowProp
         // pointers, where the row's long-press is the edit affordance.
         <button
           onClick={() => onEditDirectory(directory)}
-          aria-label={`Edit ${directory.name}`}
-          title="Edit directory"
-          className="shrink-0 self-stretch flex items-center px-8 bg-transparent border-none rounded-none cursor-pointer text-sm leading-none text-text-muted hover:text-text opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:hidden"
+          aria-label={`Editar ${directory.name}`}
+          title="Editar carpeta"
+          className="shrink-0 self-stretch flex items-center px-8 bg-transparent border-none rounded-md cursor-pointer text-sm leading-none text-text-muted hover:text-text opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:hidden"
         >
           <span className="material-symbols-sharp text-[12px]" aria-hidden="true">
             edit

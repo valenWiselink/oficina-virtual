@@ -35,7 +35,7 @@ function ToolDot({ tool }: { tool: ToolActivity }) {
       : 'bg-status-active';
   return (
     <span
-      className={`w-6 h-6 rounded-full inline-block shrink-0 ${color} ${tool.done ? '' : 'pixel-pulse'}`}
+      className={`w-6 h-6 rounded-full inline-block shrink-0 ${color} ${tool.done ? '' : 'soft-pulse'}`}
     />
   );
 }
@@ -106,12 +106,12 @@ export function DebugView({
     return (
       <div
         key={id}
-        className={`rounded-none py-6 px-8 border-2 cursor-pointer ${isSelected ? 'border-accent bg-active-bg' : 'border-border'}`}
+        className={`rounded-md py-6 px-8 border cursor-pointer ${isSelected ? 'border-accent bg-active-bg' : 'border-border'}`}
         onClick={() => onSelectAgent(id)}
       >
         <span className="flex items-center justify-between">
           <span
-            className={`rounded-none py-6 px-10 text-xl ${isSelected ? 'text-white font-bold' : ''}`}
+            className={`rounded-md py-6 px-10 text-xl ${isSelected ? 'text-white font-bold' : ''}`}
           >
             Agent #{id}
           </span>

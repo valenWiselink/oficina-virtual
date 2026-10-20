@@ -1,8 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/icons/icon-256.png?v=2" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg?v=4" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png?v=4" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png?v=4" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/icon-48.png?v=4" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png?v=4" />
     <!-- viewport-fit=cover: draw under the iPhone notch/home bar (safe-area
          insets pad the card bar back out). user-scalable=no: pinch belongs to
          the office canvas zoom, not page zoom. interactive-widget: Android
@@ -13,20 +17,27 @@
     />
     <!-- The standalone page URL carries the server token (?token=); never send it as a Referer. -->
     <meta name="referrer" content="no-referrer" />
-    <meta name="theme-color" content="#1e1e2e" />
+    <meta name="theme-color" content="#f8f3ed" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <!-- iOS "Add to Home Screen": standalone chrome-less launch -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Pixel Agents" />
-    <link rel="apple-touch-icon" href="/icons/icon-256.png?v=2" />
+    <meta name="apple-mobile-web-app-title" content="Oficina" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4" />
     <!-- public/ also holds favicon.ico, apple-touch-icon.png and
          apple-touch-icon-precomposed.png at their conventional paths: browsers
          and iOS probe those without a <link>, and the standalone server's SPA
          fallback would otherwise answer the probe with index.html, leaving a
          stale cached icon in place forever. Bump ?v= on every icon change. -->
-    <title>Pixel Agents</title>
+    <!-- UI font (falls back to the system sans when offline). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    />
+    <title>Oficina</title>
   </head>
   <body>
     <div id="root"></div>

@@ -1,6 +1,7 @@
-import type { Ref } from 'react';
+import type { CSSProperties, Ref } from 'react';
 import { useImperativeHandle, useRef } from 'react';
 
+import type { TerminalSearchHandle } from '../terminal/terminalAddons.js';
 import type { TerminalConnectionStatus } from '../terminal/terminalClient.js';
 import type { TerminalInputHandle } from './TerminalPane.js';
 import { TerminalPane } from './TerminalPane.js';
@@ -15,9 +16,18 @@ interface TerminalPaneStackProps {
   paneClassName: string;
   fontSizePx?: number;
   autoFocus?: boolean;
+  /** Where each visible pane goes (desktop split view: the pinned one and
+   *  the active one); null hides it. Without it only shownAgentId shows,
+   *  filling the stack. */
+  placement?: (agentId: number) => CSSProperties | null;
+  /** Ctrl+Shift+F in a pane. */
+  onSearchRequest?: (agentId: number) => void;
+  onRegisterSearch?: (agentId: number, handle: TerminalSearchHandle | null) => void;
   /** Input into whichever pane is showing — how the mobile key bar types and
    *  pastes. Resolved at call time, so it follows tab switches. */
   inputRef?: Ref<TerminalInputHandle>;
+  /** Each pane's input handle as it comes and goes (the chat sends through it). */
+  onInputHandle?: (agentId: number, handle: TerminalInputHandle | null) => void;
 }
 
 /**
@@ -33,7 +43,11 @@ export function TerminalPaneStack({
   paneClassName,
   fontSizePx,
   autoFocus,
+  onSearchRequest,
+  onRegisterSearch,
+  placement,
   inputRef,
+  onInputHandle,
 }: TerminalPaneStackProps) {
   const inputs = useRef(new Map<number, TerminalInputHandle>());
   const shownRef = useRef(shownAgentId);
@@ -55,25 +69,33 @@ export function TerminalPaneStack({
   const registerInput = (agentId: number, handle: TerminalInputHandle | null) => {
     if (handle) inputs.current.set(agentId, handle);
     else inputs.current.delete(agentId);
+    onInputHandle?.(agentId, handle);
   };
 
-  return agentIds.map((agentId) => (
+  return agentIds.map((agentId) => {
+    const style = placement ? placement(agentId) : null;
+    const visible = placement ? style !== null : agentId === shownAgentId;
     // Inactive wrappers must not hit-test: they are full-size transparent
     // overlays stacked in DOM order, so a later agent's empty wrapper would
     // otherwise swallow every tap or click (focus, text selection) meant for
     // an earlier shown pane.
-    <div
-      key={agentId}
-      className={`absolute ${paneClassName} ${agentId === shownAgentId ? '' : 'pointer-events-none'}`}
-    >
-      <TerminalPane
-        agentId={agentId}
-        isActive={agentId === shownAgentId}
-        onStatusChange={onStatusChange}
-        fontSizePx={fontSizePx}
-        autoFocus={autoFocus}
-        onRegisterInput={inputRef ? registerInput : undefined}
-      />
-    </div>
-  ));
+    return (
+      <div
+        key={agentId}
+        className={`absolute ${style ? '' : paneClassName} ${visible ? '' : 'pointer-events-none'}`}
+        style={style ?? undefined}
+      >
+        <TerminalPane
+          agentId={agentId}
+          isActive={visible}
+          onStatusChange={onStatusChange}
+          fontSizePx={fontSizePx}
+          autoFocus={autoFocus}
+          onSearchRequest={onSearchRequest}
+          onRegisterSearch={onRegisterSearch}
+          onRegisterInput={inputRef || onInputHandle ? registerInput : undefined}
+        />
+      </div>
+    );
+  });
 }

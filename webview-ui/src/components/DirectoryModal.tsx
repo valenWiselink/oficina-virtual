@@ -2,8 +2,10 @@ import type { KeyboardEvent } from 'react';
 import { useEffect, useState } from 'react';
 
 import type { Directory } from '../hooks/useExtensionMessages.js';
+import { FolderField } from './FolderField.js';
 import { Button } from './ui/Button.js';
 import { Modal } from './ui/Modal.js';
+import { TextInput } from './ui/TextInput.js';
 
 export interface DirectoryModalValues {
   name: string;
@@ -22,8 +24,6 @@ interface DirectoryModalProps {
   /** Paths recovered from past sessions; tapping one fills the path field. Empty
    *  (a fresh machine, or everything already a Directory) renders no section. */
   suggestions: string[];
-  /** Area labels the office layout defines. Empty renders no section. */
-  areas: string[];
   /** Areas already mapped to the Directory being edited. */
   assignedAreas: string[];
   onSubmit: (values: DirectoryModalValues) => void;
@@ -50,7 +50,6 @@ export function DirectoryModal({
   editing,
   error,
   suggestions,
-  areas,
   assignedAreas,
   onSubmit,
   onDelete,
@@ -79,12 +78,6 @@ export function DirectoryModal({
     onSubmit({ name: name.trim(), path: path.trim(), areas: selectedAreas });
   };
 
-  const toggleArea = (label: string) => {
-    setSelectedAreas((prev) =>
-      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label],
-    );
-  };
-
   // Scoped to the modal rather than the document: the office's own key handling
   // (Esc exits the layout editor) must not see these.
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -107,42 +100,35 @@ export function DirectoryModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={editing ? 'Edit Directory' : 'Add Directory'}
-      // Wider minimum than Modal's so path suggestions get room, still
-      // yielding via min() on narrow screens — a phone gets the full width
-      // (minus Modal's margin padding), a desktop only this floor.
-      className="min-w-[min(420px,100%)]!"
+      title={editing ? 'Editar carpeta' : 'Agregar carpeta'}
+      width={480}
     >
       <div
         data-testid="directory-modal"
-        className="flex flex-col gap-8 px-10 py-4"
+        className="flex flex-col gap-10 px-8 py-2"
         onKeyDown={handleKeyDown}
       >
-        <label className="flex flex-col gap-2 text-xs text-text-muted">
-          Name
-          <input
-            type="text"
-            value={name}
-            autoFocus
-            placeholder="Project name"
-            onChange={(e) => setName(e.target.value)}
-            className="text-sm py-2 px-4 bg-bg border-2 border-border rounded-none text-text"
-          />
+        <label className="flex flex-col gap-3 text-xs font-medium text-text">
+          Carpeta
+          <FolderField value={path} onChange={setPath} autoFocus />
+          <span className="font-normal text-text-muted">
+            Donde va a trabajar el agente: la carpeta de tu repo.
+          </span>
         </label>
-        <label className="flex flex-col gap-2 text-xs text-text-muted">
-          Path
-          <input
-            type="text"
-            value={path}
-            placeholder="~/code/my-project"
-            onChange={(e) => setPath(e.target.value)}
-            className="text-sm py-2 px-4 bg-bg border-2 border-border rounded-none text-text"
+        <label className="flex flex-col gap-3 text-xs font-medium text-text">
+          <span>
+            Nombre <span className="font-normal text-text-muted">(opcional)</span>
+          </span>
+          <TextInput
+            value={name}
+            placeholder="Si lo dejás vacío, usa el nombre de la carpeta"
+            onChange={(e) => setName(e.target.value)}
           />
         </label>
         {suggestions.length > 0 && (
           <div data-testid="directory-suggestions" className="flex flex-col gap-2">
-            <span className="text-xs text-text-muted">Recent working directories</span>
-            <div className="flex flex-col max-h-160 overflow-y-auto pixel-scrollbar">
+            <span className="text-xs font-medium text-text">Donde ya trabajaste con Claude</span>
+            <div className="flex flex-col max-h-180 overflow-y-auto thin-scrollbar">
               {suggestions.map((suggestion) => (
                 // shrink-0 is what keeps the list scrollable rather than
                 // invisible: overflow-hidden zeroes a flex item's automatic
@@ -152,37 +138,16 @@ export function DirectoryModal({
                   key={suggestion}
                   onClick={() => setPath(suggestion)}
                   title={suggestion}
-                  className="shrink-0 text-sm text-left py-4 px-4 bg-transparent border-none rounded-none cursor-pointer text-text-muted hover:text-text hover:bg-btn-bg overflow-hidden text-ellipsis whitespace-nowrap"
+                  className="shrink-0 flex items-center gap-6 text-sm text-left py-5 px-6 bg-transparent border-none rounded-lg cursor-pointer text-text-muted hover:text-text hover:bg-btn-bg"
                 >
-                  {suggestion}
+                  <span className="material-symbols-sharp text-sm" aria-hidden="true">
+                    folder
+                  </span>
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                    {suggestion}
+                  </span>
                 </button>
               ))}
-            </div>
-          </div>
-        )}
-        {areas.length > 0 && (
-          <div data-testid="directory-areas" className="flex flex-col gap-2">
-            {/* The same Directory→Area mapping the layout editor writes: agents
-                launched here prefer seats inside the Areas ticked below. */}
-            <span className="text-xs text-text-muted">Areas</span>
-            <div className="flex flex-wrap gap-4">
-              {areas.map((label) => {
-                const selected = selectedAreas.includes(label);
-                return (
-                  <button
-                    key={label}
-                    onClick={() => toggleArea(label)}
-                    aria-pressed={selected}
-                    className={`text-sm py-2 px-4 border-2 rounded-none cursor-pointer ${
-                      selected
-                        ? 'bg-accent border-accent text-text'
-                        : 'bg-transparent border-border text-text-muted hover:text-text'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
             </div>
           </div>
         )}
@@ -196,17 +161,17 @@ export function DirectoryModal({
               it keep running, so this needs no confirmation step. */}
           {editing ? (
             <Button variant="ghost" size="sm" className="text-danger!" onClick={onDelete}>
-              Delete
+              Borrar
             </Button>
           ) : (
             <span />
           )}
           <span className="flex items-center gap-8">
-            <Button variant="default" size="sm" onClick={onClose}>
-              Cancel
+            <Button variant="ghost" size="md" onClick={onClose}>
+              Cancelar
             </Button>
-            <Button variant="accent" size="sm" onClick={submit}>
-              Save
+            <Button variant="accent" size="md" onClick={submit}>
+              {editing ? 'Guardar' : 'Agregar'}
             </Button>
           </span>
         </div>

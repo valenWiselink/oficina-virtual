@@ -98,7 +98,7 @@ export function MobileKeyBar({ onKey, onPaste }: MobileKeyBarProps) {
   // min-w-fit keeps labels from squishing; flex-1 stretches the keys to fill
   // when there is room.
   const keyClass =
-    'flex-1 min-w-fit whitespace-nowrap bg-btn-bg border-2 border-border rounded-none text-text text-sm leading-none py-8 px-10 cursor-pointer active:bg-btn-hover';
+    'flex-1 min-w-fit whitespace-nowrap bg-btn-bg border border-border rounded-md text-text text-sm leading-none py-8 px-10 cursor-pointer active:bg-btn-hover';
   return (
     // touch-pan-x: keys are tap-only but the ROW may pan horizontally on
     // screens too narrow for all keys; vertical drags still must not pan the
@@ -151,7 +151,7 @@ export function MobileKeyBar({ onKey, onPaste }: MobileKeyBarProps) {
         onClick={() => onPaste()}
         className={keyClass}
       >
-        paste
+        pegar
       </button>
     </div>
   );

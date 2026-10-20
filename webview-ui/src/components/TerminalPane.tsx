@@ -7,16 +7,26 @@ import { useEffect, useRef } from 'react';
 import {
   TERMINAL_FONT_FAMILY,
   TERMINAL_FONT_SIZE_PX,
+  TERMINAL_MIN_CONTRAST,
+  TERMINAL_OVERVIEW_RULER_PX,
   TERMINAL_RESIZE_DEBOUNCE_MS,
   TERMINAL_SCROLLBACK_LINES,
-  TERMINAL_THEME,
   TERMINAL_URL_PATTERN,
 } from '../constants.js';
+import { registerAgentInput } from '../terminal/agentInput.js';
 import { attachClipboardInput } from '../terminal/clipboardInput.js';
+import { zoomTerminalFont } from '../terminal/fontZoom.js';
+import { attachPromptMarks } from '../terminal/promptMarks.js';
+import {
+  attachSearch,
+  attachWebgl,
+  type TerminalSearchHandle,
+} from '../terminal/terminalAddons.js';
 import type { TerminalConnectionStatus } from '../terminal/terminalClient.js';
 import { TerminalConnection } from '../terminal/terminalClient.js';
 import { isTypingInTerminal } from '../terminal/terminalDom.js';
 import { terminalLinkOpener } from '../terminal/terminalLinks.js';
+import { useTerminalColorize, useTerminalScheme } from '../terminal/terminalLook.js';
 import { attachTouchInput } from '../terminal/touchInput.js';
 
 interface TerminalPaneProps {
@@ -31,6 +41,10 @@ interface TerminalPaneProps {
    *  raises the software keyboard over half the screen on every view switch —
    *  there, tapping the terminal itself is what summons the keyboard. */
   autoFocus?: boolean;
+  /** Ctrl+Shift+F inside this pane (the drawer opens its search bar). */
+  onSearchRequest?: (agentId: number) => void;
+  /** Hands the caller this pane's search (null on teardown). */
+  onRegisterSearch?: (agentId: number, handle: TerminalSearchHandle | null) => void;
   /** Hands the caller this pane's input handle (null on teardown) — how the
    *  mobile key bar injects keys the software keyboard doesn't have and
    *  pastes clipboard text. */
@@ -60,6 +74,8 @@ export function TerminalPane({
   onStatusChange,
   fontSizePx = TERMINAL_FONT_SIZE_PX,
   autoFocus = true,
+  onSearchRequest,
+  onRegisterSearch,
   onRegisterInput,
 }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -79,6 +95,27 @@ export function TerminalPane({
   // would dispose the terminal and reconnect the socket for nothing.
   const autoFocusRef = useRef(autoFocus);
   autoFocusRef.current = autoFocus;
+  const searchRef = useRef(onSearchRequest);
+  searchRef.current = onSearchRequest;
+  // The size the terminal opens with; later changes go through the font
+  // effect below, which re-measures in place instead of rebuilding it.
+  const fontSizeRef = useRef(fontSizePx);
+  fontSizeRef.current = fontSizePx;
+  const fitNowRef = useRef<(() => void) | null>(null);
+  // The colour scheme (Ajustes). Changes repaint in place, like the font size.
+  const scheme = useTerminalScheme();
+  const colorize = useTerminalColorize();
+  const schemeRef = useRef(scheme);
+  schemeRef.current = scheme;
+  const registerSearchRef = useRef(onRegisterSearch);
+  registerSearchRef.current = onRegisterSearch;
+  // GPU drawing, held only while the pane is on screen (see attachWebgl).
+  const webglRef = useRef<(() => void) | null>(null);
+  const ensureWebgl = () => {
+    const term = termRef.current;
+    if (!isActiveRef.current || !term?.element || webglRef.current) return;
+    webglRef.current = attachWebgl(term);
+  };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -87,10 +124,15 @@ export function TerminalPane({
     const openLink = terminalLinkOpener(window.open.bind(window));
     const term = new Terminal({
       fontFamily: TERMINAL_FONT_FAMILY,
-      fontSize: fontSizePx,
-      theme: { ...TERMINAL_THEME },
+      fontSize: fontSizeRef.current,
+      theme: { ...schemeRef.current.theme },
+      minimumContrastRatio: TERMINAL_MIN_CONTRAST,
       scrollback: TERMINAL_SCROLLBACK_LINES,
       cursorBlink: true,
+      // Search highlights and the user's own messages (promptMarks) use
+      // xterm 5's decoration API, which is still marked proposed.
+      allowProposedApi: true,
+      overviewRulerWidth: TERMINAL_OVERVIEW_RULER_PX,
       // OSC 8 hyperlinks. Without this xterm's built-in activator opens any
       // scheme behind a confirm(); see terminalLinkOpener.
       linkHandler: { activate: openLink },
@@ -99,6 +141,8 @@ export function TerminalPane({
     term.loadAddon(fit);
     // Plain URLs printed as text (most of what an agent prints) become clickable.
     term.loadAddon(new WebLinksAddon(openLink, { urlRegex: TERMINAL_URL_PATTERN }));
+    const search = attachSearch(term, () => schemeRef.current.search);
+    registerSearchRef.current?.(agentId, search.handle);
     termRef.current = term;
     fitRef.current = fit;
 
@@ -117,7 +161,7 @@ export function TerminalPane({
         scheduleFit();
       },
       onExit: (exitCode) => {
-        term.write(`\r\n\x1b[90m[process exited with code ${String(exitCode)}]\x1b[0m\r\n`);
+        term.write(`\r\n\x1b[90m[el proceso terminó con código ${String(exitCode)}]\x1b[0m\r\n`);
       },
       onStatusChange: (status) => statusRef.current?.(agentId, status),
     });
@@ -127,17 +171,24 @@ export function TerminalPane({
     // Keyboard copy (verbatim; Alt+C = copy as text) and paste, OSC 52 writes.
     const detachClipboard = attachClipboardInput(term, {
       isActive: () => isActiveRef.current,
+      onShortcut: (shortcut) => {
+        if (shortcut === 'search') searchRef.current?.(agentId);
+        else zoomTerminalFont(shortcut === 'zoomIn' ? 1 : shortcut === 'zoomOut' ? -1 : 0);
+      },
     });
-    registerInputRef.current?.(agentId, {
+    const input: TerminalInputHandle = {
       send: (data) => connection.write(data),
       paste: (data) => term.paste(data),
-    });
+    };
+    registerInputRef.current?.(agentId, input);
+    // Anything in the office can write to this agent (agentInput.ts).
+    registerAgentInput(agentId, input);
 
     // Touch: scroll + flick, tap to focus / open a URL, long-press selection
     // with handles and a copy pill (see touchGesture.ts for the why).
     const detachTouch = attachTouchInput(term, host, {
       openLink,
-      fallbackRowHeightPx: fontSizePx,
+      fallbackRowHeightPx: fontSizeRef.current,
     });
 
     // Debounced: ResizeObserver fires per frame during a drag, and every resize
@@ -160,6 +211,7 @@ export function TerminalPane({
       if (!term.element) {
         term.open(host);
         if (autoFocusRef.current) term.focus();
+        ensureWebgl();
       }
       try {
         fit.fit();
@@ -189,6 +241,7 @@ export function TerminalPane({
     const observer = new ResizeObserver(scheduleFit);
     observer.observe(host);
     applyFit();
+    fitNowRef.current = applyFit;
 
     return () => {
       if (resizeTimer) clearTimeout(resizeTimer);
@@ -197,18 +250,47 @@ export function TerminalPane({
       detachClipboard();
       observer.disconnect();
       registerInputRef.current?.(agentId, null);
+      registerAgentInput(agentId, null);
+      registerSearchRef.current?.(agentId, null);
+      webglRef.current?.();
+      webglRef.current = null;
+      search.dispose();
       connection.dispose();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      fitNowRef.current = null;
     };
-  }, [agentId, fontSizePx]);
+  }, [agentId]);
+
+  // A new font size: xterm re-measures its cells in place, then the grid is
+  // re-fitted (and the PTY told) — the scrollback and the session stay.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || term.options.fontSize === fontSizePx) return;
+    term.options.fontSize = fontSizePx;
+    fitNowRef.current?.();
+  }, [fontSizePx]);
+
+  // The scheme: colours swap in place; the user's messages are re-marked in
+  // the new scheme's colours (after the mount effect, which creates the terminal).
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.theme = { ...scheme.theme };
+    return attachPromptMarks(term, scheme.prompt, colorize ? scheme.paint : undefined);
+  }, [agentId, scheme, colorize]);
 
   // Becoming visible: the pane had no dimensions while hidden, so re-fit and
   // focus now that it does.
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive) {
+      webglRef.current?.();
+      webglRef.current = null;
+      return;
+    }
     const id = requestAnimationFrame(() => {
+      ensureWebgl();
       try {
         fitRef.current?.fit();
       } catch {

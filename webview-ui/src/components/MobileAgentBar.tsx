@@ -287,8 +287,10 @@ export function MobileAgentBar({
             // A long press must not open the OS callout menu over the drawer.
             onContextMenu={(e) => e.preventDefault()}
             disabled={!canLaunch}
-            title={canLaunch ? 'Launch agent' : (launchUnavailableReason ?? 'Terminal unavailable')}
-            className={`flex items-center justify-center shrink-0 px-14 border-2 rounded-none text-2xl leading-none select-none ${
+            title={
+              canLaunch ? 'Lanzar agente' : (launchUnavailableReason ?? 'Terminal no disponible')
+            }
+            className={`flex items-center justify-center shrink-0 px-14 border rounded-md text-2xl leading-none select-none ${
               canLaunch
                 ? 'bg-accent border-accent text-white cursor-pointer active:bg-accent-bright'
                 : 'bg-btn-bg border-border text-text-muted cursor-default opacity-(--btn-disabled-opacity)'

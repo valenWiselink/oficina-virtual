@@ -108,7 +108,7 @@ export function MobileShell({
           <div className="absolute mobile-safe-top right-8 z-40">
             <Button
               size="sm"
-              className="border-border! shadow-pixel"
+              className="border-border! shadow-soft"
               onClick={shell.toggleView}
               title={shell.view === 'office' ? 'Show terminal' : 'Show office'}
             >

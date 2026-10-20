@@ -173,21 +173,36 @@ export const VISUAL_COLOR_PICKER_SWATCH_PX = 22;
 /** Gap (px) between the collapsed trigger and the expanded popup panel. */
 export const VISUAL_COLOR_PICKER_POPUP_GAP_PX = 6;
 
-// ── Notification Sound (done: ascending chime) ─────────────
-export const NOTIFICATION_NOTE_1_HZ = 659.25; // E5
-export const NOTIFICATION_NOTE_2_HZ = 1318.51; // E6 (octave up)
-export const NOTIFICATION_NOTE_1_START_SEC = 0;
-export const NOTIFICATION_NOTE_2_START_SEC = 0.1;
-export const NOTIFICATION_NOTE_DURATION_SEC = 0.18;
-export const NOTIFICATION_VOLUME = 0.14;
-
-// ── Permission Sound (attention: descending double tap) ────
-export const PERMISSION_NOTE_1_HZ = 880; // A5
-export const PERMISSION_NOTE_2_HZ = 659.25; // E5 (down a fourth)
-export const PERMISSION_NOTE_1_START_SEC = 0;
-export const PERMISSION_NOTE_2_START_SEC = 0.12;
-export const PERMISSION_NOTE_DURATION_SEC = 0.15;
+// ── Sounds (notificationSound.ts) ──────────────────────────
+/** One note of a sound: pitch, when it starts and how long it rings. */
+export interface SoundNote {
+  hz: number;
+  at: number;
+  ring: number;
+}
+/** An agent finished: a bright "plin", a quick rising C-major arpeggio rung
+ *  like a little bell (C6 E6 G6). */
+export const DONE_NOTES: readonly SoundNote[] = [
+  { hz: 1046.5, at: 0, ring: 0.45 },
+  { hz: 1318.51, at: 0.07, ring: 0.45 },
+  { hz: 1567.98, at: 0.14, ring: 0.6 },
+];
+export const DONE_VOLUME = 0.1;
+/** Something needs you: a lower, plainer "toc-toc" (A5 twice), unmistakably
+ *  not the happy one. */
+export const PERMISSION_NOTES: readonly SoundNote[] = [
+  { hz: 880, at: 0, ring: 0.14 },
+  { hz: 880, at: 0.17, ring: 0.14 },
+];
 export const PERMISSION_VOLUME = 0.12;
+/** "Hecho" pressed: a short sparkle up (G6 B6 D7 G7), quieter than the rest. */
+export const CHEER_NOTES: readonly SoundNote[] = [
+  { hz: 1567.98, at: 0, ring: 0.25 },
+  { hz: 1975.53, at: 0.05, ring: 0.25 },
+  { hz: 2349.32, at: 0.1, ring: 0.25 },
+  { hz: 3135.96, at: 0.15, ring: 0.4 },
+];
+export const CHEER_VOLUME = 0.06;
 
 // ── Furniture Animation ─────────────────────────────────────
 export const FURNITURE_ANIM_INTERVAL_SEC = 0.2;
@@ -274,15 +289,17 @@ export const CONTEXT_DANGER_THRESHOLD = 0.8;
 export const CONTEXT_CRITICAL_THRESHOLD = 0.95;
 export const CONTEXT_GAUGE_WIDTH_PX = 40;
 export const CONTEXT_GAUGE_HEIGHT_PX = 4;
-export const CONTEXT_GAUGE_COLOR_OK = '#44cc44';
-export const CONTEXT_GAUGE_COLOR_WARN = '#ffcc00';
-export const CONTEXT_GAUGE_COLOR_DANGER = '#ff8800';
-export const CONTEXT_GAUGE_COLOR_CRITICAL = '#ff2222';
-export const CONTEXT_GAUGE_BG = '#222';
+// Tuned for the light office: darker fills read on paper-coloured panels.
+export const CONTEXT_GAUGE_COLOR_OK = '#3a9a5b';
+export const CONTEXT_GAUGE_COLOR_WARN = '#c9a000';
+export const CONTEXT_GAUGE_COLOR_DANGER = '#d9730d';
+export const CONTEXT_GAUGE_COLOR_CRITICAL = '#c8323a';
+export const CONTEXT_GAUGE_BG = '#d8d0c2';
 
-// ── Agent Teams ─────────────────────────────────────────────
-export const TEAM_LEAD_COLOR = '#ffd700';
-export const TEAM_ROLE_COLOR = '#66aaff';
+// ── Agent Teams / label name line ───────────────────────────
+export const TEAM_LEAD_COLOR = '#9a6b00';
+/** The agent's name on its label (nickname / title / folder). */
+export const TEAM_ROLE_COLOR = '#1f2328';
 
 // ── Pets ────────────────────────────────────────────────────────
 /** Walking speed in world pixels per second (matches character walk speed visually but slower). */
@@ -332,29 +349,34 @@ export const WS_RECONNECT_DELAYS_MS = [250, 500, 1_000, 2_000, 4_000] as const;
 // This file is the one place inline colors are allowed (see eslint.config.js),
 // which is why xterm's theme lives here rather than next to the component.
 
-// The panel docks on the right as a full-height column, in flow beside the
-// office region (which flexes to fill the rest) — not overlaid on top of it.
+// The panel docks on an edge (right by default; the operator picks it in
+// Ajustes), in flow beside the office region, which flexes to fill the rest.
 /** Open width the panel starts at, in px; the user can drag to resize. */
 export const TERMINAL_DRAWER_DEFAULT_WIDTH_PX = 520;
 /** Clamp for the drag: never narrower than this. */
 export const TERMINAL_DRAWER_MIN_WIDTH_PX = 320;
 /** Clamp for the drag: never wider than this fraction of the window. */
 export const TERMINAL_DRAWER_MAX_WIDTH_RATIO = 0.8;
-/** Width of the always-visible agent-card bar overlaying the office's right
- *  edge — fits the toggle handle and the stacked agent cards (40px mug shot +
- *  16px close/status column + card chrome ≈ 63px, plus a little air each
- *  side). */
+/** Same three, for a panel docked above or below the office. */
+export const TERMINAL_DRAWER_DEFAULT_HEIGHT_PX = 340;
+export const TERMINAL_DRAWER_MIN_HEIGHT_PX = 180;
+export const TERMINAL_DRAWER_MAX_HEIGHT_RATIO = 0.75;
+/** Width of the always-visible agent-card column beside the office — fits the
+ *  stacked agent cards (40px mug shot + 16px close/status column + card
+ *  chrome ≈ 63px, plus a little air each side). */
 export const TERMINAL_SIDEBAR_WIDTH_PX = 72;
-/** Grab width of the drag handle on the panel's left edge. */
+/** Height of the same cards laid out as a row (panel docked top or bottom). */
+export const TERMINAL_STRIP_HEIGHT_PX = 64;
+/** Grab width of the drag handle on the panel's inner edge. */
 export const TERMINAL_DRAWER_RESIZE_HANDLE_PX = 6;
 
-// Mug shot: a square crop of the agent's front-facing sprite, focused on the
-// face, shown in each terminal tab in place of an "Agent N" label. Sprites are
-// 16 wide × 32 tall; the head runs to about row 18 (eyes ~row 14). The square is
-// wider than the 16px sprite, so the head sits centred with a little air.
+// Mug shot: a square crop of the agent's front-facing sprite, shown in each
+// terminal tab in place of an "Agent N" label. Sprites are 16 wide × 32 tall;
+// the Clawd sheets (scripts/generate-clawd-sprites.mjs) stand in rows 15-28, so
+// the crop starts at row 11 to frame the whole body with a little air.
 // Tweak these three to reframe: SIDE = zoom out/in, TOP = raise/lower the crop,
 // LEFT = shift left/right (negative centres a square wider than the sprite).
-export const MUGSHOT_CROP_TOP_ROW = 0;
+export const MUGSHOT_CROP_TOP_ROW = 11;
 export const MUGSHOT_CROP_LEFT_COL = -1;
 export const MUGSHOT_CROP_SIDE_PX = 20;
 /** Integer sprite-pixel zoom. 2 = each sprite pixel is 2 px. */
@@ -390,30 +412,274 @@ export const TERMINAL_URL_PATTERN =
  *  decoded: a runaway program shouldn't be able to stall the page. */
 export const TERMINAL_OSC52_MAX_BASE64_CHARS = 4_000_000;
 
-/** xterm theme, matched to the office palette (index.css :root). */
-export const TERMINAL_THEME = {
-  background: '#181828',
-  foreground: 'rgba(255, 255, 255, 0.9)',
-  cursor: '#6030ff',
-  cursorAccent: '#181828',
-  selectionBackground: 'rgba(96, 48, 255, 0.4)',
-  black: '#1e1e2e',
-  red: '#d14249',
-  green: '#89d185',
-  yellow: '#cca700',
-  blue: '#3794ff',
-  magenta: '#746fff',
-  cyan: '#4ad9d9',
-  white: 'rgba(255, 255, 255, 0.9)',
-  brightBlack: '#4a4a6a',
-  brightRed: '#ff6b72',
-  brightGreen: '#a8e5a4',
-  brightYellow: '#ffd700',
-  brightBlue: '#66aaff',
-  brightMagenta: '#a29bff',
-  brightCyan: '#7fe8e8',
-  brightWhite: '#ffffff',
+/** Light or dark: what Claude Code's theme is made for, and the base of
+ *  every terminal scheme. Which scheme is in use: terminalLook.ts. */
+export type { TerminalLook } from '../../core/src/messages.js';
+
+/** The 16 ANSI colours plus the basics, all #rrggbb (the decorations are
+ *  derived from them, terminalSchemes.ts). */
+export interface TerminalPalette {
+  background: string;
+  foreground: string;
+  /** The scheme's highlight: cursor, your messages' band, the active match. */
+  accent: string;
+  black: string;
+  red: string;
+  green: string;
+  yellow: string;
+  blue: string;
+  magenta: string;
+  cyan: string;
+  white: string;
+  brightBlack: string;
+  brightRed: string;
+  brightGreen: string;
+  brightYellow: string;
+  brightBlue: string;
+  brightMagenta: string;
+  brightCyan: string;
+  brightWhite: string;
+}
+
+export interface TerminalPreset {
+  id: string;
+  label: string;
+  look: 'light' | 'dark';
+  palette: TerminalPalette;
+}
+
+/** The terminal's colour schemes (Ajustes → Colores de la terminal). The
+ *  first dark and the first light one are what "Automático" picks. */
+export const TERMINAL_PRESETS: readonly TerminalPreset[] = [
+  {
+    id: 'calido',
+    label: 'Cálido',
+    look: 'dark',
+    palette: {
+      background: '#24201d',
+      foreground: '#ece5de',
+      accent: '#d97757',
+      black: '#2e2925',
+      red: '#d14249',
+      green: '#89d185',
+      yellow: '#cca700',
+      blue: '#3794ff',
+      magenta: '#746fff',
+      cyan: '#4ad9d9',
+      white: '#e9e9e8',
+      brightBlack: '#6b6058',
+      brightRed: '#ff6b72',
+      brightGreen: '#a8e5a4',
+      brightYellow: '#ffd700',
+      brightBlue: '#66aaff',
+      brightMagenta: '#a29bff',
+      brightCyan: '#7fe8e8',
+      brightWhite: '#ffffff',
+    },
+  },
+  {
+    id: 'papel',
+    label: 'Papel',
+    look: 'light',
+    palette: {
+      background: '#fffdf9',
+      foreground: '#2e2925',
+      accent: '#d97757',
+      black: '#2e2925',
+      red: '#c4314b',
+      green: '#2e7d32',
+      yellow: '#8a6400',
+      blue: '#1f5fbf',
+      magenta: '#8a3ab9',
+      cyan: '#0e7490',
+      white: '#8f867c',
+      brightBlack: '#7a7068',
+      brightRed: '#d14249',
+      brightGreen: '#3a9440',
+      brightYellow: '#a67c00',
+      brightBlue: '#2f74d6',
+      brightMagenta: '#9b4fcc',
+      brightCyan: '#11899e',
+      brightWhite: '#6b6058',
+    },
+  },
+  {
+    id: 'medianoche',
+    label: 'Medianoche',
+    look: 'dark',
+    palette: {
+      background: '#1a1b26',
+      foreground: '#c0caf5',
+      accent: '#7aa2f7',
+      black: '#15161e',
+      red: '#f7768e',
+      green: '#9ece6a',
+      yellow: '#e0af68',
+      blue: '#7aa2f7',
+      magenta: '#bb9af7',
+      cyan: '#7dcfff',
+      white: '#a9b1d6',
+      brightBlack: '#565f89',
+      brightRed: '#ff899d',
+      brightGreen: '#afd67a',
+      brightYellow: '#e9c582',
+      brightBlue: '#8db0ff',
+      brightMagenta: '#c7a9ff',
+      brightCyan: '#a4daff',
+      brightWhite: '#c0caf5',
+    },
+  },
+  {
+    id: 'nordico',
+    label: 'Nórdico',
+    look: 'dark',
+    palette: {
+      background: '#2e3440',
+      foreground: '#d8dee9',
+      accent: '#88c0d0',
+      black: '#3b4252',
+      red: '#bf616a',
+      green: '#a3be8c',
+      yellow: '#ebcb8b',
+      blue: '#81a1c1',
+      magenta: '#b48ead',
+      cyan: '#88c0d0',
+      white: '#e5e9f0',
+      brightBlack: '#616e88',
+      brightRed: '#d08770',
+      brightGreen: '#b5cfa0',
+      brightYellow: '#f0d9a8',
+      brightBlue: '#94b3d1',
+      brightMagenta: '#c5a3c0',
+      brightCyan: '#8fbcbb',
+      brightWhite: '#eceff4',
+    },
+  },
+  {
+    id: 'dracula',
+    label: 'Drácula',
+    look: 'dark',
+    palette: {
+      background: '#282a36',
+      foreground: '#f8f8f2',
+      accent: '#ff79c6',
+      black: '#21222c',
+      red: '#ff5555',
+      green: '#50fa7b',
+      yellow: '#f1fa8c',
+      blue: '#bd93f9',
+      magenta: '#ff79c6',
+      cyan: '#8be9fd',
+      white: '#f8f8f2',
+      brightBlack: '#6272a4',
+      brightRed: '#ff6e6e',
+      brightGreen: '#69ff94',
+      brightYellow: '#ffffa5',
+      brightBlue: '#d6acff',
+      brightMagenta: '#ff92df',
+      brightCyan: '#a4ffff',
+      brightWhite: '#ffffff',
+    },
+  },
+  {
+    id: 'bosque',
+    label: 'Bosque',
+    look: 'dark',
+    palette: {
+      background: '#1d2420',
+      foreground: '#dfe8dc',
+      accent: '#8fc98a',
+      black: '#26302a',
+      red: '#e06c6c',
+      green: '#8fc98a',
+      yellow: '#e5c07b',
+      blue: '#7fb4d6',
+      magenta: '#c792d6',
+      cyan: '#6fc2b4',
+      white: '#cfd8cc',
+      brightBlack: '#64736a',
+      brightRed: '#f08080',
+      brightGreen: '#a6dba1',
+      brightYellow: '#f0d08f',
+      brightBlue: '#9ccbe8',
+      brightMagenta: '#d9a8e6',
+      brightCyan: '#8ad6c9',
+      brightWhite: '#f2f7f0',
+    },
+  },
+  {
+    id: 'solarizado',
+    label: 'Solarizado',
+    look: 'light',
+    palette: {
+      background: '#fdf6e3',
+      foreground: '#586e75',
+      accent: '#cb4b16',
+      black: '#073642',
+      red: '#dc322f',
+      green: '#859900',
+      yellow: '#b58900',
+      blue: '#268bd2',
+      magenta: '#d33682',
+      cyan: '#2aa198',
+      white: '#93a1a1',
+      brightBlack: '#839496',
+      brightRed: '#cb4b16',
+      brightGreen: '#6c7d00',
+      brightYellow: '#a07800',
+      brightBlue: '#1f74b0',
+      brightMagenta: '#6c71c4',
+      brightCyan: '#23877f',
+      brightWhite: '#657b83',
+    },
+  },
+  {
+    id: 'rosa',
+    label: 'Rosa',
+    look: 'light',
+    palette: {
+      background: '#fff5f7',
+      foreground: '#3d2b33',
+      accent: '#e2709a',
+      black: '#3d2b33',
+      red: '#c4314b',
+      green: '#2e7d4f',
+      yellow: '#9a6a00',
+      blue: '#3b5fc4',
+      magenta: '#b03c86',
+      cyan: '#1f7a8c',
+      white: '#9c8a91',
+      brightBlack: '#8a7880',
+      brightRed: '#d9485f',
+      brightGreen: '#3a9460',
+      brightYellow: '#b07d00',
+      brightBlue: '#4f74d6',
+      brightMagenta: '#c4529a',
+      brightCyan: '#2a8fa3',
+      brightWhite: '#6b5a61',
+    },
+  },
+];
+
+/** "Personalizado" starts from these (the warm dark scheme's basics). */
+export const TERMINAL_CUSTOM_DEFAULT = {
+  background: '#24201d',
+  foreground: '#ece5de',
+  accent: '#d97757',
 } as const;
+
+/** Mixing toward white or black (terminalSchemes.ts, the derived colours). */
+export const MIX_WHITE = '#ffffff';
+export const MIX_BLACK = '#000000';
+
+/** Text darker or lighter than this against its background is nudged until
+ *  it reads — the net under a scheme that does not match Claude Code's theme
+ *  (dark text on the dark terminal was unreadable, 2026-10-19). */
+export const TERMINAL_MIN_CONTRAST = 3;
+
+/** Width of xterm's overview ruler, where your messages and the search
+ *  matches show up beside the scrollbar. */
+export const TERMINAL_OVERVIEW_RULER_PX = 8;
 
 // ── Mobile shell ─────────────────────────────────────────────
 // Below this the app swaps the desktop drawer layout for the mobile shell:
@@ -560,3 +826,73 @@ export const VISUAL_VIEWPORT_FULL_EPSILON_PX = 1;
  *  (with an editable focused) = the software keyboard is up. Well above an
  *  address bar collapsing (~56 px), well below any on-screen keyboard. */
 export const KEYBOARD_MIN_HEIGHT_PX = 150;
+
+// ── Office rooms (scripts/generate-office-layout.mjs) ─────────
+/** Area labels of the bundled office. The meeting room and the library are
+ *  visited (a meeting, research), never assigned as anyone's desk. */
+export const MEETING_AREA_LABEL = 'Sala de juntas';
+export const LIBRARY_AREA_LABEL = 'Biblioteca';
+export const VISIT_ONLY_AREAS: ReadonlySet<string> = new Set([
+  MEETING_AREA_LABEL,
+  LIBRARY_AREA_LABEL,
+]);
+/** Server-side repo kind (RepoArea) → the Area where its agents sit. */
+export const REPO_AREA_LABELS: Record<string, string> = {
+  backend: 'Backend Go',
+  webapp: 'Webapp',
+  flutter: 'Flutter',
+  otros: 'Otros',
+};
+/** Walking speed multiplier on the way to (or back from) a meeting or the library. */
+export const EXCURSION_SPEED_FACTOR = 2.5;
+/** Hand-off lines between subagents of a meeting (the junta prototype's violet). */
+export const FILE_LINK_COLOR = '#8a4fd6';
+/** Body colour of each bundled Clawd sheet (char_N.png, scripts/generate-clawd-sprites.mjs). */
+export const CLAWD_BODY_COLORS = ['#d97757', '#5b8def', '#4fae6b', '#9a6ad6', '#e2709a', '#8c8f99'];
+/** Graph view: the "Vos" landmark (where requests for you point) and the library. */
+export const GRAPH_VOS_COLOR = '#2a2521';
+export const GRAPH_LIBRARY_COLOR = '#5f8aa6';
+/** Clawd's eyes. */
+export const CLAWD_EYE_COLOR = '#231f1c';
+/** Clawd's accessory per repository kind (graph): a white hard hat for
+ *  backend (yellow would read as "needs you"), a pencil behind the ear for
+ *  webapp, a phone in the left hand for flutter. */
+export const CLAWD_ACCESSORY_COLORS = {
+  helmet: '#fbf8f2',
+  helmetEdge: '#c9bfae',
+  pencilWood: '#e9cf9f',
+  pencilTip: '#3a3531',
+  phone: '#3a3531',
+  phoneScreen: '#9fc6dd',
+} as const;
+/** What Clawd holds for what he is doing (graph, clawdTricks.ts): dark round
+ *  glasses while researching, a steel wrench while a build or tests run (not
+ *  a hard hat: backend already wears the white one, and yellow would read as
+ *  "needs you"), a cream mug after half an hour of work. These sit on his
+ *  body, so they are the same in the light and the dark theme. */
+export const CLAWD_PROP_COLORS = {
+  glasses: '#2e2925',
+  wrench: '#a7afb8',
+  wrenchDark: '#6d757e',
+  mug: '#f4efe8',
+  mugEdge: '#bdb2a4',
+  coffee: '#6b4228',
+} as const;
+/** What you dress each Clawd in (clawdOutfits.ts): mid-tones with a darker
+ *  edge so they read on light and dark paper alike; nothing amber (that is
+ *  "needs you"). Plus the watch an impatient Clawd checks. */
+export const CLAWD_OUTFIT_COLORS = {
+  cap: '#4a78c2',
+  capBrim: '#2f5592',
+  bow: '#e2557f',
+  bowKnot: '#b02f5a',
+  crown: '#e8bf3a',
+  crownShade: '#b38a1c',
+  crownJewel: '#d1495b',
+  phonesBand: '#7a828e',
+  phonesCup: '#4b525d',
+  phonesShine: '#a4adb8',
+  watch: '#3b4048',
+} as const;
+/** The glyph (! or ✓) inside a status badge. */
+export const BADGE_GLYPH_COLOR = '#ffffff';

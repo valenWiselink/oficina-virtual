@@ -1,0 +1,135 @@
+/**
+ * Workspaces ("espacios de trabajo"): named groups of agents, so each view
+ * can show one group at a time. Pure rules here (tested); the store that
+ * remembers them lives in workspaceStore.ts.
+ *
+ * An agent belongs to its manual assignment ("Mover a…"), else to the first
+ * workspace whose folders include the folder it works in, else to none.
+ * "Todos" (ALL) is not a workspace: it shows everyone.
+ */
+
+export const ALL = 'todos';
+
+export interface Workspace {
+  id: string;
+  name: string;
+  /** Folder names (last path segment) whose agents land here by themselves. */
+  folders: string[];
+}
+
+export interface WorkspaceState {
+  workspaces: Workspace[];
+  /** agent key → workspace id, set by hand. */
+  assignments: Record<string, string>;
+  /** The workspace on screen, or ALL. */
+  current: string;
+}
+
+/** What the rules need to know about an agent. */
+export interface Placeable {
+  key: string;
+  dir?: string;
+}
+
+const sameFolder = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** The workspace an agent belongs to, or null. */
+export function workspaceOf(agent: Placeable, state: WorkspaceState): string | null {
+  const manual = state.assignments[agent.key];
+  if (manual && state.workspaces.some((w) => w.id === manual)) return manual;
+  if (!agent.dir) return null;
+  const byFolder = state.workspaces.find((w) => w.folders.some((f) => sameFolder(f, agent.dir!)));
+  return byFolder?.id ?? null;
+}
+
+/** The agents a workspace shows (ALL: everyone). */
+export function inWorkspace<T extends Placeable>(
+  agents: readonly T[],
+  state: WorkspaceState,
+  workspaceId: string,
+): T[] {
+  if (workspaceId === ALL) return [...agents];
+  return agents.filter((a) => workspaceOf(a, state) === workspaceId);
+}
+
+/** How many agents need you in each workspace (ALL counts everyone). */
+export function needsByWorkspace<T extends Placeable & { kind: string }>(
+  agents: readonly T[],
+  state: WorkspaceState,
+): Record<string, number> {
+  const counts: Record<string, number> = { [ALL]: 0 };
+  for (const a of agents) {
+    if (a.kind !== 'needs') continue;
+    counts[ALL]++;
+    const ws = workspaceOf(a, state);
+    if (ws) counts[ws] = (counts[ws] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Where to look for an agent: the current workspace if it is there, else its
+ * own workspace, else ALL (so jumping to it never lands on a view without it).
+ */
+export function workspaceToShow(agent: Placeable, state: WorkspaceState): string {
+  if (state.current === ALL) return ALL;
+  const own = workspaceOf(agent, state);
+  if (own === state.current) return state.current;
+  return own ?? ALL;
+}
+
+/** State with a workspace removed (its assignments go too; ALL if it was on). */
+export function withoutWorkspace(state: WorkspaceState, id: string): WorkspaceState {
+  const assignments = Object.fromEntries(
+    Object.entries(state.assignments).filter(([, ws]) => ws !== id),
+  );
+  return {
+    workspaces: state.workspaces.filter((w) => w.id !== id),
+    assignments,
+    current: state.current === id ? ALL : state.current,
+  };
+}
+
+/** Agents whose key changed (a session id arriving after the name): their
+ *  manual assignment follows them. Returns the new assignments. */
+export function followKeys(
+  assignments: Record<string, string>,
+  moved: ReadonlyArray<{ from: string; to: string }>,
+): Record<string, string> {
+  const next = { ...assignments };
+  for (const { from, to } of moved) {
+    const ws = next[from];
+    if (!ws || next[to]) continue;
+    next[to] = ws;
+    delete next[from];
+  }
+  return next;
+}
+
+/**
+ * Agents that just appeared (not in `before`) while a workspace is on screen
+ * join it, even when a folder rule would put them elsewhere: you launched
+ * them there. The first look (`before` null) and ALL assign nobody.
+ */
+export function newcomersToAssign(
+  before: ReadonlySet<number> | null,
+  agents: ReadonlyArray<Placeable & { id: number }>,
+  state: WorkspaceState,
+): Array<{ key: string; workspaceId: string }> {
+  if (!before || state.current === ALL) return [];
+  return agents
+    .filter((a) => !before.has(a.id) && workspaceOf(a, state) !== state.current)
+    .map((a) => ({ key: a.key, workspaceId: state.current }));
+}
+
+/** Agents whose key changed since the last look (`before`: id → key). */
+export function changedKeys(
+  before: ReadonlyMap<number, string> | null,
+  agents: ReadonlyArray<{ id: number; key: string }>,
+): Array<{ from: string; to: string }> {
+  if (!before) return [];
+  return agents.flatMap((a) => {
+    const old = before.get(a.id);
+    return old && old !== a.key ? [{ from: old, to: a.key }] : [];
+  });
+}

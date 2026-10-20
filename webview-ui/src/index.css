@@ -5,99 +5,159 @@
    (its font-size: 24px silently beat text-[...] sizing). */
 @import '@material-symbols/font-700/sharp.css' layer(base);
 
-@font-face {
-  font-family: 'FS Pixel Sans';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/FSPixelSansUnicode-Regular.ttf') format('truetype');
-}
-
+/* Light office (the operator's preference): warm paper tones with Claude's
+   orange as the accent, flat and soft (no pixel art outside Clawd himself).
+   The embedded terminal is light or dark (TERMINAL_THEMES, terminalLook.ts):
+   by default whichever Claude Code's own theme is made for. Plus Jakarta Sans
+   is loaded in index.html. */
 :root {
   /* Core palette */
-  --color-bg: #1e1e2e;
-  --color-bg-dark: #181828;
-  --color-bg-thumb: #2a2a3a;
-  --color-border: #4a4a6a;
-  --color-accent: #6030ff;
-  --color-accent-bright: #746fff;
+  --color-bg: #fffdf9;
+  --color-bg-dark: #f8f3ed;
+  --color-bg-thumb: #f4eee6;
+  --color-border: #e8e0d5;
+  --color-border-strong: #d6cbbe;
+  --color-accent: #d97757;
+  --color-accent-bright: #c4643f;
+
+  /* The backdrop through the day (dayTint.ts): only the backdrop changes,
+     cards and text stay as they are. */
+  --color-sky-dusk: #f6e2d2;
+  --color-sky-night: #efe5d8;
 
   /* Text */
-  --color-text: rgba(255, 255, 255, 0.9);
-  --color-text-muted: rgba(255, 255, 255, 0.5);
+  --color-text: #2a2521;
+  --color-text-2: #5b534b;
+  --color-text-muted: #8f867c;
 
   /* Buttons */
-  --color-btn-bg: rgb(53, 52, 69);
-  --color-btn-hover: rgb(78, 75, 104);
-  --color-active-bg: rgb(44, 43, 109);
+  --color-btn-bg: #f4eee6;
+  --color-btn-hover: #ebe3d8;
+  --color-active-bg: #f6dccf;
+
+  /* Sticky notes on cards */
+  --color-note: #fdf3c7;
+  --color-note-border: #ecd98a;
 
   /* Semantic */
-  --color-reset-text: #ecc;
-  --color-danger: #d14249;
-  --color-warning: #ff8d14;
+  --color-reset-text: #a33a3a;
+  --color-danger: #c8323a;
+  --color-warning: #c96a00;
 
   /* Status */
-  --color-status-permission: #cca700;
-  --color-status-active: #3794ff;
-  --color-status-success: #89d185;
+  --color-status-permission: #d38b12;
+  --color-status-permission-text: #8a5a06;
+  --color-status-permission-bg: #fcf0d6;
+  --color-status-active: #5f8aa6;
+  --color-status-success: #3b9257;
   --color-status-error: var(--color-danger);
 
   /* Shadow */
-  --shadow-pixel: 2px 2px 0px #0a0a14;
+  --shadow-soft: 0 1px 2px rgba(42, 37, 33, 0.05), 0 6px 18px rgba(42, 37, 33, 0.07);
 
   /* Non-utility values */
-  --vignette: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.6) 100%);
+  --vignette: radial-gradient(ellipse at center, transparent 55%, rgba(120, 100, 80, 0.18) 100%);
   --btn-disabled-opacity: 0.35;
+  color-scheme: light;
+}
+
+/* Dark office (Ajustes → Tema, appTheme.ts): the same warm family, dimmed —
+   brown-black paper, cream text, Claude's orange unchanged. */
+:root[data-theme='dark'] {
+  --color-bg: #2b2623;
+  --color-bg-dark: #1f1b19;
+  --color-bg-thumb: #26211e;
+  --color-border: #3b3430;
+  --color-border-strong: #51473f;
+  --color-accent: #d97757;
+  --color-accent-bright: #e58b6c;
+
+  --color-sky-dusk: #251e1b;
+  --color-sky-night: #191614;
+
+  --color-text: #f1e9e0;
+  --color-text-2: #c9bdb1;
+  --color-text-muted: #9a8f84;
+
+  --color-btn-bg: #36302c;
+  --color-btn-hover: #423a35;
+  --color-active-bg: #4a3125;
+
+  --color-note: #3a3320;
+  --color-note-border: #5c5130;
+
+  --color-reset-text: #ef8a8a;
+  --color-danger: #e2575d;
+  --color-warning: #e39a3c;
+
+  --color-status-permission: #e3a43a;
+  --color-status-permission-text: #f2c879;
+  --color-status-permission-bg: #3a2e1d;
+  --color-status-active: #7fa9c6;
+  --color-status-success: #5cb87a;
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 22px rgba(0, 0, 0, 0.35);
+  --vignette: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.35) 100%);
+  color-scheme: dark;
 }
 
 @theme inline {
-  /* 1px base so Tailwind spacing maps directly to pixels (pixel-art project) */
+  /* 1px base so Tailwind spacing maps directly to pixels */
   --spacing: 1px;
 
-  --font-pixel: 'FS Pixel Sans', sans-serif;
+  --font-ui:
+    'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  /* Text sizes (pixel-art scale, base = 22px) */
+  /* Text sizes (base = 14px) */
   --text-*: initial;
-  --text-2xs: 16px;
-  --text-xs: 18px;
-  --text-sm: 20px;
-  --text-base: 22px;
-  --text-lg: 26px;
-  --text-xl: 30px;
-  --text-2xl: 36px;
-  --text-3xl: 44px;
-  --text-4xl: 52px;
-  --text-5xl: 64px;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 21px;
+  --text-3xl: 26px;
+  --text-4xl: 32px;
+  --text-5xl: 40px;
 
   /* Colors — reference :root vars so VS Code shows swatches */
   --color-bg: var(--color-bg);
   --color-bg-dark: var(--color-bg-dark);
   --color-bg-thumb: var(--color-bg-thumb);
   --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
   --color-accent: var(--color-accent);
   --color-text: var(--color-text);
   --color-text-muted: var(--color-text-muted);
+  --color-text-2: var(--color-text-2);
   --color-btn-bg: var(--color-btn-bg);
   --color-btn-hover: var(--color-btn-hover);
   --color-active-bg: var(--color-active-bg);
+  --color-note: var(--color-note);
+  --color-note-border: var(--color-note-border);
   --color-accent-bright: var(--color-accent-bright);
   --color-reset-text: var(--color-reset-text);
   --color-danger: var(--color-danger);
   --color-warning: var(--color-warning);
   --color-status-permission: var(--color-status-permission);
+  --color-status-permission-text: var(--color-status-permission-text);
+  --color-status-permission-bg: var(--color-status-permission-bg);
   --color-status-active: var(--color-status-active);
   --color-status-success: var(--color-status-success);
   --color-status-error: var(--color-status-error);
 
   /* Shadow */
-  --shadow-pixel: var(--shadow-pixel);
+  --shadow-soft: var(--shadow-soft);
 }
 
 @layer base {
   html,
   body,
   #root {
-    @apply m-0 w-full h-full overflow-hidden font-pixel text-base text-text;
+    @apply m-0 w-full h-full overflow-hidden font-ui text-base text-text;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
     /* Mobile Safari: 100% tracks the shifting URL-bar viewport; dvh follows
        the *dynamic* viewport so the card bar hugs the real bottom edge. */
     height: 100dvh;
@@ -110,73 +170,26 @@
   }
 
   * {
-    @apply font-pixel;
+    @apply font-ui;
   }
 }
 
 @layer components {
-  /* Panel with standard pixel-art border + shadow */
-  .pixel-panel {
-    @apply bg-bg border-2 border-border rounded-none shadow-pixel;
+  /* Floating panel: hairline border, rounded, soft shadow */
+  .soft-panel {
+    @apply bg-bg border border-border rounded-xl shadow-soft;
   }
 
-  /* Horizontal carousel for editor items */
-  .carousel {
-    @apply flex gap-8 overflow-x-auto flex-nowrap pb-2;
-  }
-
-  /* Pixel-art range slider (HSBC ColorPicker). The accent fill up to the thumb
-     is driven by the --range-fill custom property set inline per slider. */
-  .pixel-range {
-    -webkit-appearance: none;
-    appearance: none;
-    height: 16px;
-    cursor: pointer;
-    border: 2px solid var(--color-border);
-    background: linear-gradient(
-      to right,
-      var(--color-accent) var(--range-fill, 50%),
-      var(--color-bg-dark) var(--range-fill, 50%)
-    );
-  }
-  .pixel-range::-webkit-slider-runnable-track {
-    -webkit-appearance: none;
-    height: 12px;
-    background: transparent;
-  }
-  .pixel-range::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 10px;
-    height: 18px;
-    margin-top: -5px;
-    background: var(--color-text);
-    border: 2px solid var(--color-border);
-    border-radius: 0;
-    box-shadow: var(--shadow-pixel);
-  }
-  .pixel-range:hover::-webkit-slider-thumb {
-    background: var(--color-accent-bright);
-  }
-  .pixel-range::-moz-range-track {
-    height: 12px;
-    background: transparent;
-  }
-  .pixel-range::-moz-range-thumb {
-    width: 10px;
-    height: 18px;
-    background: var(--color-text);
-    border: 2px solid var(--color-border);
-    border-radius: 0;
-    box-shadow: var(--shadow-pixel);
-  }
-  .pixel-range:hover::-moz-range-thumb {
-    background: var(--color-accent-bright);
+  /* The guided tour: everything dims except the hole this box leaves. */
+  .tour-spotlight {
+    box-shadow:
+      0 0 0 2px var(--color-accent),
+      0 0 0 9999px color-mix(in srgb, var(--color-text) 45%, transparent);
   }
 
   /* Terminal content must be monospace: Claude Code is a full-screen TUI, and a
      proportional face breaks its column alignment. The base layer's
-     `* { font-pixel }` applies FS Pixel Sans to every element -- including the
+     `* { font-ui }` applies the UI font to every element -- including the
      span xterm renders each cell into -- which overrides what xterm sets on its
      own container. Re-assert the mono stack here (components layer beats base,
      and `.xterm *` outranks `*`).
@@ -185,7 +198,7 @@
      the font CSS paints with is the same one xterm measured its cell grid with;
      hard-coding a second stack here would misalign the grid the moment the two
      drifted. Only the terminal CONTENT is mono -- the drawer chrome around it
-     stays on the pixel font. */
+     stays on the UI font. */
   .xterm,
   .xterm * {
     font-family: var(--font-terminal);
@@ -196,7 +209,7 @@
   }
 
   /* xterm's viewport owns the terminal's native scrollbar. Same pixel
-     treatment as .pixel-scrollbar below, but with a transparent track: when
+     treatment as .thin-scrollbar below, but with a transparent track: when
      nothing overflows (a full-screen TUI like Claude Code) no strip paints at
      all, and with scrollback only the slim square thumb shows. */
   .xterm .xterm-viewport::-webkit-scrollbar {
@@ -236,9 +249,9 @@
     font-size: 17px;
     background: var(--color-btn-bg);
     color: var(--color-text);
-    border: 2px solid var(--color-border);
-    border-radius: 0;
-    box-shadow: var(--shadow-pixel);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    box-shadow: var(--shadow-soft);
   }
   /* The wrapper is the touch strip centered on the selection edge (the only
      thing that hit-tests); the bar (::before, one cell tall) and the square
@@ -281,8 +294,8 @@
   }
 
   /* Pulsing dot animation (DebugView, ToolOverlay) */
-  .pixel-pulse {
-    animation: pixel-pulse 1.5s ease-in-out infinite;
+  .soft-pulse {
+    animation: soft-pulse 1.5s ease-in-out infinite;
   }
 
   /* Top-anchored floating chrome (Settings, view toggle, connection pill):
@@ -310,22 +323,22 @@
 
   /* Pixel-style thin scrollbar utility — used by the Area card folder list
      where the mapped-folder count can exceed the card height. */
-  .pixel-scrollbar::-webkit-scrollbar {
+  .thin-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-  .pixel-scrollbar::-webkit-scrollbar-track {
+  .thin-scrollbar::-webkit-scrollbar-track {
     background: var(--color-bg-dark);
   }
-  .pixel-scrollbar::-webkit-scrollbar-thumb {
+  .thin-scrollbar::-webkit-scrollbar-thumb {
     background: var(--color-border);
     border-radius: 0;
   }
-  .pixel-scrollbar::-webkit-scrollbar-thumb:hover {
+  .thin-scrollbar::-webkit-scrollbar-thumb:hover {
     background: var(--color-accent);
   }
   /* Firefox fallback */
-  .pixel-scrollbar {
+  .thin-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: var(--color-border) var(--color-bg-dark);
   }
@@ -343,12 +356,956 @@
   }
 }
 
-@keyframes pixel-pulse {
+/* Small joys (never in calm mode: the components leave the classes off).
+   A new card pops in, a card arriving at "Te necesita" hops, a column count
+   bumps when it changes, a celebrated card hops with sparks in its colour. */
+@layer components {
+  .anim-pop-in {
+    animation: pop-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  }
+  .anim-hop {
+    animation: hop 560ms ease-out both;
+  }
+  .anim-bump {
+    animation: bump 380ms ease-out;
+  }
+  .anim-cheer {
+    animation: cheer 800ms ease-out 2;
+  }
+  .anim-float-up {
+    animation: float-up 380ms ease-out both;
+  }
+  .spark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--spark-color);
+    pointer-events: none;
+    animation: spark 900ms ease-out both;
+    animation-delay: var(--spark-delay, 0ms);
+  }
+}
+
+/* What a Clawd wears over its board mug shot (CardExtras.tsx OutfitOverlay),
+   and its impatience after 10 min waiting: a little shake every few seconds. */
+@layer components {
+  .outfit-cap {
+    fill: #2f3d63;
+  }
+  .outfit-bow {
+    fill: #e2506f;
+  }
+  .outfit-crown {
+    fill: #f0c13a;
+    stroke: #b88a12;
+    stroke-width: 0.8;
+  }
+  .outfit-headphones {
+    fill: #3a3633;
+    stroke: #3a3633;
+  }
+  .anim-impatient {
+    animation: impatient 5s ease-in-out infinite;
+  }
+}
+
+@keyframes impatient {
+  0%,
+  84%,
+  100% {
+    transform: none;
+  }
+  87% {
+    transform: rotate(-9deg);
+  }
+  90% {
+    transform: rotate(8deg);
+  }
+  93% {
+    transform: rotate(-6deg);
+  }
+  96% {
+    transform: rotate(4deg);
+  }
+}
+
+/* The loading screen's Clawd (LoadingScreen.tsx): he walks back and forth,
+   legs in turns, body bobbing, turning around at each end. */
+@layer components {
+  .loading-track {
+    width: 180px;
+    display: flex;
+  }
+  .loading-clawd {
+    fill: var(--color-accent);
+    animation: walk-across 3.2s ease-in-out infinite;
+  }
+  .loading-eye {
+    fill: #231f1c;
+  }
+  .loading-body {
+    animation: walk-bob 0.4s ease-in-out infinite;
+  }
+  .loading-legs-a {
+    animation: walk-step 0.4s ease-in-out infinite;
+  }
+  .loading-legs-b {
+    animation: walk-step 0.4s ease-in-out infinite reverse;
+  }
+}
+
+@keyframes walk-across {
+  0% {
+    transform: translateX(0) scaleX(1);
+  }
+  45% {
+    transform: translateX(116px) scaleX(1);
+  }
+  50% {
+    transform: translateX(116px) scaleX(-1);
+  }
+  95% {
+    transform: translateX(0) scaleX(-1);
+  }
+  100% {
+    transform: translateX(0) scaleX(1);
+  }
+}
+
+@keyframes walk-bob {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: translateY(-0.6px);
+  }
+}
+
+@keyframes walk-step {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: translateY(-1.2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-impatient,
+  .loading-clawd,
+  .loading-body,
+  .loading-legs-a,
+  .loading-legs-b {
+    animation: none;
+  }
+  .anim-pop-in,
+  .anim-hop,
+  .anim-bump,
+  .anim-cheer,
+  .anim-float-up,
+  .spark {
+    animation: none;
+  }
+  .spark {
+    display: none;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hop {
+  0%,
+  100% {
+    transform: none;
+  }
+  30% {
+    transform: translateY(-7px);
+  }
+  55% {
+    transform: none;
+  }
+  75% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes bump {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: scale(1.35);
+  }
+}
+
+@keyframes cheer {
+  0%,
+  100% {
+    transform: none;
+  }
+  25% {
+    transform: translateY(-8px) rotate(-6deg);
+  }
+  50% {
+    transform: none;
+  }
+  75% {
+    transform: translateY(-4px) rotate(5deg);
+  }
+}
+
+@keyframes float-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spark {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--spark-dx), var(--spark-dy)) rotate(200deg) scale(0.5);
+  }
+}
+
+@keyframes soft-pulse {
   0%,
   100% {
     opacity: 1;
   }
   50% {
     opacity: 0.3;
+  }
+}
+
+/* ── First-run presentation (intro/IntroShow.tsx) ─────────────────────────
+   Every animated element is fully visible in its base style and its
+   keyframes run FROM the hidden or offscreen state with a backwards fill,
+   so with reduced motion (animations off) each scene simply shows its final
+   picture. Colours come from the theme tokens (light and dark) and from the
+   agent colour in --clawd. */
+@layer components {
+  .intro-show {
+    background:
+      radial-gradient(
+        ellipse at 50% 38%,
+        color-mix(in srgb, var(--color-accent) 10%, transparent),
+        transparent 62%
+      ),
+      var(--color-bg-dark);
+    color: var(--color-text);
+  }
+  .intro-scene {
+    position: absolute;
+    inset: 0;
+    padding: 24px 16px 72px;
+    animation: intro-scene-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .intro-title {
+    font-size: clamp(30px, 5.2vw, 54px);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+  }
+  .intro-caption {
+    font-size: clamp(22px, 3.4vw, 34px);
+    font-weight: 750;
+    letter-spacing: -0.02em;
+  }
+  .intro-letter {
+    display: inline-block;
+    animation: intro-letter 520ms cubic-bezier(0.2, 0.9, 0.3, 1.3) backwards;
+  }
+  .intro-fade-up {
+    animation: intro-fade-up 700ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  .intro-pop {
+    animation: intro-pop 560ms cubic-bezier(0.2, 0.9, 0.3, 1.45) backwards;
+  }
+  .intro-halo {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    width: min(520px, 80vw);
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--color-accent) 18%, transparent),
+      transparent 66%
+    );
+    animation: intro-breathe 3.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .intro-hop-in {
+    transform-origin: 50% 100%;
+    animation: intro-hop-in 1100ms cubic-bezier(0.3, 0.7, 0.4, 1) backwards;
+  }
+
+  /* Clawd */
+  .intro-clawd {
+    overflow: visible;
+    fill: var(--clawd);
+    filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--color-text) 14%, transparent));
+  }
+  .intro-clawd .intro-legs-a,
+  .intro-clawd .intro-legs-b {
+    fill: color-mix(in srgb, var(--clawd) 82%, black);
+  }
+  .intro-clawd .intro-eye {
+    fill: #231f1c;
+  }
+  .intro-clawd .intro-eye-happy {
+    fill: none;
+    stroke: #231f1c;
+    stroke-width: 0.75;
+    stroke-linecap: round;
+  }
+  .intro-clawd .intro-arm-l,
+  .intro-clawd .intro-arm-r {
+    transform-box: fill-box;
+  }
+  .intro-clawd .intro-arm-l {
+    transform-origin: 100% 50%;
+  }
+  .intro-clawd .intro-arm-r {
+    transform-origin: 0% 50%;
+  }
+  .intro-pose-walk .intro-legs-a {
+    animation: intro-step 280ms ease-in-out 6 alternate;
+    animation-delay: var(--d, 0ms);
+  }
+  .intro-pose-walk .intro-legs-b {
+    animation: intro-step 280ms ease-in-out 6 alternate-reverse;
+    animation-delay: var(--d, 0ms);
+  }
+  .intro-pose-walk .intro-body {
+    animation: intro-bob 280ms ease-in-out 6 alternate;
+    animation-delay: var(--d, 0ms);
+  }
+  .intro-arrives-typing .intro-arm-l,
+  .intro-pose-type .intro-arm-l {
+    animation: intro-type 300ms ease-in-out infinite alternate;
+    animation-delay: calc(var(--d, 0ms) + 1500ms);
+  }
+  .intro-arrives-typing .intro-arm-r,
+  .intro-pose-type .intro-arm-r {
+    animation: intro-type 300ms ease-in-out infinite alternate-reverse;
+    animation-delay: calc(var(--d, 0ms) + 1500ms);
+  }
+  .intro-pose-wave .intro-arm-r {
+    animation: intro-wave 520ms ease-in-out infinite alternate;
+    animation-delay: var(--wave-delay, 0ms);
+  }
+  .intro-pose-happy .intro-body {
+    animation: intro-happy 600ms ease-in-out infinite alternate;
+  }
+  .intro-walk-in-left {
+    animation: intro-walk-left 1700ms cubic-bezier(0.25, 0.7, 0.3, 1) backwards;
+    animation-delay: var(--d, 0ms);
+  }
+  .intro-walk-in-right {
+    animation: intro-walk-right 1700ms cubic-bezier(0.25, 0.7, 0.3, 1) backwards;
+    animation-delay: var(--d, 0ms);
+  }
+
+  /* Desks */
+  .intro-desk {
+    background: color-mix(in srgb, var(--color-text) 12%, var(--color-bg));
+    box-shadow: var(--shadow-soft);
+    animation: intro-pop 480ms cubic-bezier(0.2, 0.9, 0.3, 1.4) backwards;
+    animation-delay: calc(var(--d, 0ms) + 300ms);
+  }
+  .intro-laptop {
+    background: color-mix(in srgb, var(--color-text) 78%, var(--color-bg));
+  }
+  .intro-laptop-screen {
+    background: color-mix(in srgb, var(--color-accent) 55%, var(--color-bg));
+    animation: intro-screen 900ms steps(2) infinite;
+    animation-delay: calc(var(--d, 0ms) + 1500ms);
+  }
+
+  /* Board */
+  .intro-column {
+    background: var(--color-bg-thumb);
+    border-color: var(--color-border);
+    transition:
+      background-color 400ms,
+      border-color 400ms;
+    animation: intro-rise 600ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  .intro-column-hot {
+    background: var(--color-status-permission-bg);
+    border-color: var(--color-status-permission);
+  }
+  .intro-count {
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    animation: bump 380ms ease-out;
+  }
+  .intro-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-soft);
+    transition:
+      left 780ms cubic-bezier(0.2, 0.9, 0.3, 1.12),
+      top 780ms cubic-bezier(0.2, 0.9, 0.3, 1.12),
+      opacity 420ms ease-out;
+    transition-delay: 0ms, 0ms, var(--pop-delay, 0ms);
+  }
+  .intro-card-needs {
+    border: 2px solid var(--color-status-permission);
+  }
+  .intro-needs-text {
+    color: var(--color-status-permission-text);
+    font-weight: 600;
+  }
+  .intro-ring {
+    position: absolute;
+    inset: -5px;
+    border-radius: 12px;
+    border: 2px solid var(--color-status-permission);
+    animation: intro-ring 1.3s ease-out infinite;
+    pointer-events: none;
+  }
+  .intro-ring-round {
+    inset: -8px;
+    border-radius: 50%;
+  }
+  .intro-done-chip {
+    background: var(--color-accent);
+    color: white;
+  }
+  .intro-cursor {
+    left: calc(1.5% + 26px);
+    top: 92px;
+    z-index: 3;
+    animation: intro-cursor-glide 950ms cubic-bezier(0.3, 0.7, 0.2, 1) backwards;
+  }
+  .intro-cursor-arrow {
+    fill: var(--color-text);
+    stroke: var(--color-bg);
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+  }
+  .intro-cursor-click svg {
+    animation: intro-press 260ms ease-out;
+  }
+  .intro-click-ripple {
+    position: absolute;
+    left: -10px;
+    top: -10px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid var(--color-accent);
+    animation: intro-ripple 600ms ease-out forwards;
+  }
+
+  /* Graph */
+  .intro-link {
+    stroke: color-mix(in srgb, var(--color-text) 30%, transparent);
+    stroke-width: 2;
+  }
+  .intro-link-amber {
+    stroke: var(--color-status-permission);
+    stroke-width: 2.6;
+  }
+  .intro-draw {
+    stroke-dasharray: 1;
+    animation: intro-draw 1100ms cubic-bezier(0.4, 0, 0.2, 1) 400ms backwards;
+  }
+  /* The drawn amber line stays as a faint track under the marching dashes. */
+  .intro-link-amber.intro-draw {
+    opacity: 0.35;
+  }
+  .intro-march {
+    stroke-dasharray: 7 7;
+    animation:
+      intro-march 700ms linear infinite,
+      intro-appear 400ms ease-out 1300ms backwards;
+  }
+  .intro-vos {
+    background: var(--color-text);
+    color: var(--color-bg);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: var(--shadow-soft);
+  }
+  .intro-node {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--clawd) 15%, var(--color-bg));
+    border: 2px solid color-mix(in srgb, var(--clawd) 55%, transparent);
+    box-shadow: var(--shadow-soft);
+  }
+  .intro-sat {
+    width: 38px;
+    height: 38px;
+  }
+  .intro-orbit {
+    width: 0;
+    height: 0;
+    animation:
+      intro-spin 16s linear infinite,
+      intro-appear 600ms ease-out 900ms backwards;
+  }
+  .intro-orbit-arm {
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    transform-origin: 0 0;
+  }
+  .intro-orbit-spoke {
+    left: 0;
+    top: -1px;
+    height: 2px;
+    background: repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-text) 28%, transparent) 0 5px,
+      transparent 5px 10px
+    );
+  }
+  .intro-orbit-counter {
+    animation: intro-spin 16s linear infinite reverse;
+  }
+
+  /* Chat */
+  .intro-panel {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    box-shadow:
+      0 2px 4px color-mix(in srgb, var(--color-text) 6%, transparent),
+      0 24px 60px color-mix(in srgb, var(--color-text) 16%, transparent);
+  }
+  .intro-slide-in {
+    animation: intro-slide-in 700ms cubic-bezier(0.2, 0.9, 0.3, 1.1) backwards;
+  }
+  .intro-bubble-mine {
+    background: var(--color-accent);
+    color: white;
+  }
+  .intro-caret {
+    display: inline-block;
+    width: 1.5px;
+    height: 1em;
+    margin-left: 1px;
+    vertical-align: -2px;
+    background: var(--color-text);
+    animation: intro-blink 900ms steps(1) infinite;
+  }
+  .intro-send {
+    background: var(--color-accent);
+    color: white;
+  }
+  .intro-send-pressed {
+    animation: intro-press 260ms ease-out;
+  }
+  .intro-your-turn {
+    background: var(--color-status-permission-bg);
+    color: var(--color-status-permission-text);
+    border-left: 3px solid var(--color-status-permission);
+    animation:
+      intro-fade-up 600ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards,
+      intro-glow 1.6s ease-in-out 600ms infinite alternate;
+  }
+
+  /* Finale */
+  .intro-start {
+    background: var(--color-accent);
+    color: white;
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--color-accent) 45%, transparent);
+    transition: transform 160ms ease-out;
+  }
+  .intro-start:hover {
+    transform: translateY(-2px) scale(1.03);
+  }
+  .intro-confetti {
+    position: absolute;
+    top: -24px;
+    width: 8px;
+    height: 13px;
+    border-radius: 2px;
+    animation-name: intro-fall;
+    animation-timing-function: cubic-bezier(0.3, 0.2, 0.5, 1);
+    animation-fill-mode: both;
+    animation-iteration-count: infinite;
+  }
+  .intro-confetti-round {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+  }
+
+  /* Progress */
+  .intro-dot {
+    width: 34px;
+    height: 5px;
+    background: color-mix(in srgb, var(--color-text) 14%, transparent);
+  }
+  .intro-dot-fill {
+    width: 0;
+    background: var(--color-accent);
+  }
+  .intro-dot-full {
+    width: 100%;
+  }
+  .intro-dot-running {
+    width: 100%;
+    animation: intro-fill var(--scene-ms) linear backwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-show *,
+  .intro-show *::before,
+  .intro-show *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .intro-show .intro-scene {
+    animation: intro-appear 400ms ease-out both !important;
+  }
+  .intro-show .intro-confetti,
+  .intro-show .intro-march {
+    display: none;
+  }
+}
+
+@keyframes intro-scene-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+@keyframes intro-appear {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes intro-letter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.9);
+    filter: blur(4px);
+  }
+}
+@keyframes intro-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes intro-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+@keyframes intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+}
+@keyframes intro-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+@keyframes intro-hop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-70vh) scale(0.9, 1.15);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(0) scale(1.18, 0.78);
+  }
+  72% {
+    transform: translateY(-34px) scale(0.94, 1.08);
+  }
+  86% {
+    transform: translateY(0) scale(1.06, 0.94);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes intro-step {
+  to {
+    transform: translateY(-1.3px);
+  }
+}
+@keyframes intro-bob {
+  to {
+    transform: translateY(-0.6px);
+  }
+}
+@keyframes intro-type {
+  to {
+    transform: translateY(0.9px);
+  }
+}
+@keyframes intro-wave {
+  from {
+    transform: rotate(-28deg);
+  }
+  to {
+    transform: rotate(-80deg) translateY(-0.6px);
+  }
+}
+@keyframes intro-happy {
+  to {
+    transform: translateY(-1px);
+  }
+}
+@keyframes intro-walk-left {
+  from {
+    transform: translateX(-62vw);
+  }
+}
+@keyframes intro-walk-right {
+  from {
+    transform: translateX(62vw);
+  }
+}
+@keyframes intro-screen {
+  50% {
+    filter: brightness(1.25);
+  }
+}
+@keyframes intro-ring {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.14);
+  }
+}
+@keyframes intro-cursor-glide {
+  from {
+    left: 74%;
+    top: 214px;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+}
+@keyframes intro-press {
+  50% {
+    transform: scale(0.85);
+  }
+}
+@keyframes intro-ripple {
+  from {
+    opacity: 0.9;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+@keyframes intro-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+@keyframes intro-march {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+@keyframes intro-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes intro-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(36px) scale(0.95);
+  }
+}
+@keyframes intro-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes intro-glow {
+  to {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-status-permission) 22%, transparent);
+  }
+}
+@keyframes intro-fall {
+  from {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--sway), 108vh) rotate(var(--spin));
+    opacity: 0;
+  }
+}
+@keyframes intro-fill {
+  from {
+    width: 0;
+  }
+}
+
+/* ── Goodbye after "Apagar la oficina" (components/ShutdownScreen.tsx) ───
+   Reuses the presentation's Clawd and halo: asleep, breathing slowly, with
+   three z's floating up one after the other. */
+@layer components {
+  .intro-pose-sleep .intro-body {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: shutdown-breathe 2.8s ease-in-out infinite;
+  }
+  .shutdown-zzz {
+    position: absolute;
+    right: -14px;
+    top: -10px;
+    font-weight: 800;
+    color: var(--color-text-muted);
+  }
+  .shutdown-zzz span {
+    position: absolute;
+    font-size: 18px;
+    opacity: 0;
+    animation: shutdown-z 2.4s ease-out infinite;
+  }
+  .shutdown-zzz span:nth-child(2) {
+    animation-delay: 0.8s;
+  }
+  .shutdown-zzz span:nth-child(3) {
+    animation-delay: 1.6s;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shutdown-screen *,
+  .shutdown-screen *::before,
+  .shutdown-screen *::after {
+    animation: none !important;
+  }
+  .shutdown-zzz span:first-child {
+    opacity: 1;
+  }
+}
+@keyframes shutdown-breathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.96);
+  }
+}
+@keyframes shutdown-z {
+  from {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.7);
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate(22px, -46px) scale(1.25);
+  }
+}
+
+/* ── Presentation: workspaces and "Tu día" scenes (intro/SceneSpaces.tsx,
+   intro/SceneDay.tsx) ── */
+@layer components {
+  .intro-spaces-bar {
+    background: var(--color-bg-thumb);
+    border: 1px solid var(--color-border);
+    animation-delay: 60ms;
+  }
+  .intro-space-tab {
+    height: 30px;
+    color: var(--color-text-muted);
+    transition:
+      background-color 260ms,
+      color 260ms,
+      box-shadow 260ms;
+  }
+  .intro-space-tab-on {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-weight: 600;
+    box-shadow: var(--shadow-soft);
+  }
+  .intro-space-badge {
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: var(--color-status-permission);
+    color: white;
+  }
+  .intro-space-card {
+    transition:
+      left 700ms cubic-bezier(0.2, 0.9, 0.3, 1.12),
+      top 700ms cubic-bezier(0.2, 0.9, 0.3, 1.12),
+      opacity 380ms ease-out,
+      transform 380ms ease-out;
+  }
+  .intro-pointer {
+    z-index: 3;
+    transition:
+      left 850ms cubic-bezier(0.3, 0.7, 0.2, 1),
+      top 850ms cubic-bezier(0.3, 0.7, 0.2, 1),
+      opacity 300ms ease-out;
+  }
+  .intro-day-count {
+    animation: bump 380ms ease-out;
+  }
+  .intro-day-row {
+    background: var(--color-bg);
+  }
+  .intro-merged {
+    background: color-mix(in srgb, var(--color-status-success) 16%, var(--color-bg));
+    color: var(--color-status-success);
   }
 }

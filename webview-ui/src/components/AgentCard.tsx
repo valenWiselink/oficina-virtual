@@ -1,6 +1,6 @@
+import { type AgentKind, KIND_COLOR } from '../views/agentViews.js';
 import type { CardVariant } from './cardBar.js';
 import { CharacterMugShot } from './CharacterMugShot.js';
-import { Button } from './ui/Button.js';
 
 /** How a given agent's character looks, for the tab mug shot. */
 export interface AgentAppearance {
@@ -8,23 +8,17 @@ export interface AgentAppearance {
   hueShift: number;
 }
 
-/** Agent activity reflected by the tab's status dot. */
-export type AgentActivity = 'idle' | 'working' | 'attention';
+/** The tab dot: the agent's state as the board shows it (same colour), or
+ *  the drawer-owned "connection broken". */
+export type TabStatus = AgentKind | 'disconnected';
 
-/** Activity plus the drawer-owned "connection broken" state. */
-export type TabStatus = AgentActivity | 'disconnected';
-
-const STATUS_DOT: Record<TabStatus, string> = {
-  idle: 'bg-status-success', // green — turn complete, nothing pending
-  working: 'bg-accent-bright', // blue — actively running
-  attention: 'bg-status-permission', // yellow — needs permission or input
-  disconnected: 'bg-status-error', // red — terminal socket dropped
-};
+const dotColor = (status: TabStatus): string =>
+  status === 'disconnected' ? 'var(--color-status-error)' : KIND_COLOR[status];
 
 const CARD_VARIANT: Record<CardVariant, string> = {
-  default: 'bg-btn-bg border-transparent hover:bg-btn-hover',
+  default: 'bg-bg border-border hover:border-border-strong',
   focused: 'bg-active-bg border-transparent',
-  active: 'bg-active-bg border-accent',
+  active: 'bg-bg border-accent ring-2 ring-accent/30',
 };
 
 interface AgentCardProps {
@@ -32,57 +26,60 @@ interface AgentCardProps {
   variant: CardVariant;
   appearance: AgentAppearance;
   status: TabStatus | null;
-  /** When false the × is invisible (not removed — the card keeps its width so
-   *  the bar doesn't reflow). Mobile only shows it on the active terminal tab
-   *  to keep a stray tap from killing an agent. */
+  /** When false the × is hidden. Mobile only shows it on the active terminal
+   *  tab to keep a stray tap from killing an agent. */
   showClose?: boolean;
+  /** Who it is, for the tooltip. */
+  label?: string;
   onSelect: (agentId: number) => void;
   onClose: (agentId: number) => void;
 }
 
-/** One agent's card in the terminal sidebar — mug shot beside a
- *  close-button/status-dot column. The cards double as the terminal panel's
- *  tabs: clicking one selects that agent's pane. */
+/** One agent's tab: its mug shot with the state dot, and a close button on
+ *  hover. The cards double as the terminal panel's tabs: clicking one selects
+ *  that agent's pane. */
 export function AgentCard({
   agentId,
   variant,
   appearance,
   status,
   showClose = true,
+  label,
   onSelect,
   onClose,
 }: AgentCardProps) {
   return (
     <div
-      className={`pointer-events-auto flex items-stretch gap-1 p-1 cursor-pointer border-2 shrink-0 ${CARD_VARIANT[variant]}`}
+      className={`group relative pointer-events-auto flex items-center justify-center w-52 h-52 rounded-xl cursor-pointer border shrink-0 transition-colors ${CARD_VARIANT[variant]}`}
       onClick={() => onSelect(agentId)}
-      title={`Agent ${agentId}`}
+      title={label ?? `Agente ${agentId}`}
     >
-      <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} />
-      {/* Close on top, status dot at the bottom, both centred over the
-          same column beside the mug shot. */}
-      <div className="flex flex-col items-center justify-between shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
+      <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} size={36} />
+      {/* The state dot, ringed so it reads on any mug shot. */}
+      {status && (
+        <span
+          className="absolute right-3 bottom-3 size-10 rounded-full ring-2 ring-bg"
+          style={{ background: dotColor(status) }}
+          title={status === 'disconnected' ? 'Terminal desconectada' : undefined}
+        />
+      )}
+      {showClose && (
+        <button
+          type="button"
           onClick={(e) => {
             // Don't also select the tab we're about to remove.
             e.stopPropagation();
             onClose(agentId);
           }}
-          title="Close agent"
-          className={`leading-none ${showClose ? '' : 'invisible'}`}
+          title="Cerrar agente"
+          aria-label="Cerrar agente"
+          className="absolute right-1 top-1 size-16 rounded-full border border-border bg-bg text-text-muted hover:text-danger cursor-pointer flex items-center justify-center p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
         >
-          ×
-        </Button>
-        {/* 1px left: optically centres the solid square under the pixel-font ×
-            glyph, which sits a hair left in its cell. mb (not pb) lifts it off
-            the card's bottom edge: the span is a fixed-size empty box, so
-            padding is invisible — only margin moves it. */}
-        <span
-          className={`size-6 shrink-0 relative -left-1 mb-2 ${status ? STATUS_DOT[status] : ''}`}
-        />
-      </div>
+          <span className="material-symbols-sharp text-xs" aria-hidden="true">
+            close
+          </span>
+        </button>
+      )}
     </div>
   );
 }

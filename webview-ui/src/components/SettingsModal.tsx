@@ -1,24 +1,26 @@
-import { useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 
+import { APP_THEME_CHOICES, setAppThemeChoice, useAppThemeChoice } from '../effects/appTheme.js';
+import { setCalm, useCalmMode } from '../effects/calmMode.js';
+import { TERMINAL_DOCKS, type TerminalDock } from '../hooks/useTerminalDock.js';
 import { isSoundEnabled, setSoundEnabled } from '../notificationSound.js';
-import { isBrowserRuntime } from '../runtime.js';
 import { transport } from '../transport/index.js';
+import { setOperatorName, useOperatorName } from '../views/officeMemory.js';
+import { TerminalSchemePicker } from './TerminalSchemePicker.js';
 import { Button } from './ui/Button.js';
-import { Checkbox } from './ui/Checkbox.js';
-import { MenuItem } from './ui/MenuItem.js';
 import { Modal } from './ui/Modal.js';
+import { Switch } from './ui/Switch.js';
+import { TextInput } from './ui/TextInput.js';
 
+// The pixel office's settings (export/import layout, furniture asset folders,
+// always-on name labels, ghosts, areas) left with it on 2026-10-19: the board
+// and the graph have no layout, and offering them would be a lie.
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   isDebugMode: boolean;
   onToggleDebugMode: () => void;
-  alwaysShowOverlay: boolean;
-  onToggleAlwaysShowOverlay: () => void;
-  /** Whether headless agents (adopted, no terminal to focus) render translucent. */
-  ghostHeadlessAgents: boolean;
-  onToggleGhostHeadlessAgents: () => void;
-  externalAssetDirectories: string[];
   watchAllSessions: boolean;
   onToggleWatchAllSessions: () => void;
   /** ACTUAL install state (the hooksStatus message), not the hooksEnabled
@@ -27,21 +29,21 @@ interface SettingsModalProps {
    *  ~/.claude/settings.json. */
   hooksInstalled: boolean;
   onToggleHooksEnabled: () => void;
-  /** Whether the areas overlay is rendered outside of the Areas edit tool. */
-  showAreas: boolean;
-  onToggleShowAreas: () => void;
-  /** Hide the Show Areas checkbox entirely when areas are unavailable. */
-  showAreasAvailable: boolean;
   /** Permission posture applied by the host to every launch from this office. */
   bypassPermissions: boolean;
   onToggleBypassPermissions: () => void;
   /** Whether the launch drawer lists the host's own Directories. */
   showHostDirectories: boolean;
   onToggleShowHostDirectories: () => void;
-  /** Browser-native layout export (standalone only; VS Code uses the host save dialog). */
-  onExportLayout: () => void;
-  /** Browser-native layout import from a chosen file (standalone only). */
-  onImportLayout: (file: File) => void;
+  /** Where the terminal panel docks; absent where there is no panel. */
+  terminalDock?: TerminalDock;
+  onTerminalDockChange: (dock: TerminalDock) => void;
+  /** Turn the office off (standalone only). */
+  onShutdown?: () => void;
+  /** Run the guided tour again. */
+  onShowGuide?: () => void;
+  /** Play the animated presentation again. */
+  onShowIntro?: () => void;
 }
 
 export function SettingsModal({
@@ -49,198 +51,235 @@ export function SettingsModal({
   onClose,
   isDebugMode,
   onToggleDebugMode,
-  alwaysShowOverlay,
-  onToggleAlwaysShowOverlay,
-  ghostHeadlessAgents,
-  onToggleGhostHeadlessAgents,
-  externalAssetDirectories,
   watchAllSessions,
   onToggleWatchAllSessions,
   hooksInstalled,
   onToggleHooksEnabled,
-  showAreas,
-  onToggleShowAreas,
-  showAreasAvailable,
   bypassPermissions,
   onToggleBypassPermissions,
   showHostDirectories,
   onToggleShowHostDirectories,
-  onExportLayout,
-  onImportLayout,
+  terminalDock,
+  onTerminalDockChange,
+  onShutdown,
+  onShowGuide,
+  onShowIntro,
 }: SettingsModalProps) {
   const [soundLocal, setSoundLocal] = useState(isSoundEnabled);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [assetDirDraft, setAssetDirDraft] = useState('');
+  const calm = useCalmMode();
+  const appTheme = useAppThemeChoice();
+  const operatorName = useOperatorName();
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Settings">
-      {/* Open Sessions Folder opens an OS file manager — impossible in the browser. */}
-      {!isBrowserRuntime && (
-        <MenuItem
-          onClick={() => {
-            transport.send({ type: 'openSessionsFolder' });
-            onClose();
-          }}
-        >
-          Open Sessions Folder
-        </MenuItem>
-      )}
-      <MenuItem
-        onClick={() => {
-          if (isBrowserRuntime) {
-            onExportLayout();
-          } else {
-            transport.send({ type: 'exportLayout' });
-          }
-          onClose();
-        }}
-      >
-        Export Layout
-      </MenuItem>
-      <MenuItem
-        onClick={() => {
-          if (isBrowserRuntime) {
-            // Open the native file picker; the import is applied in onChange below.
-            fileInputRef.current?.click();
-          } else {
-            transport.send({ type: 'importLayout' });
-            onClose();
-          }
-        }}
-      >
-        Import Layout
-      </MenuItem>
-      {isBrowserRuntime && (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            // Reset the value so re-selecting the same file fires change again.
-            e.target.value = '';
-            if (file) {
-              onImportLayout(file);
-              onClose();
-            }
-          }}
-        />
-      )}
-      {/* Browser has no native directory picker, so accept a typed absolute path. */}
-      {isBrowserRuntime ? (
-        <div className="flex items-center gap-4 py-4 px-10">
-          <input
-            type="text"
-            value={assetDirDraft}
-            placeholder="Absolute asset directory path"
-            onChange={(e) => setAssetDirDraft(e.target.value)}
-            className="flex-1 min-w-0 text-xs py-2 px-4 bg-bg border-2 border-border rounded-none text-text"
+    <Modal isOpen={isOpen} onClose={onClose} title="Ajustes" width={500}>
+      <Section title="Vos">
+        <div className="flex items-center justify-between gap-8 py-7 px-8">
+          <span className="flex flex-col gap-1">
+            <span className="text-sm text-text">Tu nombre</span>
+            <span className="text-xs text-text-muted">Para que la oficina te salude</span>
+          </span>
+          <TextInput
+            className="w-160"
+            maxLength={40}
+            placeholder="Por ejemplo: Valentín"
+            defaultValue={operatorName}
+            onChange={(e) => setOperatorName(e.target.value)}
           />
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => {
-              const path = assetDirDraft.trim();
-              if (!path) return;
-              transport.send({ type: 'addExternalAssetDirectory', path });
-              setAssetDirDraft('');
-            }}
-            className="shrink-0"
-          >
-            Add
-          </Button>
         </div>
-      ) : (
-        <MenuItem
-          onClick={() => {
-            transport.send({ type: 'addExternalAssetDirectory' });
-            onClose();
-          }}
-        >
-          Add Asset Directory
-        </MenuItem>
-      )}
-      {externalAssetDirectories.map((dir) => (
-        <div key={dir} className="flex items-center justify-between py-4 px-10 gap-8">
-          <span
-            className="text-xs text-text-muted overflow-hidden text-ellipsis whitespace-nowrap"
-            title={dir}
-          >
-            {dir.split(/[/\\]/).pop() ?? dir}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => transport.send({ type: 'removeExternalAssetDirectory', path: dir })}
-            className="shrink-0"
-          >
-            x
-          </Button>
-        </div>
-      ))}
-      <Checkbox
-        label="Sound Notifications"
-        checked={soundLocal}
-        onChange={() => {
-          const newVal = !isSoundEnabled();
-          setSoundEnabled(newVal);
-          setSoundLocal(newVal);
-          transport.send({ type: 'setSoundEnabled', enabled: newVal });
-        }}
-      />
-      <Checkbox
-        label="Watch All Sessions"
-        checked={watchAllSessions}
-        onChange={onToggleWatchAllSessions}
-      />
-      <Checkbox
-        label="Instant Detection (Hooks)"
-        checked={hooksInstalled}
-        onChange={onToggleHooksEnabled}
-      />
-      <Checkbox
-        label="Always Show Labels"
-        checked={alwaysShowOverlay}
-        onChange={onToggleAlwaysShowOverlay}
-      />
-      {/* Headless agents are the office's only terminal-less citizens in VS Code.
-          Standalone has no terminals at all, so nothing there would ever ghost. */}
-      {!isBrowserRuntime && (
-        <Checkbox
-          label="Display Headless as Ghosts"
-          checked={ghostHeadlessAgents}
-          onChange={onToggleGhostHeadlessAgents}
+      </Section>
+      <Section title="Apariencia">
+        <ChoiceRow
+          label="Tema"
+          description="Según la hora: oscuro de 20 a 7"
+          choices={APP_THEME_CHOICES}
+          value={appTheme}
+          onChange={setAppThemeChoice}
         />
-      )}
-      {showAreasAvailable && (
-        <Checkbox label="Show Areas" checked={showAreas} onChange={onToggleShowAreas} />
-      )}
-      {/* Permission posture, set once instead of per launch: while on, the host
-          adds the CLI's skip-permissions flag to every agent it launches. */}
-      <Checkbox
-        label={
-          <span className="flex items-center gap-4">
-            Skip Permissions
-            {/* Nudged down: the pixel font's glyphs sit low in their line box,
-                so a centered icon reads as floating high. */}
-            <span className="material-symbols-sharp text-[12px] translate-y-2" aria-hidden="true">
-              warning
+        {terminalDock && (
+          <ChoiceRow
+            label="Lado de la terminal"
+            description="De qué lado de la ventana aparece"
+            choices={TERMINAL_DOCKS}
+            value={terminalDock}
+            onChange={onTerminalDockChange}
+          />
+        )}
+        <TerminalSchemePicker />
+        <Switch
+          label="Modo calma"
+          description="Sin efectos decorativos: queda sólo lo que dice el estado"
+          checked={calm}
+          onChange={() => setCalm(!calm)}
+        />
+      </Section>
+      <Section title="Avisos">
+        <Switch
+          label="Sonidos"
+          description="Un sonido cuando un agente termina o te pide permiso"
+          checked={soundLocal}
+          onChange={() => {
+            const newVal = !isSoundEnabled();
+            setSoundEnabled(newVal);
+            setSoundLocal(newVal);
+            transport.send({ type: 'setSoundEnabled', enabled: newVal });
+          }}
+        />
+      </Section>
+      <Section title="Agentes">
+        <Switch
+          label="Ver todas las sesiones"
+          description="También las de otras carpetas, aunque no las hayas abierto desde acá"
+          checked={watchAllSessions}
+          onChange={onToggleWatchAllSessions}
+        />
+        <Switch
+          label="Ofrecer la carpeta de inicio"
+          description="Suma al menú de «+ Agente» la carpeta desde donde arrancó la oficina"
+          checked={showHostDirectories}
+          onChange={onToggleShowHostDirectories}
+        />
+        {/* Permission posture, set once instead of per launch: while on, the
+            host adds the CLI's skip-permissions flag to every agent it launches. */}
+        <Switch
+          label="Saltear permisos"
+          description="Los agentes nuevos hacen todo sin preguntarte. Peligroso."
+          danger
+          checked={bypassPermissions}
+          onChange={onToggleBypassPermissions}
+        />
+      </Section>
+      <Section title="Avanzado">
+        <Switch
+          label="Detección al instante"
+          description="Los hooks de Claude Code: permisos y avisos en el momento"
+          checked={hooksInstalled}
+          onChange={onToggleHooksEnabled}
+        />
+        <Switch
+          label="Vista de depuración"
+          description="Muestra lo que la oficina recibe de cada agente"
+          checked={isDebugMode}
+          onChange={onToggleDebugMode}
+        />
+      </Section>
+      {onShowGuide && (
+        <Section title="Ayuda">
+          <div className="flex items-center justify-between gap-8 py-7 px-8">
+            <span className="flex flex-col gap-1">
+              <span className="text-sm text-text">Guía</span>
+              <span className="text-xs text-text-muted">Un recorrido rápido por la oficina</span>
             </span>
-          </span>
-        }
-        checked={bypassPermissions}
-        onChange={onToggleBypassPermissions}
-      />
-      {/* The host's own Directories in the launch drawer, named for what each
-          host contributes: VS Code its workspace folders, standalone the
-          directory the server was started from. */}
-      <Checkbox
-        label={isBrowserRuntime ? 'Show Start Directory' : 'Show Workspace Folders'}
-        checked={showHostDirectories}
-        onChange={onToggleShowHostDirectories}
-      />
-      <Checkbox label="Debug View" checked={isDebugMode} onChange={onToggleDebugMode} />
+            <Button size="sm" onClick={onShowGuide}>
+              Ver la guía
+            </Button>
+          </div>
+          {onShowIntro && (
+            <div className="flex items-center justify-between gap-8 py-7 px-8">
+              <span className="flex flex-col gap-1">
+                <span className="text-sm text-text">Presentación</span>
+                <span className="text-xs text-text-muted">
+                  De qué se trata la oficina, en menos de un minuto
+                </span>
+              </span>
+              <Button size="sm" onClick={onShowIntro}>
+                Ver la presentación
+              </Button>
+            </div>
+          )}
+        </Section>
+      )}
+      {onShutdown && <ShutdownRow onShutdown={onShutdown} />}
     </Modal>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col pt-6 pb-4">
+      <h3 className="m-0 px-8 pb-2 text-2xs font-semibold uppercase tracking-wide text-text-muted">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/** A setting with a few named options, as a segmented control. */
+function ChoiceRow<T extends string>({
+  label,
+  description,
+  choices,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  choices: ReadonlyArray<{ id: T; label: string }>;
+  value: T;
+  onChange: (next: T) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-8 py-7 px-8">
+      <span className="flex flex-col gap-1">
+        <span className="text-sm text-text">{label}</span>
+        <span className="text-xs text-text-muted">{description}</span>
+      </span>
+      <div className="flex rounded-lg bg-bg-thumb p-2 shrink-0" role="group" aria-label={label}>
+        {choices.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            aria-pressed={value === c.id}
+            onClick={() => onChange(c.id)}
+            className={`border-0 rounded-md px-8 py-3 text-xs font-medium cursor-pointer ${
+              value === c.id
+                ? 'bg-bg text-text shadow-soft'
+                : 'bg-transparent text-text-muted hover:text-text'
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** "Apagar la oficina", with the consequence spelled out before it happens. */
+function ShutdownRow({ onShutdown }: { onShutdown: () => void }) {
+  const [asking, setAsking] = useState(false);
+  return (
+    <div className="flex flex-col gap-4 py-8 px-8 border-t border-border mt-4">
+      {asking ? (
+        <>
+          <span className="text-xs text-text">
+            Se cierran las terminales de tus agentes. La próxima vez que abras la oficina se retoman
+            con su conversación; lo que estén haciendo en este momento se corta.
+          </span>
+          <div className="flex gap-4 justify-end">
+            <Button size="sm" onClick={() => setAsking(false)}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              variant="accent"
+              className="bg-danger! border-danger!"
+              onClick={onShutdown}
+            >
+              Apagar
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="self-start px-0! hover:bg-transparent! hover:text-danger!"
+          onClick={() => setAsking(true)}
+        >
+          Apagar la oficina…
+        </Button>
+      )}
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useEffect } from 'react';
 
 import { Button } from './Button.js';
 
@@ -7,8 +8,10 @@ interface ModalProps {
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
-  /** z-index for backdrop (modal gets +1). Default 49 */
+  /** z-index for backdrop (modal gets +1). Default 50 */
   zIndex?: number;
+  /** Panel width in px (it still shrinks to fit narrow screens). Default 460. */
+  width?: number;
   className?: string;
 }
 
@@ -18,36 +21,60 @@ export function Modal({
   title,
   children,
   zIndex = 50,
+  width = 460,
   className = '',
 }: ModalProps) {
+  // Esc closes, like every dialog.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50" style={{ zIndex }} onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-text/25 backdrop-blur-[2px]"
+        style={{ zIndex }}
+        onClick={onClose}
+      />
       {/* Sizing wrapper: a full-viewport flex box (inset-0, no viewport
           units — dvw/dvh support varies across iOS) whose padding is the
           modal's screen margin. The panel can never exceed it: max-w/h-full
-          caps it, min-width yields via min() (min-width beats max-width in
-          CSS, so an unconditional minimum would overflow narrow phones), and
-          overflow scrolls. Clicks on the margin fall through to the
-          backdrop. */}
+          caps it and overflow scrolls. Clicks on the margin fall through to
+          the backdrop. */}
       <div
-        className="fixed inset-0 flex items-center justify-center p-8 pointer-events-none"
+        className="fixed inset-0 flex items-center justify-center p-16 pointer-events-none"
         style={{ zIndex: zIndex + 1 }}
       >
         <div
-          className={`pointer-events-auto bg-bg border-2 border-border rounded-none shadow-pixel p-4 min-w-[min(320px,100%)] max-w-full max-h-full overflow-y-auto overflow-x-hidden ${className}`}
+          role="dialog"
+          aria-modal="true"
+          className={`pointer-events-auto bg-bg border border-border rounded-2xl shadow-soft max-w-full max-h-full overflow-y-auto overflow-x-hidden ${className}`}
+          style={{ width }}
         >
           {/* Sticky so the close button stays reachable while long content
-              (changelog, settings) scrolls under it. */}
-          <div className="sticky top-0 z-10 bg-bg flex items-center justify-between py-4 px-10 border-b border-border mb-4">
-            <span className="text-accent-bright text-2xl">{title}</span>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              x
+              scrolls under it. */}
+          <div className="sticky top-0 z-10 bg-bg flex items-center justify-between px-18 pt-14 pb-10">
+            <span className="text-text text-base font-semibold">{title}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              title="Cerrar (Esc)"
+              aria-label="Cerrar"
+            >
+              <span className="material-symbols-sharp text-base" aria-hidden="true">
+                close
+              </span>
             </Button>
           </div>
-          {children}
+          <div className="px-10 pb-14">{children}</div>
         </div>
       </div>
     </>

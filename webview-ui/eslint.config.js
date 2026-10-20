@@ -37,8 +37,10 @@ export default defineConfig([
       'react-hooks/refs': 'off',
       'react-hooks/set-state-in-effect': 'off',
       'pixel-agents/no-inline-colors': 'error',
-      'pixel-agents/pixel-shadow': 'error',
-      'pixel-agents/pixel-font': 'error',
+      // The office dropped its pixel-art look (2026-10-19): Work Sans and soft
+      // shadows are the house style now, so these two pixel-only rules are off.
+      'pixel-agents/pixel-shadow': 'off',
+      'pixel-agents/pixel-font': 'off',
     },
   },
   {
