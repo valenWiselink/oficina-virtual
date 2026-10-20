@@ -15,7 +15,9 @@ cambiar de ventana.
 
 ## Instalar con el instalador (.exe) — lo más fácil
 
-1. Hacé doble clic en `Oficina-virtual-Setup-<versión>.exe`. Se instala solo
+1. Bajá `Oficina-virtual-Setup-<versión>.exe` de la
+   [última versión](https://github.com/valenWiselink/oficina-virtual/releases/latest)
+   y hacé doble clic. Se instala solo
    para tu usuario (no pide permisos de administrador) y crea el acceso
    **Oficina virtual** en el escritorio y en el menú Inicio.
 2. Windows puede mostrar "Windows protegió su PC" porque el instalador no está
@@ -41,27 +43,24 @@ entrá una vez con `claude` para iniciar sesión.
 
 ### Actualizaciones
 
-Vienen apagadas hasta que haya un lugar de dónde bajarlas. Dos formas de
-prenderlas:
+El programa busca versiones nuevas en los
+[Releases de este repo](https://github.com/valenWiselink/oficina-virtual/releases)
+al abrirse y desde la bandeja (**Buscar actualizaciones**). Si hay una, la baja
+sola y te ofrece instalarla; tus agentes se retoman solos. Para eso el repo
+tiene que ser público.
 
-- **GitHub Releases** (recomendado): en `electron-builder.yml` reemplazá
-  `publish: null` por
+Para publicar una versión nueva:
 
-  ```yaml
-  publish:
-    provider: github
-    owner: <usuario-u-organización>
-    repo: <repo>
-  ```
+1. Subí la versión en `electron-builder.yml` (`extraMetadata.version`, por ejemplo `1.0.1`).
+2. `npm run dist:win` deja en `release/` el `.exe`, su `.blockmap` y `latest.yml`.
+3. Publicalos juntos (los tres hacen falta para que el programa se actualice):
 
-  y publicá cada versión con `GH_TOKEN=<token> npx electron-builder --win --publish always`
-  (subí antes `extraMetadata.version`). Los programas instalados con ese build
-  buscan versiones nuevas al abrir y desde la bandeja (**Buscar
-  actualizaciones**), la bajan sola y te ofrecen instalarla.
+   ```powershell
+   gh release create v1.0.1 release/Oficina-virtual-Setup-1.0.1.exe release/Oficina-virtual-Setup-1.0.1.exe.blockmap release/latest.yml --title "Oficina virtual 1.0.1" --notes "Qué cambió"
+   ```
 
-- **Una carpeta en un servidor**: subí ahí el `.exe` nuevo y su `latest.yml`
-  (los deja `npm run dist:win` en `release/` cuando hay `publish` configurado),
-  y abrí la oficina con la variable `OFICINA_UPDATE_URL=https://…/carpeta/`.
+Para probar con otro lugar de descarga: abrí la oficina con
+`OFICINA_UPDATE_URL=https://…/carpeta/` (una carpeta con el `.exe` y su `latest.yml`).
 
 ### Armar el instalador
 

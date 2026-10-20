@@ -48,9 +48,9 @@ nsis:
   uninstallDisplayName: Oficina virtual
   include: build/installer.nsh
   artifactName: Oficina-virtual-Setup-${version}.${ext}
-# Updates are off until a feed exists. To turn them on, set one (see README):
-# publish:
-#   provider: github
-#   owner: <usuario-u-org>
-#   repo: <repo>
-publish: null
+# Updates come from this repo's GitHub Releases (it must be public): each
+# release carries the Setup .exe, its .blockmap and latest.yml (see README).
+publish:
+  provider: github
+  owner: valenWiselink
+  repo: oficina-virtual
