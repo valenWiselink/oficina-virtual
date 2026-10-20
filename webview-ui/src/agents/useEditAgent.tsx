@@ -111,15 +111,18 @@ export function useEditAgent(views: readonly AgentView[]): {
       answer = await setAgentRun(id, { model: draft.model, effort: draft.effort });
       id = answer.newId ?? id;
     }
+    // Queued: the office joins a second change to the one already waiting.
     if (answer.ok && scopeChanged) {
       answer = await setSupervision(id, draft.scope);
       id = answer.newId ?? id;
     }
     if (answer.ok && pickedChanged) sendTeam(id, draft.picked);
     setPhase({
-      done: answer.ok
-        ? 'Listo: retomó la misma conversación con los cambios.'
-        : `No se pudo cambiar: ${answer.reason ?? 'error desconocido'}.`,
+      done: !answer.ok
+        ? `No se pudo cambiar: ${answer.reason ?? 'error desconocido'}.`
+        : answer.reason === 'queued'
+          ? 'Está trabajando: queda anotado y lo cambio solo cuando termine su turno.'
+          : 'Listo: retomó la misma conversación con los cambios.',
     });
   };
 

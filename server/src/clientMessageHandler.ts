@@ -205,7 +205,8 @@ export function handleClientMessage(
           id,
           ok: result.ok,
           newId: result.ok ? result.newId : undefined,
-          reason: result.ok ? undefined : result.reason,
+          // "queued": it was working; the change waits for its turn to end.
+          reason: result.ok ? (result.queued ? 'queued' : undefined) : result.reason,
         }),
       );
       break;
@@ -231,13 +232,17 @@ export function handleClientMessage(
         id,
         scope,
         adapter?.getSetting(KEY_BYPASS_PERMISSIONS, false) ?? false,
+        // A queued change lands later: every office hears it then.
+        (done) => {
+          if (done.ok) broadcastSupervision(store);
+        },
       ).then((result) => {
         answer(
           result.ok,
-          result.ok ? undefined : result.reason,
+          result.ok ? (result.queued ? 'queued' : undefined) : result.reason,
           result.ok ? result.newId : undefined,
         );
-        if (result.ok) broadcastSupervision(store);
+        if (result.ok && !result.queued) broadcastSupervision(store);
       });
       break;
     }

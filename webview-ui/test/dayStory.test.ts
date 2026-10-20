@@ -87,6 +87,89 @@ describe('dayStory: what each agent did', () => {
   });
 });
 
+describe('dayStory: a session told by its recap', () => {
+  const story = dayStory(
+    [
+      e({
+        at: 1,
+        agentId: 1,
+        agent: 'Pagos',
+        kind: 'recap',
+        folder: 'api',
+        text: 'Arreglé el cobro.',
+      }),
+      e({ at: 2, agentId: 1, agent: 'Pagos', summary: 'Corrí los tests.', folder: 'api' }),
+      e({
+        at: 3,
+        agentId: 1,
+        agent: 'Pagos',
+        kind: 'recap',
+        folder: 'api',
+        text: 'Arreglamos el sistema de cobros de Mercado Pago que tenía un bug. Falta el pase a prod.',
+      }),
+      e({ at: 4, agentId: 2, agent: 'Eventos', summary: 'Mejoré la pantalla.', folder: 'api' }),
+      e({ at: 5, agentId: 2, agent: 'Eventos', summary: 'Ajusté los textos.', folder: 'api' }),
+      e({ at: 6, agentId: 3, agent: 'Saludo', kind: 'recap', text: 'Sólo nos saludamos.' }),
+    ],
+    [],
+    new Map(),
+  );
+
+  it('leads with its newest recap, cut to what got done; else its last turn', () => {
+    const [api] = story.projects;
+    expect(api.streams.map((s) => [s.agent, s.title])).toEqual([
+      ['Pagos', 'Arreglamos el sistema de cobros de Mercado Pago que tenía un bug.'],
+      ['Eventos', 'Ajusté los textos.'],
+    ]);
+  });
+
+  it('sums the day in "Hoy", a line per project', () => {
+    expect(story.today).toEqual([
+      {
+        project: 'api',
+        headlines: [
+          'Arreglamos el sistema de cobros de Mercado Pago que tenía un bug.',
+          'Ajusté los textos.',
+        ],
+      },
+    ]);
+    // A recap that says nothing happened tells nothing: the greeting is not there.
+    expect(
+      [...story.minor, ...story.projects.flatMap((p) => p.streams)].map((s) => s.agent),
+    ).not.toContain('Saludo');
+  });
+});
+
+describe('dayStory: one card per session', () => {
+  it("puts a recap read from the transcript under the session's office name", () => {
+    const story = dayStory(
+      [
+        e({
+          at: 1,
+          agentId: 1,
+          agent: 'Captación',
+          sessionId: 's1',
+          summary: 'Armé el PR.',
+          folder: 'web',
+        }),
+        e({
+          at: 2,
+          agent: 'oficina-wiselink-b022',
+          kind: 'recap',
+          sessionId: 's1',
+          folder: 'web',
+          text: 'Sumate al pedido ya está en dev.',
+        }),
+      ],
+      [],
+      new Map(),
+    );
+    expect(story.projects[0].streams.map((s) => [s.agent, s.title])).toEqual([
+      ['Captación', 'Sumate al pedido ya está en dev.'],
+    ]);
+  });
+});
+
 describe('terminal schemes', () => {
   const dark = TERMINAL_PRESETS.find((p) => p.look === 'dark')!.palette;
   const light = TERMINAL_PRESETS.find((p) => p.look === 'light')!.palette;

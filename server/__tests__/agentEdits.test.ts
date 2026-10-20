@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   cleanEffort,
@@ -148,7 +148,7 @@ describe('setAgentRun refusals', () => {
     };
   };
 
-  it('refuses outside agents, unknown models and an agent mid-turn', async () => {
+  it('refuses outside agents and unknown models', async () => {
     await expect(
       setAgentRun(deps(agent(), false), 1, { model: 'opus' }, false),
     ).resolves.toMatchObject({
@@ -167,12 +167,23 @@ describe('setAgentRun refusals', () => {
       ok: false,
       reason: 'Ese nivel de esfuerzo no existe',
     });
-    const busy = agent({ activeToolIds: new Set(['t1']) });
-    await expect(
-      setAgentRun(deps(busy, true), 1, { model: 'sonnet' }, false),
-    ).resolves.toMatchObject({
-      ok: false,
-      reason: expect.stringContaining('Está trabajando'),
-    });
+  });
+
+  it('mid-turn, keeps the change for when its turn ends', async () => {
+    vi.useFakeTimers();
+    try {
+      const busy = agent({ activeToolIds: new Set(['t1']) });
+      const d = deps(busy, true);
+      await expect(setAgentRun(d, 1, { model: 'sonnet' }, false)).resolves.toEqual({
+        ok: true,
+        queued: true,
+      });
+      // The agent goes away before its turn ends: the wait gives up quietly.
+      d.store.delete(1);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

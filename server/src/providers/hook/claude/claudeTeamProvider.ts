@@ -56,6 +56,24 @@ function teammateDir(projectDir: string, leadSessionId: string): string {
  *  line is the ONLY lead-side evidence of the (implicit) team. */
 const AGENT_ID_RESULT_PATTERN = /agent_id:\s*([^\s@]+)@(\S+)/;
 
+/** Claude Code 2.1.30x: `Spawned successfully… agent_id: <id>\nname: <name>`,
+ *  with no team. The team is in the teammate's sidecar (`teamName`) under the
+ *  lead's `subagents/` folder — measured 2026-10-20, a 7-agent meeting the
+ *  graph never showed. */
+const SPAWNED_RESULT_PATTERN = /^Spawned successfully\.[\s\S]*?agent_id:\s*(\S+)\s+name:\s*(\S+)/m;
+
+/** The team named in a spawned teammate's sidecar, if it is written yet. */
+function sidecarTeam(leadJsonlPath: string, agentId: string): string | undefined {
+  const dir = teammateDir(path.dirname(leadJsonlPath), path.basename(leadJsonlPath, '.jsonl'));
+  try {
+    const raw = fs.readFileSync(path.join(dir, `agent-${agentId}.meta.json`), 'utf-8');
+    const data = JSON.parse(raw) as { teamName?: unknown };
+    return typeof data.teamName === 'string' && data.teamName ? data.teamName : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Flatten a tool_result content value (string or content-block array) to text. */
 function toolResultText(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -157,11 +175,14 @@ export const claudeTeamProvider: TeamProvider = {
     return typeof agentType === 'string' ? agentType : undefined;
   },
 
-  extractTeammateSpawnFromToolResult(toolName, resultContent) {
+  extractTeammateSpawnFromToolResult(toolName, resultContent, leadJsonlPath) {
     if (!TEAMMATE_SPAWN_TOOLS.has(toolName)) return null;
-    const match = AGENT_ID_RESULT_PATTERN.exec(toolResultText(resultContent));
-    if (!match) return null;
-    return { teammateName: match[1], teamName: match[2] };
+    const text = toolResultText(resultContent);
+    const match = AGENT_ID_RESULT_PATTERN.exec(text);
+    if (match) return { teammateName: match[1], teamName: match[2] };
+    const spawned = SPAWNED_RESULT_PATTERN.exec(text);
+    const teamName = spawned && leadJsonlPath ? sidecarTeam(leadJsonlPath, spawned[1]) : undefined;
+    return spawned && teamName ? { teammateName: spawned[2], teamName } : null;
   },
 
   discoverTeammates(projectDir, leadSessionId, teamName) {

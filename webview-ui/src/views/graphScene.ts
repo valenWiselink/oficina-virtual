@@ -99,9 +99,14 @@ export function layout(nodes: Map<string, SimNode>, list: AgentView[]) {
     let ax = cx + Math.cos(ang) * ring;
     let ay = cy + Math.sin(ang) * ring * 0.8;
     const target = v.kind === 'needs' ? VOS : v.kind === 'research' ? LIBRARY : null;
+    // Waiting on its supervisor: it leans toward the supervisor, not toward you.
+    const boss = v.askingSupervisor ? nodes.get(`a${v.askingSupervisor.id}`) : undefined;
     if (target) {
       ax += (target.x - ax) * 0.45;
       ay += (target.y - ay) * 0.45;
+    } else if (boss) {
+      ax += (boss.ax - ax) * 0.3;
+      ay += (boss.ay - ay) * 0.3;
     } else if (v.kind === 'idle' || v.kind === 'done') {
       ax = cx + (ax - cx) * 1.15;
       ay = cy + (ay - cy) * 1.15;
@@ -303,6 +308,21 @@ export function drawScene(
   for (const v of needing) {
     const n = nodes.get(`a${v.id}`);
     const pill = n ? drawRequestLine(ctx, th, n, VOS, f.t, askOf(v)) : null;
+    if (pill) obstacles.push(pill);
+  }
+  // A supervised agent asks its supervisor: the same arrow, to the supervisor.
+  for (const v of list) {
+    const n = v.askingSupervisor ? nodes.get(`a${v.id}`) : undefined;
+    const boss = v.askingSupervisor ? nodes.get(`a${v.askingSupervisor.id}`) : undefined;
+    if (!n || !boss) continue;
+    const pill = drawRequestLine(
+      ctx,
+      th,
+      n,
+      { x: boss.x, y: boss.y + boss.r * 0.6 },
+      f.t,
+      askOf(v),
+    );
     if (pill) obstacles.push(pill);
   }
 

@@ -176,6 +176,9 @@ function saveAgentSeats(os: OfficeState): void {
   transport.send({ type: 'saveAgentSeats', seats: os.getPersistableSeats() });
 }
 
+/** Each agent's last status, so the "done" sound plays once per turn. */
+const lastStatus = new Map<number, string>();
+
 export function useExtensionMessages(
   getOfficeState: () => OfficeState,
   onLayoutLoaded?: (layout: OfficeLayout) => void,
@@ -555,10 +558,15 @@ export function useExtensionMessages(
           return { ...prev, [id]: awaiting };
         });
         os.setAgentActive(id, status === 'active');
+        const wasWaiting = lastStatus.get(id) === 'waiting';
+        lastStatus.set(id, status);
         if (status === 'waiting') {
           os.showWaitingBubble(id, msg.awaitingInput === true);
-          // A supervised agent's news reaches you through its supervisor.
-          if (!isSupervised(id)) playDoneSound();
+          // Once per finished turn (the office repeats "waiting"), and only
+          // for agents whose news is yours: a supervised one's goes through
+          // its supervisor, a meeting member's through its lead.
+          const teammate = os.characters.get(id)?.leadAgentId !== undefined;
+          if (!wasWaiting && !teammate && !isSupervised(id)) playDoneSound();
         }
       } else if (msg.type === 'agentToolPermission') {
         const id = msg.id as number;

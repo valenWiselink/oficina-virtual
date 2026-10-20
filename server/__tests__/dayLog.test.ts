@@ -190,3 +190,75 @@ describe('turnSummary', () => {
     expect(turnSummary('a'.repeat(300))?.length).toBe(240);
   });
 });
+
+describe('DayLog: recaps', () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
+  });
+  const temp = () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'recaps-'));
+    dirs.push(d);
+    return d;
+  };
+  const recapLine = (at: Date, content: string, sessionId = 's-1') =>
+    JSON.stringify({
+      type: 'system',
+      subtype: 'away_summary',
+      content,
+      timestamp: at.toISOString(),
+      sessionId,
+      cwd: path.join(os.tmpdir(), 'wiselink', 'webapp'),
+    });
+
+  it('logs a recap that arrives live, once', () => {
+    const store = new AgentStateStore();
+    store.set(1, { id: 1, nickname: 'Pagos' } as AgentState);
+    const log = new DayLog(store, temp(), () => new Date(2026, 9, 20, 15, 0).getTime(), 0);
+    log.start();
+    const at = new Date(2026, 9, 20, 14, 0).getTime();
+    log.recap(1, 'Arreglamos los cobros de Mercado Pago.', at);
+    log.recap(1, 'Arreglamos los cobros de Mercado Pago.', at + 5);
+    expect(log.today().map((e) => [e.kind, e.agent, e.text, e.at])).toEqual([
+      ['recap', 'Pagos', 'Arreglamos los cobros de Mercado Pago.', at],
+    ]);
+  });
+
+  it("reads today's recaps from the transcripts, named as the office or Claude Code names the session", () => {
+    const projects = temp();
+    const home = temp();
+    fs.mkdirSync(path.join(projects, 'proj'));
+    const today = new Date(2026, 9, 20, 9, 0);
+    const yesterday = new Date(2026, 9, 19, 18, 0);
+    fs.writeFileSync(
+      path.join(projects, 'proj', 's-1.jsonl'),
+      [
+        recapLine(yesterday, 'Lo de ayer.'),
+        JSON.stringify({ type: 'custom-title', customTitle: 'cobros-mp' }),
+        recapLine(today, 'Arreglamos los cobros de Mercado Pago.'),
+        '',
+      ].join('\n'),
+    );
+    fs.writeFileSync(
+      path.join(projects, 'proj', 's-2.jsonl'),
+      `${recapLine(today, 'Mejoramos las pantallas de creación de evento.', 's-2')}\n`,
+    );
+    // Written to today (the transcripts of other days are not read).
+    for (const f of ['s-1.jsonl', 's-2.jsonl']) {
+      fs.utimesSync(path.join(projects, 'proj', f), today, today);
+    }
+    fs.writeFileSync(
+      path.join(home, 'oficina-sesiones.json'),
+      JSON.stringify([{ sessionId: 's-2', nickname: 'Eventos' }]),
+    );
+    const log = new DayLog(new AgentStateStore(), home, () => today.getTime() + 3_600_000, 0);
+    log.readRecapsFrom(projects);
+    const told = () => log.today().map((e) => [e.agent, e.text, e.folder]);
+    expect(told().sort()).toEqual([
+      ['Eventos', 'Mejoramos las pantallas de creación de evento.', 'webapp'],
+      ['cobros-mp', 'Arreglamos los cobros de Mercado Pago.', 'webapp'],
+    ]);
+    // Read again (a reload): nothing doubles.
+    expect(told()).toHaveLength(2);
+  });
+});

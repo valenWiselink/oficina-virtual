@@ -70,10 +70,12 @@ export interface TeamProvider {
    *  result (Claude: `agent_id: <name>@<team>` in the Agent tool_result).
    *  Returns the spawned teammate's identity, or null when the result is not a
    *  teammate spawn. `resultContent` is the raw tool_result content (string or
-   *  content-block array). */
+   *  content-block array). `leadJsonlPath` lets a provider look the team up
+   *  next to the lead's transcript when the result does not name it. */
   extractTeammateSpawnFromToolResult?(
     toolName: string,
     resultContent: unknown,
+    leadJsonlPath?: string,
   ): { teamName: string; teammateName: string } | null;
 
   /** Return team metadata for a session if it participates in a team.

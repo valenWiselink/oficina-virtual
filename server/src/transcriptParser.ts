@@ -89,6 +89,14 @@ export function setTeamSwitchCallback(
   teamSwitchCallback = cb;
 }
 
+/** Called with the recaps Claude Code writes (`away_summary`, the "※ recap"):
+ *  the day's history tells a session by its newest one. */
+let recapCallback: ((agentId: number, text: string, at: number) => void) | null = null;
+
+export function setRecapCallback(cb: (agentId: number, text: string, at: number) => void): void {
+  recapCallback = cb;
+}
+
 /** Format a tool status line. Delegates to the active HookProvider's formatToolStatus.
  *  Invariant: a provider is registered before any transcript lines are parsed. */
 export function formatToolStatus(toolName: string, input: Record<string, unknown>): string {
@@ -305,6 +313,7 @@ export function processTranscriptLine(
                 ? hookProvider?.team?.extractTeammateSpawnFromToolResult?.(
                     completedToolName,
                     block.content,
+                    agent.jsonlFile,
                   )
                 : null;
               if (
@@ -469,6 +478,13 @@ export function processTranscriptLine(
           }
         }
       }
+    } else if (
+      record.type === 'system' &&
+      record.subtype === 'away_summary' &&
+      typeof record.content === 'string'
+    ) {
+      const at = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : NaN;
+      recapCallback?.(agentId, record.content, Number.isNaN(at) ? Date.now() : at);
     } else if (record.type === 'system' && record.subtype === 'turn_duration') {
       endTurn(agentId, agent, agents, waitingTimers, permissionTimers, !agent.hookDelivered);
     } else if (record.type && !agent.seenUnknownRecordTypes.has(record.type)) {

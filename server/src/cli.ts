@@ -46,6 +46,7 @@ import { PtySessionManager } from './terminal/ptySessionManager.js';
 import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
 import { setStateGuessingAllowed } from './timerManager.js';
+import { setRecapCallback } from './transcriptParser.js';
 import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
 
 // ── Argument parsing ──────────────────────────────────────────
@@ -273,6 +274,10 @@ async function main(): Promise<void> {
     // Today's history (standalone only: it writes under ~/.pixel-agents).
     runtime.dayLog = new DayLog(store);
     runtime.dayLog.start();
+    // Its recaps: the ones arriving live, and today's already in the transcripts.
+    const dayLog = runtime.dayLog;
+    setRecapCallback((id, text, at) => dayLog.recap(id, text, at));
+    for (const root of claudeProvider.getAllSessionRoots?.() ?? []) dayLog.readRecapsFrom(root);
     runtime.prWatch = watchAgentPrs(store, runtime.dayLog);
 
     // Supervisor agents: who supervises whom, and what reaches them (their

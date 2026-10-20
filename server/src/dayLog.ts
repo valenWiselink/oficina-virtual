@@ -3,8 +3,10 @@
  * an agent — a permission asked or answered, a turn finished (with what it
  * did: the start of its answer and how many files it edited), something left
  * for you ("te toca"), a task completed, a session closed, a context nearly
- * full. Built from the messages the server already broadcasts (so it says
- * only what the office itself saw), kept in memory for the day and appended
+ * full, and the recaps Claude Code writes (what a session achieved). Built
+ * from the messages the server already broadcasts (so it says only what the
+ * office itself saw) plus today's transcripts for the recaps, kept in memory
+ * for the day and appended
  * to ~/.pixel-agents/historial-AAAA-MM-DD.jsonl so a reload or a restart does
  * not lose it.
  */
@@ -16,6 +18,7 @@ import * as path from 'path';
 import type { DayLogEntry } from '../../core/src/messages.js';
 import { spokenName } from './agentIdentity.js';
 import type { AgentStateStore } from './agentStateStore.js';
+import { readRecaps, transcriptsOfDay } from './dayRecaps.js';
 import { turnSummary } from './turnSummary.js';
 
 /** A context this full gets one line (the first time it crosses). */
@@ -57,6 +60,10 @@ export class DayLog {
   private readonly agents = new Map<number, AgentMemory>();
   /** requestId → when it was asked and by whom (to measure the wait). */
   private readonly asked = new Map<string, { at: number; agentId?: number }>();
+  /** Where today's transcripts are read for recaps (none until told). */
+  private projectsDir: string | null = null;
+  /** transcript → its size when last read for recaps (unchanged: skipped). */
+  private readonly recapsRead = new Map<string, number>();
 
   constructor(
     private readonly store: AgentStateStore,
@@ -75,7 +82,21 @@ export class DayLog {
   /** Today's lines, oldest first. */
   today(): DayLogEntry[] {
     this.rollOver();
-    return [...this.entries];
+    this.catchUpRecaps();
+    return [...this.entries].sort((a, b) => a.at - b.at);
+  }
+
+  /** Read the recaps Claude Code wrote today in the transcripts under
+   *  `projectsDir` (also the ones from before the office started). */
+  readRecapsFrom(projectsDir: string): void {
+    this.projectsDir = projectsDir;
+  }
+
+  /** A recap an agent's transcript just got (transcriptParser). */
+  recap(agentId: number, text: string, at: number): void {
+    const clean = text.trim();
+    if (!clean || this.hasRecap(clean)) return;
+    this.add(agentId, 'recap', clean, { at });
   }
 
   /** The PR links in today's history (for the merge watch). */
@@ -224,6 +245,64 @@ export class DayLog {
     mem.contextAlerted = full;
   }
 
+  private hasRecap(text: string): boolean {
+    return this.entries.some((e) => e.kind === 'recap' && e.text === text);
+  }
+
+  /** Today's recaps not logged yet, from every transcript written today. A
+   *  transcript read before is read again only when it grew. */
+  private catchUpRecaps(): void {
+    if (!this.projectsDir) return;
+    for (const file of transcriptsOfDay(this.projectsDir, this.day, localDay)) {
+      let size: number;
+      try {
+        size = fs.statSync(file).size;
+      } catch {
+        continue;
+      }
+      if (this.recapsRead.get(file) === size) continue;
+      this.recapsRead.set(file, size);
+      const { recaps, title } = readRecaps(file, this.day, localDay);
+      for (const r of recaps) {
+        if (this.hasRecap(r.text)) continue;
+        const live = this.agentOfSession(r.sessionId);
+        const folder = r.cwd ? path.basename(r.cwd) : undefined;
+        this.add(live, 'recap', r.text, {
+          at: r.at,
+          agent: live === undefined ? this.sessionName(r.sessionId, title, folder) : undefined,
+          folder,
+          sessionId: r.sessionId,
+        });
+      }
+    }
+  }
+
+  private agentOfSession(sessionId: string): number | undefined {
+    for (const [id, agent] of this.store) if (agent.sessionId === sessionId) return id;
+    return undefined;
+  }
+
+  /** A session that is not running now, named as today's history named it,
+   *  else as the office saved it, else by its Claude Code title or folder. */
+  private sessionName(sessionId: string, title?: string, folder?: string): string | undefined {
+    const logged = [...this.entries]
+      .reverse()
+      .find((e) => e.sessionId === sessionId && e.kind !== 'recap');
+    return logged?.agent ?? this.officeName(sessionId) ?? title ?? folder;
+  }
+
+  /** The name the office gave a session it runs (its saved sessions). */
+  private officeName(sessionId: string): string | undefined {
+    try {
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(this.dir, 'oficina-sesiones.json'), 'utf-8'),
+      ) as Array<{ sessionId?: string; nickname?: string }>;
+      return saved.find((s) => s.sessionId === sessionId)?.nickname || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private alreadyLogged(id: number, text: string): boolean {
     const agent = this.nameOf(id);
     return this.entries.some((e) => e.text === text && e.agent === agent);
@@ -265,7 +344,10 @@ export class DayLog {
     if (extra.prUrl) entry.prUrl = extra.prUrl;
     if (extra.summary) entry.summary = extra.summary;
     if (extra.edits) entry.edits = extra.edits;
-    const folder = this.folderOf(agentId);
+    const sessionId =
+      extra.sessionId ?? (agentId === undefined ? undefined : this.store.get(agentId)?.sessionId);
+    if (sessionId) entry.sessionId = sessionId;
+    const folder = extra.folder ?? this.folderOf(agentId);
     if (folder) entry.folder = folder;
     this.entries.push(entry);
     this.persist(entry);

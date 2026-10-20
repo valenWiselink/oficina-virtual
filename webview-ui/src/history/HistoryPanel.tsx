@@ -18,6 +18,7 @@ const KIND_DOT: Record<DayLogEntry['kind'], string> = {
   cerrado: 'var(--color-border-strong)',
   contexto: 'var(--color-danger)',
   mergeado: 'var(--color-accent)',
+  recap: 'var(--color-status-success)',
 };
 
 /**

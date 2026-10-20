@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentIdentity, PermissionPending } from '../../core/src/messages.js';
-import { buildAgentViews, type CharacterFacts, type ViewInputs } from '../src/views/agentViews.js';
+import {
+  type AgentView,
+  buildAgentViews,
+  type CharacterFacts,
+  type ViewInputs,
+  withSupervisionNames,
+} from '../src/views/agentViews.js';
 
 const ch = (over: Partial<CharacterFacts> = {}): CharacterFacts => ({
   palette: 1,
@@ -142,5 +148,39 @@ describe('buildAgentViews', () => {
         tasks: [],
       }) as AgentIdentity;
     expect(one({ identity })).toMatchObject({ name: 'Notificaciones', folder: 'wiselink_api_crm' });
+  });
+});
+
+describe('withSupervisionNames: only the supervisor comes to you', () => {
+  const v = (over: Partial<AgentView>): AgentView =>
+    ({ id: 1, name: 'A', kind: 'work', statusText: '', supervisedBy: [], ...over }) as AgentView;
+
+  it('a supervised agent that needs something waits on its supervisor', () => {
+    const [boss, worker, alone] = withSupervisionNames([
+      v({ id: 10, name: 'Jefa', kind: 'needs', statusText: 'Te toca: elegir' }),
+      v({
+        id: 2,
+        name: 'Pagos',
+        kind: 'needs',
+        statusText: 'Necesita tu permiso',
+        supervisedBy: [10],
+      }),
+      v({ id: 3, name: 'Solo', kind: 'needs', statusText: 'Necesita tu permiso' }),
+    ]);
+    expect(boss.kind).toBe('needs');
+    expect(worker).toMatchObject({
+      kind: 'work',
+      statusText: 'Lo atiende Jefa',
+      askingSupervisor: { id: 10, name: 'Jefa' },
+      supervisorNames: ['Jefa'],
+    });
+    expect(alone.kind).toBe('needs');
+    expect(boss.teamSize).toBe(1);
+  });
+
+  it('with its supervisor gone, it comes to you again', () => {
+    const [worker] = withSupervisionNames([v({ id: 2, kind: 'needs', supervisedBy: [10] })]);
+    expect(worker.kind).toBe('needs');
+    expect(worker.askingSupervisor).toBeUndefined();
   });
 });

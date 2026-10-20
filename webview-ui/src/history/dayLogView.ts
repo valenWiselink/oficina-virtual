@@ -1,4 +1,5 @@
 import type { DayLogEntry } from '../../../core/src/messages.js';
+import { recapHeadline } from './recapHeadline.js';
 
 /** Consecutive lines of the same kind for the same agent within this window
  *  collapse into one ("4 pedidos de permiso · 10:12–10:20"). */
@@ -27,12 +28,16 @@ const PLURAL: Partial<Record<DayLogEntry['kind'], (n: number) => string>> = {
 export function dayLogRows(entries: DayLogEntry[]): DayLogRow[] {
   const rows: DayLogRow[] = [];
   for (const e of entries) {
+    // A recap reads as what the session achieved so far (none: nothing to say).
+    const recap = e.kind === 'recap' ? recapHeadline(e.text) : undefined;
+    if (e.kind === 'recap' && !recap) continue;
     const last = rows[rows.length - 1];
     if (
       last &&
       last.agentId === e.agentId &&
       last.kind === e.kind &&
       e.kind !== 'tetoca' &&
+      e.kind !== 'recap' &&
       e.at - last.to <= GROUP_WINDOW_MS
     ) {
       last.count++;
@@ -45,7 +50,7 @@ export function dayLogRows(entries: DayLogEntry[]): DayLogRow[] {
       agentId: e.agentId,
       agent: e.agent,
       kind: e.kind,
-      text: e.text,
+      text: recap ? `Resumen: ${recap}` : e.text,
       from: e.at,
       to: e.at,
       count: 1,

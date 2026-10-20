@@ -111,12 +111,69 @@ export function editAgent(
   return true;
 }
 
-export type RunResult = { ok: true; newId: number } | { ok: false; reason: string };
+/** `queued`: it was working, so the change waits for its turn to end. */
+export type RunResult =
+  { ok: true; newId?: number; queued?: boolean } | { ok: false; reason: string };
+
+/** How often a queued change looks whether the turn ended, and for how long. */
+const QUEUE_POLL_MS = 3_000;
+const QUEUE_MAX_MS = 30 * 60_000;
+
+/** Changes waiting for their agent's turn to end, by session (merged). */
+const queued = new Map<
+  string,
+  { change: RelaunchChange; timer: ReturnType<typeof setInterval>; later?: Later }
+>();
+
+type RelaunchChange = Partial<Pick<ResumableSession, 'model' | 'effort' | 'supervision'>>;
+type Later = (result: RunResult) => void;
+
+/**
+ * Apply `change` when the agent's turn ends (asked 2026-10-20: refusing with
+ * "Está trabajando" made you watch for the right moment). A newer change for
+ * the same agent joins the one already waiting. `later` hears the outcome.
+ */
+function queueRelaunch(
+  deps: LaunchStandaloneAgentDeps,
+  sessionId: string,
+  change: RelaunchChange,
+  bypassPermissions: boolean,
+  later?: Later,
+): void {
+  const waiting = queued.get(sessionId);
+  if (waiting) clearInterval(waiting.timer);
+  const merged = { ...waiting?.change, ...change };
+  const since = Date.now();
+  let checking = false;
+  const timer = setInterval(() => {
+    if (checking) return;
+    checking = true;
+    void (async () => {
+      try {
+        const found = [...deps.store.entries()].find(([, a]) => a.sessionId === sessionId);
+        if (!found || Date.now() - since > QUEUE_MAX_MS) {
+          clearInterval(timer);
+          queued.delete(sessionId);
+          return;
+        }
+        if (await isWorking(found[1])) return;
+        clearInterval(timer);
+        queued.delete(sessionId);
+        const result = await relaunch(deps, found[0], merged, bypassPermissions, later);
+        if (!('queued' in result && result.queued)) later?.(result);
+      } finally {
+        checking = false;
+      }
+    })();
+  }, QUEUE_POLL_MS);
+  queued.set(sessionId, { change: merged, timer, later: later ?? waiting?.later });
+}
 
 /** Busy right now: in a turn (Claude's own registry says so, or a tool runs,
  *  or its background session says it is working). */
 async function isWorking(agent: AgentState): Promise<boolean> {
-  if (agent.activeToolIds.size > 0) return true;
+  // Background subagents (a meeting) run on their own: they do not hold the turn.
+  if (agent.activeToolIds.size > agent.backgroundAgentToolIds.size) return true;
   if (findLiveSession(agent.sessionId)?.status === 'busy') return true;
   if (!agent.bgId) return false;
   const row = await findBackground(agent.bgId, agent.cwd);
@@ -129,6 +186,7 @@ export async function setAgentRun(
   id: number,
   msg: Record<string, unknown>,
   bypassPermissions: boolean,
+  later?: Later,
 ): Promise<RunResult> {
   const { store, ptyManager } = deps;
   const agent = store.get(id);
@@ -143,7 +201,7 @@ export async function setAgentRun(
   if (asked(msg.model) && !model) return { ok: false, reason: 'Ese modelo no existe' };
   const effort = asked(msg.effort) ? cleanEffort(msg.effort) : undefined;
   if (asked(msg.effort) && !effort) return { ok: false, reason: 'Ese nivel de esfuerzo no existe' };
-  return relaunch(deps, id, { model, effort }, bypassPermissions);
+  return relaunch(deps, id, { model, effort }, bypassPermissions, later);
 }
 
 /**
@@ -155,8 +213,9 @@ export async function setAgentRun(
 export async function relaunch(
   deps: LaunchStandaloneAgentDeps,
   id: number,
-  change: Partial<Pick<ResumableSession, 'model' | 'effort' | 'supervision'>>,
+  change: RelaunchChange,
   bypassPermissions: boolean,
+  later?: Later,
 ): Promise<RunResult> {
   const { store, runtime, ptyManager } = deps;
   const agent = store.get(id);
@@ -165,7 +224,8 @@ export async function relaunch(
     return { ok: false, reason: 'Sólo se cambia en los agentes con terminal de la oficina' };
   }
   if (await isWorking(agent)) {
-    return { ok: false, reason: 'Está trabajando: esperá a que termine su turno y probá de nuevo' };
+    queueRelaunch(deps, agent.sessionId, change, bypassPermissions, later);
+    return { ok: true, queued: true };
   }
   if (!agent.cwd) return { ok: false, reason: 'No sé en qué carpeta trabaja' };
 
@@ -238,12 +298,25 @@ export async function setSupervision(
   id: number,
   scope: SupervisionScope | null,
   bypassPermissions: boolean,
+  later?: Later,
 ): Promise<RunResult> {
   const sessionId = deps.store.get(id)?.sessionId;
-  const result = await relaunch(deps, id, { supervision: scope ?? undefined }, bypassPermissions);
-  if (result.ok && !scope && sessionId) {
-    supervisors().forget(sessionId);
-    supervisors().teams.remove(sessionId);
-  }
+  const settle = (result: RunResult) => {
+    if (result.ok && !result.queued && !scope && sessionId) {
+      supervisors().forget(sessionId);
+      supervisors().teams.remove(sessionId);
+    }
+  };
+  const result = await relaunch(
+    deps,
+    id,
+    { supervision: scope ?? undefined },
+    bypassPermissions,
+    (done) => {
+      settle(done);
+      later?.(done);
+    },
+  );
+  settle(result);
   return result;
 }

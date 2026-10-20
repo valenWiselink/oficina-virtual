@@ -192,6 +192,32 @@ describe('claudeTeamProvider', () => {
       ).toBeNull();
       expect(claudeTeamProvider.extractTeammateSpawnFromToolResult!('Agent', undefined)).toBeNull();
     });
+
+    it('reads the team from the sidecar when the result names none (2.1.30x)', () => {
+      const fsMod = require('fs') as typeof import('fs');
+      const root = fsMod.mkdtempSync(path.join(os.tmpdir(), 'pixel-agents-spawned-'));
+      const lead = path.join(root, 'lead-session.jsonl');
+      const subagents = path.join(root, 'lead-session', 'subagents');
+      fsMod.mkdirSync(subagents, { recursive: true });
+      const text =
+        'Spawned successfully. (This tool result is internal metadata.)\n' +
+        'agent_id: amobile-909759f6b1275ede\nname: mobile\nThe agent is now running.';
+      const extract = claudeTeamProvider.extractTeammateSpawnFromToolResult!;
+      try {
+        expect(extract('Agent', text, lead)).toBeNull();
+        fsMod.writeFileSync(
+          path.join(subagents, 'agent-amobile-909759f6b1275ede.meta.json'),
+          JSON.stringify({ agentType: 'mobile', teamName: 'session-f146177e' }),
+        );
+        expect(extract('Agent', text, lead)).toEqual({
+          teammateName: 'mobile',
+          teamName: 'session-f146177e',
+        });
+        expect(extract('Agent', text)).toBeNull();
+      } finally {
+        fsMod.rmSync(root, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('discoverTeammates (new-style: top-level tagged sessions)', () => {

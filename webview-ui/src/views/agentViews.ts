@@ -82,6 +82,9 @@ export interface AgentView {
   supervisorNames: string[];
   /** For a supervisor: how many agents it watches over right now. */
   teamSize: number;
+  /** Supervised and waiting: its supervisor handles it, so it shows as
+   *  working ("Lo atiende «Jefa»") and only the supervisor comes to you. */
+  askingSupervisor?: { id: number; name: string };
   subagents: SubagentView[];
   /** The office owns its terminal (can type into it, pass results to it). */
   hasTerminal: boolean;
@@ -325,12 +328,25 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
   return withSupervisionNames(views);
 }
 
-/** Who watches over each agent, by name, and how many each supervisor has. */
-function withSupervisionNames(views: AgentView[]): AgentView[] {
-  const nameOf = new Map(views.map((v) => [v.id, v.name]));
-  return views.map((v) => ({
-    ...v,
-    supervisorNames: v.supervisedBy.flatMap((id) => nameOf.get(id) ?? []),
-    teamSize: views.filter((o) => o.supervisedBy.includes(v.id)).length,
-  }));
+/** Who watches over each agent, by name, and how many each supervisor has.
+ *  A supervised agent that needs something waits on its supervisor, not on
+ *  you: it leaves "Te necesita" (and the arrow to "Vos") for the supervisor
+ *  alone — asked for 2026-10-20 ("que se me acerque solo el supervisor"). */
+export function withSupervisionNames(views: AgentView[]): AgentView[] {
+  const byId = new Map(views.map((v) => [v.id, v]));
+  return views.map((v) => {
+    const supervisorNames = v.supervisedBy.flatMap((id) => byId.get(id)?.name ?? []);
+    const teamSize = views.filter((o) => o.supervisedBy.includes(v.id)).length;
+    const boss =
+      v.kind === 'needs' ? v.supervisedBy.map((id) => byId.get(id)).find(Boolean) : undefined;
+    if (!boss) return { ...v, supervisorNames, teamSize };
+    return {
+      ...v,
+      kind: 'work',
+      statusText: `Lo atiende ${boss.name}`,
+      askingSupervisor: { id: boss.id, name: boss.name },
+      supervisorNames,
+      teamSize,
+    };
+  });
 }

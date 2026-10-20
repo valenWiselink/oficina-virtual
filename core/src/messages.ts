@@ -570,10 +570,19 @@ export interface DayLogEntry {
   folder?: string;
   summary?: string;
   edits?: number;
+  sessionId?: string;
 }
 
 export type DayLogKind =
-  'permiso' | 'respuesta' | 'termino' | 'tetoca' | 'tarea' | 'cerrado' | 'contexto' | 'mergeado';
+  | 'permiso'
+  | 'respuesta'
+  | 'termino'
+  | 'tetoca'
+  | 'tarea'
+  | 'cerrado'
+  | 'contexto'
+  | 'mergeado'
+  | 'recap';
 
 export interface DayLogAppended {
   type: 'dayLogAppended';
@@ -649,19 +658,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_340;
-  supervision?: AnonymousSchema_341;
+  effort?: AnonymousSchema_341;
+  supervision?: AnonymousSchema_342;
 }
 
-export type AnonymousSchema_340 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_341 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_341 {
-  kind: AnonymousSchema_342;
+export interface AnonymousSchema_342 {
+  kind: AnonymousSchema_343;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_342 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_343 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -710,16 +719,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_367;
+  scope: AnonymousSchema_368;
 }
 
-export interface AnonymousSchema_367 {
-  kind: AnonymousSchema_368;
+export interface AnonymousSchema_368 {
+  kind: AnonymousSchema_369;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_368 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_369 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

@@ -1486,7 +1486,7 @@ components:
       description: |
         Something that happened to an agent today, as the server saw it
         (permission asked or answered, turn finished, "te toca", task done,
-        session closed, context nearly full).
+        session closed, context nearly full, a recap Claude Code wrote).
       type: object
       additionalProperties: false
       required: [at, kind, agent, text]
@@ -1521,10 +1521,15 @@ components:
         edits:
           type: integer
           description: For a finished turn, how many files it edited or wrote.
+        sessionId:
+          type: string
+          description: |
+            The Claude Code session it is about, so one session is told once
+            even if its name changed during the day.
 
     DayLogKind:
       type: string
-      enum: [permiso, respuesta, termino, tetoca, tarea, cerrado, contexto, mergeado]
+      enum: [permiso, respuesta, termino, tetoca, tarea, cerrado, contexto, mergeado, recap]
 
     PrState:
       description: A pull request's state on GitHub, as `gh pr view` reports it.
