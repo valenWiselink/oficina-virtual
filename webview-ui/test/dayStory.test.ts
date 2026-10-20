@@ -35,8 +35,8 @@ describe('dayStory', () => {
     statuses,
   );
 
-  it('groups by project, busiest first, and drops agents that did nothing', () => {
-    expect(story.projects.map((p) => p.name)).toEqual(['api', 'webapp']);
+  it('groups by project and drops agents that did nothing', () => {
+    expect(story.projects.map((p) => p.name)).toEqual(['api']);
   });
 
   it('keeps a closed agent in its project by the folder the line recorded', () => {
@@ -51,7 +51,39 @@ describe('dayStory', () => {
   });
 
   it('sums the day in one headline', () => {
-    expect(story.headline).toBe('3 agentes en 2 proyectos · 3 tareas · 1 PR (1 mergeado)');
+    expect(story.headline).toBe('2 agentes en 1 proyecto · 3 tareas · 1 PR (1 mergeado)');
+  });
+
+  it('folds the sessions where nothing got done', () => {
+    expect(story.minor.map((s) => s.agent)).toEqual(['Web']);
+  });
+});
+
+describe('dayStory: what each agent did', () => {
+  const story = dayStory(
+    [
+      e({ at: 1, agentId: 1, summary: 'Encontré la causa del bug.', folder: 'api' }),
+      e({ at: 2, agentId: 1, summary: 'Lo arreglé con un test.', edits: 3, folder: 'api' }),
+      e({ at: 3, agentId: 1, summary: 'Lo arreglé con un test.', folder: 'api' }),
+      e({ at: 4, agentId: 2, agent: 'Hola que tal', summary: '¡Hola! ¿En qué te ayudo?' }),
+      e({ at: 5, agentId: 3, agent: 'development', folder: 'api' }),
+      e({ at: 6, agentId: 3, agent: 'development', folder: 'api' }),
+      e({ at: 7, agentId: 4, agent: 'Charla', summary: 'Te expliqué el flujo.', folder: 'web' }),
+      e({ at: 8, agentId: 4, agent: 'Charla', summary: 'Sí, ya está en dev.', folder: 'web' }),
+    ],
+    [],
+    new Map(),
+  );
+
+  it('tells its turns newest first, without repeats, with the files it edited', () => {
+    const [stream] = story.projects.find((p) => p.name === 'api')!.streams;
+    expect(stream.did).toEqual(['Lo arreglé con un test.', 'Encontré la causa del bug.']);
+    expect(stream.edits).toBe(3);
+  });
+
+  it('a greeting or turns with nothing to tell are short sessions; talk through turns is not', () => {
+    expect(story.minor.map((s) => s.agent).sort()).toEqual(['Hola que tal', 'development']);
+    expect(story.projects.map((p) => p.name).sort()).toEqual(['api', 'web']);
   });
 });
 

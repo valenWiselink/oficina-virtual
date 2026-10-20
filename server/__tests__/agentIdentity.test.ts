@@ -4,6 +4,7 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  effortSetBy,
   identityMessage,
   observeIdentity,
   seedIdentity,
@@ -291,5 +292,19 @@ describe('effort', () => {
     observeIdentity(agent, turn('low', true));
     expect(agent.effort).toBe('high');
     expect(identityMessage(1, agent)).toMatchObject({ effort: 'high' });
+  });
+});
+
+describe('effortSetBy: /effort typed in the terminal', () => {
+  it('reads the effort from the command output', () => {
+    const out = (text: string) => ({ type: 'user', message: { content: text } });
+    expect(
+      effortSetBy(out('<local-command-stdout>Set effort level to max (saved as your default…)')),
+    ).toBe('max');
+    expect(effortSetBy(out('<local-command-stdout>Set effort level to low'))).toBe('low');
+    expect(effortSetBy(out('Set effort level to max'))).toBeUndefined();
+    expect(
+      effortSetBy({ ...out('<local-command-stdout>Set effort level to max'), isSidechain: true }),
+    ).toBeUndefined();
   });
 });

@@ -61,6 +61,13 @@ export function observeIdentity(agent: AgentState, record: Record<string, unknow
   set('entrypoint', str(record.entrypoint));
   // The effort a turn ran with: on the main chain's assistant records only
   // (a subagent's turn says nothing about this agent).
+  // `/effort` typed in its terminal says so right away (the next turn would
+  // too): "Set effort level to xhigh (saved as…)".
+  const typed = effortSetBy(record);
+  if (typed && agent.effort !== typed) {
+    agent.effort = typed;
+    changed = true;
+  }
   if (record.type === 'assistant' && record.isSidechain !== true) {
     const effort = str(record.effort);
     if (effort && agent.effort !== effort) {
@@ -402,3 +409,13 @@ export function seedIdentity(agent: AgentState, file: string): boolean {
   }
   return changed;
 }
+
+/** The effort a `/effort` command just set, from its output record. */
+export function effortSetBy(record: Record<string, unknown>): string | undefined {
+  if (record.type !== 'user' || record.isSidechain === true) return undefined;
+  const content = (record.message as { content?: unknown } | undefined)?.content;
+  if (typeof content !== 'string') return undefined;
+  return EFFORT_SET.exec(content)?.[1];
+}
+
+const EFFORT_SET = /^<local-command-stdout>Set effort level to (low|medium|high|xhigh|max)\b/;

@@ -1,6 +1,7 @@
 /**
  * DayLog: today's history of the office, one line per thing that happened to
- * an agent — a permission asked or answered, a turn finished, something left
+ * an agent — a permission asked or answered, a turn finished (with what it
+ * did: the start of its answer and how many files it edited), something left
  * for you ("te toca"), a task completed, a session closed, a context nearly
  * full. Built from the messages the server already broadcasts (so it says
  * only what the office itself saw), kept in memory for the day and appended
@@ -15,9 +16,15 @@ import * as path from 'path';
 import type { DayLogEntry } from '../../core/src/messages.js';
 import { spokenName } from './agentIdentity.js';
 import type { AgentStateStore } from './agentStateStore.js';
+import { turnSummary } from './turnSummary.js';
 
 /** A context this full gets one line (the first time it crosses). */
 const CONTEXT_ALERT_RATIO = 0.9;
+/** A finished turn waits this long for its last answer: the Stop hook is
+ *  instant, the transcript line with the answer arrives a beat later. */
+const TURN_SETTLE_MS = 3000;
+/** Chat lines of a tool that changed a file (agentChat.ts toolLine). */
+const EDIT_LINE = /^(Editó|Escribió) /;
 
 interface AgentMemory {
   /** Its identity was seen once: from then on, changes are news. */
@@ -29,6 +36,12 @@ interface AgentMemory {
   yourTurnId?: string;
   completed: Set<string>;
   contextAlerted?: boolean;
+  /** The newest thing it said this turn (its answer, once the turn ends). */
+  lastSaid?: string;
+  /** Files it edited or wrote this turn. */
+  edits: number;
+  /** A finished turn waiting for its answer to arrive. */
+  settling?: { at: number; timer?: ReturnType<typeof setTimeout> };
 }
 
 const OUTCOME_TEXT: Record<string, string> = {
@@ -49,6 +62,7 @@ export class DayLog {
     private readonly store: AgentStateStore,
     private readonly dir = path.join(os.homedir(), '.pixel-agents'),
     private readonly now: () => number = Date.now,
+    private readonly settleMs = TURN_SETTLE_MS,
   ) {
     this.day = localDay(this.now());
     this.entries = this.load(this.day);
@@ -100,7 +114,10 @@ export class DayLog {
         return this.identity(id!, message);
       case 'agentContextUsage':
         return this.context(id!, message);
+      case 'agentChatAppend':
+        return this.chat(id, message.items);
       case 'agentClosed':
+        if (id !== undefined) this.settleTurn(id);
         this.add(id, 'cerrado', 'Se cerró');
         this.agents.delete(id!);
         return;
@@ -122,10 +139,44 @@ export class DayLog {
     if (id === undefined) return;
     const mem = this.memory(id);
     // The first status seen (a restart) is the state, not an event.
-    if (waiting && mem.waiting === false && !mem.background) {
-      this.add(id, 'termino', 'Terminó su turno');
+    if (waiting && mem.waiting === false && !mem.background && !mem.settling) {
+      mem.settling = { at: this.now() };
+      if (this.settleMs > 0) {
+        mem.settling.timer = setTimeout(() => this.settleTurn(id), this.settleMs);
+      } else {
+        this.settleTurn(id);
+      }
     }
     mem.waiting = waiting;
+  }
+
+  /** What it said and edited, from the chat lines of its transcript. */
+  private chat(id: number | undefined, items: unknown): void {
+    if (id === undefined || !Array.isArray(items)) return;
+    const mem = this.memory(id);
+    for (const item of items as Array<{ role?: string; text?: unknown }>) {
+      if (typeof item.text !== 'string') continue;
+      if (item.role === 'assistant') mem.lastSaid = item.text;
+      else if (item.role === 'tool' && EDIT_LINE.test(item.text)) mem.edits++;
+    }
+  }
+
+  /** Write the finished turn with what it did, and start counting anew. */
+  private settleTurn(id: number): void {
+    const mem = this.agents.get(id);
+    if (!mem?.settling) return;
+    clearTimeout(mem.settling.timer);
+    const { at } = mem.settling;
+    const summary = turnSummary(mem.lastSaid);
+    const edits = mem.edits;
+    mem.settling = undefined;
+    mem.lastSaid = undefined;
+    mem.edits = 0;
+    this.add(id, 'termino', 'Terminó su turno', {
+      at,
+      summary,
+      edits: edits > 0 ? edits : undefined,
+    });
   }
 
   private identity(id: number, message: Record<string, unknown>): void {
@@ -181,7 +232,7 @@ export class DayLog {
   private memory(id: number): AgentMemory {
     let mem = this.agents.get(id);
     if (!mem) {
-      mem = { completed: new Set() };
+      mem = { completed: new Set(), edits: 0 };
       this.agents.set(id, mem);
     }
     return mem;
@@ -209,9 +260,11 @@ export class DayLog {
   ): void {
     this.rollOver();
     const agent = extra.agent ?? this.nameOf(agentId);
-    const entry: DayLogEntry = { at: this.now(), agentId, agent, kind, text };
+    const entry: DayLogEntry = { at: extra.at ?? this.now(), agentId, agent, kind, text };
     if (extra.waitedMs !== undefined) entry.waitedMs = extra.waitedMs;
     if (extra.prUrl) entry.prUrl = extra.prUrl;
+    if (extra.summary) entry.summary = extra.summary;
+    if (extra.edits) entry.edits = extra.edits;
     const folder = this.folderOf(agentId);
     if (folder) entry.folder = folder;
     this.entries.push(entry);

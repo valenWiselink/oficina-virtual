@@ -20,6 +20,7 @@ export function SupervisionField({
   workspaces,
   candidates,
   disabled,
+  allowPicked = true,
   onChange,
 }: {
   scope: SupervisionScope;
@@ -27,6 +28,8 @@ export function SupervisionField({
   workspaces: readonly Workspace[];
   candidates: ReadonlyArray<TeamCandidate & { name: string }>;
   disabled: boolean;
+  /** "Elegidos" needs the agent to exist (launching: pick them later in Editar). */
+  allowPicked?: boolean;
   onChange: (scope: SupervisionScope, picked: string[]) => void;
 }) {
   const pick = (kind: string | null) => {
@@ -49,7 +52,11 @@ export function SupervisionField({
     <div className="flex flex-col gap-6">
       <Choices
         legend="Supervisa"
-        choices={workspaces.length > 0 ? KINDS : KINDS.filter((k) => k.value !== 'workspace')}
+        choices={KINDS.filter(
+          (k) =>
+            (k.value !== 'workspace' || workspaces.length > 0) &&
+            (k.value !== 'agents' || allowPicked),
+        )}
         value={scope.kind === 'none' ? null : scope.kind}
         disabled={disabled}
         onChange={pick}

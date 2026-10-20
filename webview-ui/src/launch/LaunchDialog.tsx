@@ -3,12 +3,14 @@ import { useCallback, useState } from 'react';
 import type { LaunchAgent } from '../../../core/src/messages.js';
 import { EFFORT_CHOICES, MODEL_CHOICES } from '../agents/agentEdits.js';
 import { Choices } from '../agents/Choices.js';
+import { SupervisionField } from '../agents/SupervisionField.js';
+import type { SupervisionScope } from '../agents/supervisionRules.js';
 import { Button } from '../components/ui/Button.js';
 import { Modal } from '../components/ui/Modal.js';
 import { TextInput } from '../components/ui/TextInput.js';
 import type { Directory } from '../hooks/useExtensionMessages.js';
 import { transport } from '../transport/index.js';
-import { noteLaunch } from '../workspaces/workspaceStore.js';
+import { noteLaunch, useWorkspaces } from '../workspaces/workspaceStore.js';
 import { ClawdColorPicker } from './ClawdColorPicker.js';
 import { CLAWD_COLOR_NAMES } from './clawdColors.js';
 import {
@@ -29,6 +31,8 @@ interface PendingLaunch {
   /** First message (a template's, edited or not). */
   prompt: string;
   template: string;
+  /** Born a supervisor of this (none: a plain agent). */
+  supervision: SupervisionScope;
 }
 
 /**
@@ -42,6 +46,7 @@ export function useLaunchDialog(taken: () => readonly TakenLook[]): {
   launchDialog: React.ReactNode;
 } {
   const [pending, setPending] = useState<PendingLaunch | null>(null);
+  const { workspaces } = useWorkspaces();
 
   const requestLaunch = useCallback(
     (directory: Directory) => {
@@ -57,6 +62,7 @@ export function useLaunchDialog(taken: () => readonly TakenLook[]): {
         effort: start.effort ?? null,
         prompt: '',
         template: 'nada',
+        supervision: { kind: 'none' },
       });
     },
     [taken],
@@ -80,6 +86,10 @@ export function useLaunchDialog(taken: () => readonly TakenLook[]): {
       prompt: pending.prompt.trim() || undefined,
       model: pending.model ?? undefined,
       effort: (pending.effort ?? undefined) as LaunchAgent['effort'],
+      supervision:
+        pending.supervision.kind === 'none'
+          ? undefined
+          : (pending.supervision as LaunchAgent['supervision']),
     });
     noteLaunch(pending.directory.path);
     setPending(null);
@@ -163,6 +173,15 @@ export function useLaunchDialog(taken: () => readonly TakenLook[]): {
             choices={EFFORT_CHOICES}
             value={pending.effort}
             onChange={(effort) => setPending({ ...pending, effort })}
+          />
+          <SupervisionField
+            scope={pending.supervision}
+            picked={[]}
+            workspaces={workspaces}
+            candidates={[]}
+            disabled={false}
+            allowPicked={false}
+            onChange={(supervision) => setPending({ ...pending, supervision })}
           />
 
           <div className="flex gap-8 justify-end pt-4">

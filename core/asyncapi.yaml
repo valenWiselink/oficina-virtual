@@ -1513,6 +1513,14 @@ components:
           description: |
             The folder the agent worked in (last segment), so the day can be
             told by project even after the agent is closed.
+        summary:
+          type: string
+          description: |
+            For a finished turn, what the agent did in a sentence or two (the
+            start of its last answer, without "Te toca" or markdown).
+        edits:
+          type: integer
+          description: For a finished turn, how many files it edited or wrote.
 
     DayLogKind:
       type: string
@@ -1664,6 +1672,21 @@ components:
           type: string
           enum: [low, medium, high, xhigh, max]
           description: --effort for the session. Absent = Claude Code's default.
+        supervision:
+          type: object
+          description: |
+            Launch it as a supervisor of this scope (as setSupervision). Absent
+            or kind none = a plain agent.
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind:
+              type: string
+              enum: [none, workspace, agents, all]
+            workspaceId:
+              type: string
+            name:
+              type: string
 
     EditAgent:
       description: |

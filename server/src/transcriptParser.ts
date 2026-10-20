@@ -7,7 +7,7 @@ import type { AgentStateStore } from './agentStateStore.js';
 import { TEXT_IDLE_DELAY_MS, TOOL_DONE_DELAY_MS } from './constants.js';
 import { updateContextUsage } from './contextUsage.js';
 import { fileOpOf } from './fileLinks.js';
-import { isSyntheticUser } from './resumeState.js';
+import { isInterruption, isSyntheticUser } from './resumeState.js';
 import { updateSessionSpend } from './sessionSpend.js';
 import { hasInlineTeammates, hasPromotedBackgroundAgent } from './teamUtils.js';
 import {
@@ -276,6 +276,11 @@ export function processTranscriptLine(
       );
     } else if (record.type === 'progress') {
       processProgressRecord(agentId, record, agents, waitingTimers, permissionTimers);
+    } else if (record.type === 'user' && isInterruption(record)) {
+      // Esc: the turn stops with no turn_duration and no Stop hook, so this
+      // record is the only end there is. Without it the agent stayed
+      // "Pensando…" and refused edits ("Está trabajando") — 2026-10-20.
+      endTurn(agentId, agent, agents, waitingTimers, permissionTimers, true);
     } else if (record.type === 'user' && isSyntheticUser(record)) {
       // Written by Claude Code, not typed: an idle compaction would otherwise
       // turn a finished agent into "Pensando…" with nothing running.
@@ -465,76 +470,7 @@ export function processTranscriptLine(
         }
       }
     } else if (record.type === 'system' && record.subtype === 'turn_duration') {
-      cancelWaitingTimer(agentId, waitingTimers);
-      cancelPermissionTimer(agentId, permissionTimers);
-
-      // Definitive turn-end: clean up any stale tool state, but preserve background agents.
-      // When hooks are active, the Stop hook already handled the status change,
-      // but we still perform state cleanup here as a safety net.
-      const hasForegroundTools = agent.activeToolIds.size > agent.backgroundAgentToolIds.size;
-      if (hasForegroundTools) {
-        // Remove only non-background tool state
-        for (const toolId of agent.activeToolIds) {
-          if (agent.backgroundAgentToolIds.has(toolId)) continue;
-          agent.activeToolIds.delete(toolId);
-          agent.activeToolStatuses.delete(toolId);
-          const toolName = agent.activeToolNames.get(toolId);
-          agent.activeToolNames.delete(toolId);
-          if (isSubagentTool(toolName)) {
-            agent.activeSubagentToolIds.delete(toolId);
-            agent.activeSubagentToolNames.delete(toolId);
-            // A foreground spawn dropped at turn end without a tool_result:
-            // stop its shadow watch too, or it lingers until sessionEnd.
-            backgroundAgentCompletedCallback?.(agentId, toolId);
-          }
-        }
-        if (!agent.hookDelivered) {
-          agents.broadcast({ type: 'agentToolsClear', id: agentId });
-        }
-        // Re-send background agent tools so webview keeps their sub-agents alive.
-        // toolName + runInBackground are REQUIRED: without them the webview can't
-        // recognize the re-sent tool as a subagent spawn and never recreates the
-        // Subtask sub-character. Skip tools whose agent was promoted to its own
-        // character -- re-sending would spawn a ghost Subtask alongside it.
-        for (const toolId of agent.backgroundAgentToolIds) {
-          if (hasPromotedBackgroundAgent(agentId, toolId, agents)) continue;
-          const status = agent.activeToolStatuses.get(toolId);
-          if (status) {
-            agents.broadcast({
-              type: 'agentToolStart',
-              id: agentId,
-              toolId,
-              status,
-              toolName: agent.activeToolNames.get(toolId),
-              runInBackground: true,
-              isTeammateSpawn: agent.teammateSpawnToolIds?.has(toolId) || undefined,
-            });
-          }
-        }
-      } else if (agent.activeToolIds.size > 0 && agent.backgroundAgentToolIds.size === 0) {
-        agent.activeToolIds.clear();
-        agent.activeToolStatuses.clear();
-        agent.activeToolNames.clear();
-        agent.activeSubagentToolIds.clear();
-        agent.activeSubagentToolNames.clear();
-        if (!agent.hookDelivered) {
-          agents.broadcast({ type: 'agentToolsClear', id: agentId });
-        }
-      }
-
-      agent.isWaiting = true;
-      agent.permissionSent = false;
-      agent.hadToolsInTurn = false;
-      // Skip status post when hooks already handled it
-      if (!agent.hookDelivered) {
-        agents.broadcast({
-          type: 'agentStatus',
-          id: agentId,
-          status: 'waiting',
-          // turn_duration = the turn completed, so this is "Done".
-          awaitingInput: false,
-        });
-      }
+      endTurn(agentId, agent, agents, waitingTimers, permissionTimers, !agent.hookDelivered);
     } else if (record.type && !agent.seenUnknownRecordTypes.has(record.type)) {
       // Log first occurrence of unrecognized record types to help diagnose issues
       // where Claude Code changes JSONL format. Known types we intentionally skip:
@@ -758,4 +694,85 @@ function isAsyncAgentResult(block: Record<string, unknown>): boolean {
     return content.startsWith('Async agent launched successfully.');
   }
   return false;
+}
+
+/** The turn is over: drop foreground tool state (background agents stay) and
+ *  mark the agent waiting. `announce`: tell the webview (hooks may have). */
+function endTurn(
+  agentId: number,
+  agent: AgentState,
+  agents: AgentStateStore,
+  waitingTimers: Map<number, ReturnType<typeof setTimeout>>,
+  permissionTimers: Map<number, ReturnType<typeof setTimeout>>,
+  announce: boolean,
+): void {
+  cancelWaitingTimer(agentId, waitingTimers);
+  cancelPermissionTimer(agentId, permissionTimers);
+
+  // Definitive turn-end: clean up any stale tool state, but preserve background agents.
+  // When hooks are active, the Stop hook already handled the status change,
+  // but we still perform state cleanup here as a safety net.
+  const hasForegroundTools = agent.activeToolIds.size > agent.backgroundAgentToolIds.size;
+  if (hasForegroundTools) {
+    // Remove only non-background tool state
+    for (const toolId of agent.activeToolIds) {
+      if (agent.backgroundAgentToolIds.has(toolId)) continue;
+      agent.activeToolIds.delete(toolId);
+      agent.activeToolStatuses.delete(toolId);
+      const toolName = agent.activeToolNames.get(toolId);
+      agent.activeToolNames.delete(toolId);
+      if (isSubagentTool(toolName)) {
+        agent.activeSubagentToolIds.delete(toolId);
+        agent.activeSubagentToolNames.delete(toolId);
+        // A foreground spawn dropped at turn end without a tool_result:
+        // stop its shadow watch too, or it lingers until sessionEnd.
+        backgroundAgentCompletedCallback?.(agentId, toolId);
+      }
+    }
+    if (announce) {
+      agents.broadcast({ type: 'agentToolsClear', id: agentId });
+    }
+    // Re-send background agent tools so webview keeps their sub-agents alive.
+    // toolName + runInBackground are REQUIRED: without them the webview can't
+    // recognize the re-sent tool as a subagent spawn and never recreates the
+    // Subtask sub-character. Skip tools whose agent was promoted to its own
+    // character -- re-sending would spawn a ghost Subtask alongside it.
+    for (const toolId of agent.backgroundAgentToolIds) {
+      if (hasPromotedBackgroundAgent(agentId, toolId, agents)) continue;
+      const status = agent.activeToolStatuses.get(toolId);
+      if (status) {
+        agents.broadcast({
+          type: 'agentToolStart',
+          id: agentId,
+          toolId,
+          status,
+          toolName: agent.activeToolNames.get(toolId),
+          runInBackground: true,
+          isTeammateSpawn: agent.teammateSpawnToolIds?.has(toolId) || undefined,
+        });
+      }
+    }
+  } else if (agent.activeToolIds.size > 0 && agent.backgroundAgentToolIds.size === 0) {
+    agent.activeToolIds.clear();
+    agent.activeToolStatuses.clear();
+    agent.activeToolNames.clear();
+    agent.activeSubagentToolIds.clear();
+    agent.activeSubagentToolNames.clear();
+    if (announce) {
+      agents.broadcast({ type: 'agentToolsClear', id: agentId });
+    }
+  }
+
+  agent.isWaiting = true;
+  agent.permissionSent = false;
+  agent.hadToolsInTurn = false;
+  if (announce) {
+    agents.broadcast({
+      type: 'agentStatus',
+      id: agentId,
+      status: 'waiting',
+      // The turn completed (or you stopped it), so this is "Done".
+      awaitingInput: false,
+    });
+  }
 }

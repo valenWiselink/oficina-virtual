@@ -78,6 +78,9 @@ export interface LaunchStandaloneAgentOptions {
   /** Show this Claude Code background session instead of starting Claude:
    *  the terminal runs `claude attach <bgId>` (backgroundSessions.ts). */
   attach?: { bgId: string; sessionId: string; name?: string };
+  /** Launch it as a supervisor of this scope (validated by the caller); a
+   *  resume brings its own. */
+  supervision?: SupervisionScope;
 }
 
 /** A supervisor's extra launch flags (its MCP and role files), none otherwise.
@@ -123,7 +126,7 @@ export function launchStandaloneAgent(
   const prompt = resume || attach ? undefined : options.prompt;
   const model = resume ? resume.model : options.model;
   const effort = resume ? resume.effort : options.effort;
-  const supervision = resume?.supervision;
+  const supervision = resume ? resume.supervision : options.supervision;
   // Attaching: the session already runs with its flags (and a supervisor's
   // token, which must not rotate under it), so nothing is rebuilt.
   const launch = attach
@@ -326,16 +329,19 @@ function backgroundLaunchArgs(
     model?: string;
     effort?: string;
     supervision?: SupervisionScope;
+    /** A fresh supervisor: its files go under this id until Claude names it. */
+    provisionalId?: string;
   },
 ): string[] | null {
   const resume = look.sessionId !== undefined;
+  const filesId = look.sessionId ?? look.provisionalId;
   const launch = provider.buildLaunchCommand?.(look.sessionId ?? crypto.randomUUID(), cwd, {
     bypassPermissions: look.bypassPermissions,
     resume,
     prompt: look.prompt,
     model: look.model,
     effort: look.effort,
-    extraArgs: resume ? supervisorArgs(look.sessionId!, look.supervision) : [],
+    extraArgs: filesId ? supervisorArgs(filesId, look.supervision) : [],
   });
   return launch ? backgroundArgs(launch.args, look.name) : null;
 }
@@ -399,15 +405,19 @@ export async function launchAgent(
     }
     if (promptNeedsTerminal(options.prompt)) return launchStandaloneAgent(deps, options);
     const name = backgroundName(options.nickname || path.basename(cwd));
+    const provisionalId = options.supervision ? crypto.randomUUID() : undefined;
     const args = backgroundLaunchArgs(deps.provider, cwd, {
       name,
       bypassPermissions: options.bypassPermissions,
       prompt: options.prompt,
       model: options.model,
       effort: options.effort,
+      supervision: options.supervision,
+      provisionalId,
     });
     if (!args) return launchStandaloneAgent(deps, options);
     const started = await startBackground(cwd, args);
+    if (provisionalId) supervisors().rebind(provisionalId, started.sessionId);
     return launchStandaloneAgent(deps, { ...options, attach: { ...started, name } });
   } catch (err) {
     const why = err instanceof WorkspaceNotTrustedError ? 'carpeta sin confianza' : String(err);

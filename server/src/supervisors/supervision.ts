@@ -294,6 +294,17 @@ export class SupervisorRegistry {
     ];
   }
 
+  /** A fresh background supervisor gets its session id from Claude Code only
+   *  after it started (with files written under a provisional id): its token
+   *  now answers for the real session. The provisional files stay as Claude
+   *  read them; the next launch writes its own. */
+  rebind(provisionalId: string, sessionId: string): void {
+    for (const [token, owner] of this.tokens) {
+      if (owner === provisionalId) this.tokens.set(token, sessionId);
+    }
+    this.saveTokens();
+  }
+
   /** No longer a supervisor: its token and files go. */
   forget(sessionId: string): void {
     for (const [token, owner] of this.tokens) if (owner === sessionId) this.tokens.delete(token);

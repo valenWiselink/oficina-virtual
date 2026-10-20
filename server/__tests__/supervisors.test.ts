@@ -183,6 +183,17 @@ describe('SupervisorRegistry', () => {
     expect(registry.supervisorByToken(token)).toBeUndefined();
   });
 
+  it('a supervisor born in the background keeps the token Claude started with', () => {
+    const { registry } = office(dir);
+    const flags = registry.prepareLaunch('provisorio', { kind: 'all' });
+    const token = JSON.parse(
+      fs.readFileSync(flags[1], 'utf-8'),
+    ).mcpServers.oficina.headers.Authorization.slice(7);
+    expect(registry.supervisorByToken(token)).toBeUndefined();
+    registry.rebind('provisorio', 's11');
+    expect(registry.supervisorByToken(token)).toBe(11);
+  });
+
   it('takes the team the browser sends, and tells every office', () => {
     const { store, registry } = office(dir);
     const sent: Array<Record<string, unknown>> = [];

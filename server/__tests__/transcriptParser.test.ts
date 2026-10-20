@@ -376,3 +376,30 @@ describe('transcriptParser: records Claude Code writes itself', () => {
     expect(statuses).toEqual(['active']);
   });
 });
+
+describe('transcriptParser: stopping a turn with Esc', () => {
+  it('leaves the agent waiting, not "Pensando…" forever', () => {
+    setHookProvider(claudeProvider);
+    const agents = new AgentStateStore();
+    const agent = createTestAgent({ hookDelivered: true });
+    agents.set(1, agent);
+    const statuses: unknown[] = [];
+    agents.on('broadcast', (msg) => {
+      const m = msg as { type: string; status?: string };
+      if (m.type === 'agentStatus') statuses.push(m.status);
+    });
+    const line = (r: object) =>
+      processTranscriptLine(1, JSON.stringify(r), agents, new Map(), new Map());
+    line({ type: 'user', message: { content: 'supervisá Desarrollo' } });
+    const tool = agentToolUseRecord('toolu_9', 'Bash', { command: 'ls' });
+    processTranscriptLine(1, tool, agents, new Map(), new Map());
+    expect(agent.activeToolIds.size).toBe(1);
+    line({
+      type: 'user',
+      message: { content: [{ type: 'text', text: '[Request interrupted by user]' }] },
+    });
+    expect(statuses.at(-1)).toBe('waiting');
+    expect(agent.isWaiting).toBe(true);
+    expect(agent.activeToolIds.size).toBe(0);
+  });
+});

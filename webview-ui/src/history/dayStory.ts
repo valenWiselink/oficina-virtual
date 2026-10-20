@@ -4,8 +4,10 @@ import { shortPr } from './prRows.js';
 
 /**
  * The day told by work rather than by event: per project (the agent's
- * folder), per agent, what got done (tasks completed, PRs and their fate),
- * what it left you and when it worked — plus one headline for the whole day.
+ * folder), per agent, what it did (its turns in a sentence each, tasks
+ * completed, files edited), then its PRs and what it left you — plus one
+ * headline for the whole day. Sessions where nothing got done (a greeting, a
+ * quick question) are set apart as "cortas" instead of filling the day.
  * Pure: built from today's history, the live agents and the PR statuses.
  */
 export interface WorkStream {
@@ -16,6 +18,10 @@ export interface WorkStream {
   from: number;
   to: number;
   done: string[];
+  /** What its turns did, one sentence each, newest first, without repeats. */
+  did: string[];
+  /** Files it edited or wrote. */
+  edits: number;
   prs: Array<{ url: string; label: string; state?: PrStatus['state'] }>;
   /** What its turns left you ("te toca"), newest first, without repeats. */
   leftForYou: string[];
@@ -27,13 +33,27 @@ export interface DayStory {
   headline: string;
   span?: { from: number; to: number };
   projects: Array<{ name: string; streams: WorkStream[] }>;
+  /** Sessions with nothing done (greetings, tests, a quick question). */
+  minor: WorkStream[];
 }
 
 const NO_PROJECT = 'Sin carpeta';
 const COMPLETED = /^Completó:\s*/;
 
 const weight = (s: WorkStream) =>
-  s.done.length * 3 + s.prs.length * 4 + s.turns + s.leftForYou.length;
+  s.done.length * 3 + s.prs.length * 4 + s.turns + s.leftForYou.length + s.did.length + s.edits;
+
+/** Something to tell: it changed files, finished tasks, opened a PR, left
+ *  you something, or worked through more than one turn it could sum up. */
+export function didSomething(s: WorkStream): boolean {
+  return (
+    s.done.length > 0 ||
+    s.prs.length > 0 ||
+    s.edits > 0 ||
+    s.leftForYou.length > 0 ||
+    s.did.length > 1
+  );
+}
 
 function streamFor(map: Map<string, WorkStream>, e: DayLogEntry, view?: AgentView): WorkStream {
   let s = map.get(e.agent);
@@ -46,6 +66,8 @@ function streamFor(map: Map<string, WorkStream>, e: DayLogEntry, view?: AgentVie
       from: e.at,
       to: e.at,
       done: [],
+      did: [],
+      edits: 0,
       prs: [],
       leftForYou: [],
       turns: 0,
@@ -60,8 +82,11 @@ function streamFor(map: Map<string, WorkStream>, e: DayLogEntry, view?: AgentVie
 
 function addEntry(s: WorkStream, e: DayLogEntry, statuses: ReadonlyMap<string, PrStatus>): void {
   if (e.kind === 'tarea') s.done.push(e.text.replace(COMPLETED, ''));
-  else if (e.kind === 'termino') s.turns++;
-  else if (e.kind === 'respuesta') s.answered++;
+  else if (e.kind === 'termino') {
+    s.turns++;
+    s.edits += e.edits ?? 0;
+    if (e.summary && !s.did.includes(e.summary)) s.did.unshift(e.summary);
+  } else if (e.kind === 'respuesta') s.answered++;
   else if (e.kind === 'tetoca' && !s.leftForYou.includes(e.text)) s.leftForYou.unshift(e.text);
   if (e.prUrl && !s.prs.some((p) => p.url === e.prUrl)) {
     const status = statuses.get(e.prUrl);
@@ -86,8 +111,13 @@ export function dayStory(
     addEntry(s, e, statuses);
   }
   const projects = new Map<string, WorkStream[]>();
+  const minor: WorkStream[] = [];
   for (const s of streams.values()) {
     if (weight(s) === 0) continue;
+    if (!didSomething(s)) {
+      minor.push(s);
+      continue;
+    }
     const name = projectOf.get(s.agent) ?? NO_PROJECT;
     projects.set(name, [...(projects.get(name) ?? []), s]);
   }
@@ -103,6 +133,7 @@ export function dayStory(
     span:
       entries.length > 0 ? { from: entries[0].at, to: entries[entries.length - 1].at } : undefined,
     projects: list,
+    minor: minor.sort((a, b) => b.to - a.to),
   };
 }
 

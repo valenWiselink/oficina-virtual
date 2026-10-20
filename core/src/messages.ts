@@ -568,6 +568,8 @@ export interface DayLogEntry {
   waitedMs?: number;
   prUrl?: string;
   folder?: string;
+  summary?: string;
+  edits?: number;
 }
 
 export type DayLogKind =
@@ -647,10 +649,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_338;
+  effort?: AnonymousSchema_340;
+  supervision?: AnonymousSchema_341;
 }
 
-export type AnonymousSchema_338 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_340 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export interface AnonymousSchema_341 {
+  kind: AnonymousSchema_342;
+  workspaceId?: string;
+  name?: string;
+}
+
+export type AnonymousSchema_342 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -699,16 +710,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_361;
+  scope: AnonymousSchema_367;
 }
 
-export interface AnonymousSchema_361 {
-  kind: AnonymousSchema_362;
+export interface AnonymousSchema_367 {
+  kind: AnonymousSchema_368;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_362 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_368 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

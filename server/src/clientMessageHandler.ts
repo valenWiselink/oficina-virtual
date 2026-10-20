@@ -172,8 +172,12 @@ export function handleClientMessage(
           prompt: launchPrompt(msg),
           model: cleanModel(msg.model),
           effort: cleanEffort(msg.effort),
+          supervision: parseScope(msg.supervision) ?? undefined,
         },
-      );
+      ).then((id) => {
+        // Born a supervisor: every office learns who it watches over.
+        if (id !== null && msg.supervision) broadcastSupervision(store);
+      });
       break;
     }
 

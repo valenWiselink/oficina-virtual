@@ -52,3 +52,19 @@ describe('endedWaiting', () => {
     ).toBe(true);
   });
 });
+
+describe('endedWaiting after Esc', () => {
+  it('a stopped turn is over', () => {
+    expect(
+      endedWaiting([
+        answer([{ type: 'tool_use' }]),
+        rec({
+          type: 'user',
+          message: {
+            content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }],
+          },
+        }),
+      ]),
+    ).toBe(true);
+  });
+});

@@ -30,6 +30,18 @@ export function isSyntheticUser(r: {
   return r.isCompactSummary === true || r.isMeta === true || r.isVisibleInTranscriptOnly === true;
 }
 
+/** The record Claude Code writes when you stop a turn with Esc. */
+export function isInterruption(r: { message?: { content?: unknown }; content?: unknown }): boolean {
+  const content = r.message?.content ?? r.content;
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content) && content.length === 1
+        ? (content[0] as { type?: string; text?: unknown }).text
+        : undefined;
+  return typeof text === 'string' && text.startsWith('[Request interrupted by user');
+}
+
 /** True when the newest turn-relevant record of the main conversation closes
  *  a turn: a turn_duration, or an answer with no tool call pending. */
 export function endedWaiting(lines: readonly string[]): boolean {
@@ -61,7 +73,7 @@ export function endedWaiting(lines: readonly string[]): boolean {
         : [];
       return !content.some((c) => c.type === 'tool_use');
     }
-    if (r.type === 'user') return false;
+    if (r.type === 'user') return isInterruption(r);
   }
   return false;
 }
