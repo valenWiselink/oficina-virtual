@@ -184,3 +184,35 @@ describe('withSupervisionNames: only the supervisor comes to you', () => {
     expect(worker.askingSupervisor).toBeUndefined();
   });
 });
+
+describe('buildAgentViews: a meeting of teammates', () => {
+  it("its members sit in their lead's meeting, not as agents of their own", () => {
+    const members = [2, 3, 4];
+    const characters = new Map<number, CharacterFacts>([
+      [1, ch()],
+      ...members.map((id): [number, CharacterFacts] => [
+        id,
+        ch({ leadAgentId: 1, agentName: `area-${id}`, isActive: false }),
+      ]),
+    ]);
+    const views = buildAgentViews(
+      inputs({
+        agentIds: [1, ...members],
+        characters,
+        agentTools: { 3: [{ status: 'Bash: ls', done: false }] },
+      }),
+    );
+    expect(views.map((v) => v.id)).toEqual([1]);
+    expect(views[0].kind).toBe('meet');
+    expect(views[0].subagents.map((s) => [s.label, s.kind])).toEqual([
+      ['area-2', 'done'],
+      ['area-3', 'work'],
+      ['area-4', 'done'],
+    ]);
+  });
+
+  it('a member whose lead is gone shows on its own', () => {
+    const characters = new Map([[2, ch({ leadAgentId: 9, agentName: 'suelto' })]]);
+    expect(buildAgentViews(inputs({ agentIds: [2], characters })).map((v) => v.id)).toEqual([2]);
+  });
+});

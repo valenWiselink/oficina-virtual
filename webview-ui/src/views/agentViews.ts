@@ -129,6 +129,8 @@ export interface CharacterFacts {
   spend?: Spend;
   agentName?: string;
   directoryName?: string;
+  /** A meeting member (Claude Code teammate): the agent that called it. */
+  leadAgentId?: number;
 }
 
 export interface ToolRow {
@@ -188,6 +190,34 @@ function pendingAsk(
   return !!identity?.yourTurn && !!identity.yourTurnId && !done(identity.yourTurnId);
 }
 
+/** A meeting member as one of its lead's subagents. */
+function memberView(input: ViewInputs, id: number): SubagentView {
+  const ch = input.characters.get(id);
+  const tool = liveTool(input.agentTools[id]);
+  const asks = input.permissions.some((p) => p.id === id) || !!tool?.permissionWait;
+  const kind: AgentKind = asks
+    ? 'needs'
+    : input.researching(id)
+      ? 'research'
+      : tool
+        ? 'work'
+        : ch?.isActive && input.inTurn(id)
+          ? 'think'
+          : 'done';
+  return {
+    id,
+    label: ch?.agentName || 'Integrante',
+    kind,
+    statusText: asks
+      ? 'Necesita tu permiso'
+      : tool
+        ? statusText(tool.status)
+        : kind === 'think'
+          ? 'Pensando…'
+          : 'Esperando la junta',
+  };
+}
+
 function liveTool(rows: ToolRow[] | undefined): ToolRow | undefined {
   return rows ? [...rows].reverse().find((t) => !t.done) : undefined;
 }
@@ -198,10 +228,19 @@ function liveTool(rows: ToolRow[] | undefined): ToolRow | undefined {
  * turn in progress); with none of it, the agent is idle — never guessed busy.
  */
 export function buildAgentViews(input: ViewInputs): AgentView[] {
+  const shown = new Set(input.agentIds);
+  const leadOf = (id: number) => {
+    const lead = input.characters.get(id)?.leadAgentId;
+    return lead !== undefined && lead !== id && shown.has(lead) ? lead : undefined;
+  };
   const views: AgentView[] = input.agentIds.flatMap((id) => {
     const ch = input.characters.get(id);
     if (!ch) return [];
+    // A meeting member sits in its lead's meeting, not as an agent of its own
+    // (measured 2026-10-20: seven members piled up as full bubbles).
+    if (leadOf(id) !== undefined) return [];
     const identity = input.identity(id);
+    const members = input.agentIds.filter((m) => leadOf(m) === id).map((m) => memberView(input, m));
     const subs = input.subagents
       .filter((s) => s.parentAgentId === id)
       .map((s): SubagentView => {
@@ -219,7 +258,8 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
           kind,
           statusText: statusText(tool?.status ?? 'Thinking'),
         };
-      });
+      })
+      .concat(members);
 
     const permission = input.permissions.find((p) => p.id === id);
     const tool = liveTool(input.agentTools[id]);
