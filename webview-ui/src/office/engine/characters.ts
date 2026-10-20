@@ -1,5 +1,6 @@
 import {
   DEFAULT_MAX_CONTEXT_TOKENS,
+  EXCURSION_SPEED_FACTOR,
   SEAT_REST_MAX_SEC,
   SEAT_REST_MIN_SEC,
   TYPE_FRAME_DURATION_SEC,
@@ -98,6 +99,10 @@ export function updateCharacter(
   blockedTiles: Set<string>,
 ): void {
   ch.frameTimer += dt;
+  if (ch.excursion) {
+    updateExcursion(ch, dt, ch.excursion, tileMap, blockedTiles);
+    return;
+  }
 
   switch (ch.state) {
     case CharacterState.TYPE: {
@@ -313,6 +318,81 @@ export function updateCharacter(
       }
       break;
     }
+  }
+}
+
+/**
+ * A character on an excursion walks to its spot and stays there, active or
+ * not — a meeting does not end because one subagent paused, and a reader
+ * does not wander off between two searches. No idle wandering meanwhile.
+ */
+function updateExcursion(
+  ch: Character,
+  dt: number,
+  spot: NonNullable<Character['excursion']>,
+  tileMap: TileTypeVal[][],
+  blockedTiles: Set<string>,
+): void {
+  const arrived = ch.tileCol === spot.col && ch.tileRow === spot.row;
+  if (ch.state === CharacterState.WALK) {
+    const lastStep = ch.path[ch.path.length - 1];
+    const headingThere = lastStep?.col === spot.col && lastStep?.row === spot.row;
+    if (!headingThere && ch.path.length > 0 && ch.moveProgress === 0) {
+      // Was walking elsewhere (to its desk, wandering): turn toward the spot.
+      ch.path = findPath(ch.tileCol, ch.tileRow, spot.col, spot.row, tileMap, blockedTiles);
+    }
+    if (ch.path.length > 0) {
+      stepAlongPath(ch, dt);
+      return;
+    }
+  }
+  if (!arrived) {
+    const path = findPath(ch.tileCol, ch.tileRow, spot.col, spot.row, tileMap, blockedTiles);
+    if (path.length > 0) {
+      ch.path = path;
+      ch.moveProgress = 0;
+      ch.state = CharacterState.WALK;
+      ch.frame = 0;
+      ch.frameTimer = 0;
+      return;
+    }
+    // Unreachable spot: stay put rather than wander (the excursion ends soon).
+  }
+  const center = tileCenter(ch.tileCol, ch.tileRow);
+  ch.x = center.x;
+  ch.y = center.y;
+  ch.dir = spot.dir;
+  // Seated (sofa) uses the TYPE pose; standing at a shelf reads on its feet.
+  ch.state = spot.seated ? CharacterState.TYPE : CharacterState.IDLE;
+  if (ch.frameTimer >= TYPE_FRAME_DURATION_SEC) {
+    ch.frameTimer -= TYPE_FRAME_DURATION_SEC;
+    ch.frame = spot.seated ? (ch.frame + 1) % 2 : 0;
+  }
+}
+
+/** Advance one walking step (shared shape with the WALK case above), hurried:
+ *  an excursion has to arrive while the meeting or the research still lasts —
+ *  at strolling pace a short one ended before anyone got there (measured). */
+function stepAlongPath(ch: Character, dt: number): void {
+  if (ch.frameTimer >= WALK_FRAME_DURATION_SEC / EXCURSION_SPEED_FACTOR) {
+    ch.frameTimer -= WALK_FRAME_DURATION_SEC / EXCURSION_SPEED_FACTOR;
+    ch.frame = (ch.frame + 1) % 4;
+  }
+  const nextTile = ch.path[0];
+  ch.dir = directionBetween(ch.tileCol, ch.tileRow, nextTile.col, nextTile.row);
+  ch.moveProgress += ((WALK_SPEED_PX_PER_SEC * EXCURSION_SPEED_FACTOR) / TILE_SIZE) * dt;
+  const fromCenter = tileCenter(ch.tileCol, ch.tileRow);
+  const toCenter = tileCenter(nextTile.col, nextTile.row);
+  const t = Math.min(ch.moveProgress, 1);
+  ch.x = fromCenter.x + (toCenter.x - fromCenter.x) * t;
+  ch.y = fromCenter.y + (toCenter.y - fromCenter.y) * t;
+  if (ch.moveProgress >= 1) {
+    ch.tileCol = nextTile.col;
+    ch.tileRow = nextTile.row;
+    ch.x = toCenter.x;
+    ch.y = toCenter.y;
+    ch.path.shift();
+    ch.moveProgress = 0;
   }
 }
 

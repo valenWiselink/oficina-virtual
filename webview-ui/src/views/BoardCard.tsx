@@ -1,0 +1,303 @@
+import { useState } from 'react';
+
+import { CharacterMugShot } from '../components/CharacterMugShot.js';
+import { Sparks } from '../components/Sparks.js';
+import { Button } from '../components/ui/Button.js';
+import { CLAWD_BODY_COLORS, TERMINAL_FONT_FAMILY } from '../constants.js';
+import { useCalmMode } from '../effects/calmMode.js';
+import { useNow } from '../hooks/useNow.js';
+import { useOutfit } from '../identity/clawdOutfit.js';
+import { ApproveButtons } from '../permissions/ApproveButtons.js';
+import { describeToolInput } from '../permissions/describeToolInput.js';
+import { useWritableAgents } from '../terminal/agentInput.js';
+import { MoveMenu } from '../workspaces/MoveMenu.js';
+import { useWorkspaces } from '../workspaces/workspaceStore.js';
+import { type AgentView, KIND_COLOR, waitedFor } from './agentViews.js';
+import { AgentNote, CompactButton, OutfitMenu, OutfitOverlay, QuickReplies } from './CardExtras.js';
+import type { CardMotion } from './cardMotion.js';
+import { isImpatient, offersCompact, offersQuickReplies } from './cardRules.js';
+import { useCheer } from './celebrate.js';
+
+/** From this wait on, "hace N min" is set in bold (never in red: red means
+ *  a broken terminal here). */
+const LONG_WAIT_MS = 5 * 60_000;
+
+export interface BoardActions {
+  onSelect: (id: number) => void;
+  onAllow?: (requestId: string) => void;
+  onDeny?: (requestId: string) => void;
+  onAdopt?: (id: number) => void;
+  onHandOff?: (id: number) => void;
+  onClose?: (id: number) => void;
+  /** You handled what its finished turn left you ("te toca"). */
+  onYourTurnDone?: (turnId: string) => void;
+}
+
+/** First line of what a held permission would run, for the inline request. */
+function permissionSummary(view: AgentView): { title: string; detail?: string } | null {
+  const p = view.permission;
+  if (!p) return null;
+  const d = describeToolInput(p.toolName, p.toolInput);
+  return { title: d.title, detail: d.sections.find((s) => s.code)?.text };
+}
+
+/** One agent on the board: who it is, what it does, and what you can do with it.
+ *  When you mark its "Hecho", its Clawd hops with sparks in its colour; after
+ *  10 min waiting on you it fidgets. It wears what you pick, carries your
+ *  sticky note, and offers one-tap replies and "Compactar" when they fit. */
+export function BoardCard({
+  view,
+  actions,
+  motion,
+}: {
+  view: AgentView;
+  actions: BoardActions;
+  motion?: CardMotion;
+}) {
+  const calm = useCalmMode();
+  const cheering = useCheer(view.id) && !calm;
+  const now = useNow();
+  const writable = useWritableAgents().has(view.id);
+  const outfit = useOutfit(view.key);
+  const [editingNote, setEditingNote] = useState(false);
+  const [outfitOpen, setOutfitOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const hasWorkspaces = useWorkspaces().workspaces.length > 0;
+  const replies = offersQuickReplies(view, writable);
+  const compact = offersCompact(view, writable);
+  const fidget = !calm && !cheering && isImpatient(view, now);
+  const meta = [view.ticket, view.folder, view.progress && `tareas ${view.progress}`]
+    .filter(Boolean)
+    .join(' · ');
+  const ask = permissionSummary(view);
+  const color = CLAWD_BODY_COLORS[view.palette % CLAWD_BODY_COLORS.length];
+  const hasActions =
+    (!!view.yourTurnId && !!actions.onYourTurnDone) ||
+    !!view.prUrl ||
+    (!view.hasTerminal && !!actions.onAdopt) ||
+    compact;
+  return (
+    <article
+      className={`group relative bg-bg rounded-lg pl-14 pr-8 py-8 flex flex-col gap-6 cursor-pointer transition-shadow hover:shadow-soft ${
+        motion && !calm ? (motion === 'pop' ? 'anim-pop-in' : 'anim-hop') : ''
+      } ${
+        view.kind === 'needs'
+          ? 'border-2 border-status-permission shadow-soft'
+          : 'border border-border'
+      }`}
+      onClick={() => actions.onSelect(view.id)}
+      aria-label={`${view.name}: ${view.statusText}`}
+    >
+      {/* The agent's colour, so a card reads as "that Clawd" at a glance. */}
+      <span
+        className="absolute left-5 top-8 bottom-8 w-3 rounded-full"
+        style={{ background: color }}
+      />
+      <div className="flex gap-8 items-center">
+        <span
+          className={`relative shrink-0 ${cheering ? 'anim-cheer' : fidget ? 'anim-impatient' : ''}`}
+          title={fidget ? 'Te espera hace rato' : undefined}
+        >
+          <CharacterMugShot palette={view.palette} hueShift={view.hueShift} size={32} />
+          <OutfitOverlay outfit={outfit} />
+          {cheering && <Sparks color={color} />}
+        </span>
+        <div className="flex flex-col gap-1 min-w-0 flex-1">
+          <span className="flex items-center gap-6 min-w-0">
+            <span className="text-sm font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap">
+              {view.name}
+            </span>
+            {/* Only where the office could host it: a viewer without terminals
+                would see every agent marked. */}
+            {!view.hasTerminal && actions.onAdopt && (
+              <span
+                className="shrink-0 text-2xs text-text-muted border border-border rounded-full px-6"
+                title="Corre fuera de la oficina (VS Code, otra consola): no tiene terminal acá"
+              >
+                afuera
+              </span>
+            )}
+          </span>
+          <span
+            className={`text-xs flex items-center gap-5 min-w-0 ${
+              view.kind === 'needs'
+                ? 'text-status-permission-text font-medium'
+                : view.kind === 'done'
+                  ? 'text-status-success'
+                  : 'text-text-muted'
+            }`}
+          >
+            <span
+              className="w-7 h-7 rounded-full shrink-0"
+              style={{ background: KIND_COLOR[view.kind] }}
+            />
+            <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+              {view.statusText}
+            </span>
+          </span>
+          {view.waitingSince !== undefined && <WaitedFor since={view.waitingSince} />}
+          {meta && (
+            <span className="text-2xs text-text-muted overflow-hidden text-ellipsis whitespace-nowrap">
+              {meta}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <AgentNote view={view} editing={editingNote} onDone={() => setEditingNote(false)} />
+
+      {view.contextPct !== undefined && (
+        <div
+          className="h-4 rounded-full overflow-hidden bg-bg-thumb"
+          title={`Contexto usado: ${view.contextPct}%`}
+          aria-label={`Contexto usado: ${view.contextPct}%`}
+        >
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${Math.min(100, view.contextPct)}%`,
+              // Grey, red only near the limit: amber would claim it needs you.
+              background: view.contextPct >= 90 ? 'var(--color-danger)' : 'var(--color-text-muted)',
+            }}
+          />
+        </div>
+      )}
+
+      {ask && view.permission && (
+        <div className="flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
+          <span className="text-xs text-text">{ask.title}</span>
+          {ask.detail && (
+            <pre
+              className="m-0 p-6 rounded-md bg-bg-dark text-text text-2xs whitespace-pre-wrap break-all overflow-auto"
+              style={{ maxHeight: 120, fontFamily: TERMINAL_FONT_FAMILY }}
+            >
+              {ask.detail}
+            </pre>
+          )}
+          {actions.onAllow && actions.onDeny && (
+            <ApproveButtons
+              permission={view.permission}
+              onAllow={actions.onAllow}
+              onDeny={actions.onDeny}
+            />
+          )}
+        </div>
+      )}
+
+      {view.subagents.length > 0 && (
+        <ul className="m-0 p-0 list-none flex flex-col gap-1 border-l-2 border-border pl-6">
+          {view.subagents.map((s) => (
+            <li key={s.id} className="text-2xs text-text-muted flex items-center gap-4 min-w-0">
+              <span
+                className="w-5 h-5 rounded-full shrink-0"
+                style={{ background: KIND_COLOR[s.kind] }}
+              />
+              <span className="text-text shrink-0">{s.label}</span>
+              <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                {s.statusText}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* What it asks of you stays in sight; the rest shows on hover. */}
+      {replies && (
+        <QuickReplies
+          view={view}
+          onSent={() => view.yourTurnId && actions.onYourTurnDone?.(view.yourTurnId)}
+        />
+      )}
+      {hasActions && (
+        <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+          {view.yourTurnId && actions.onYourTurnDone && (
+            <Button
+              size="sm"
+              variant="accent"
+              title="Ya lo hice: sacarlo de «Te necesita»"
+              onClick={() => actions.onYourTurnDone!(view.yourTurnId!)}
+            >
+              Hecho
+            </Button>
+          )}
+          {view.prUrl && (
+            <Button
+              size="sm"
+              title={view.prUrl}
+              onClick={() => window.open(view.prUrl, '_blank', 'noopener')}
+            >
+              Abrir PR
+            </Button>
+          )}
+          {compact && <CompactButton view={view} />}
+          {!view.hasTerminal && actions.onAdopt && (
+            <Button
+              size="sm"
+              title="Traer a la oficina (para escribirle desde acá)"
+              onClick={() => actions.onAdopt!(view.id)}
+            >
+              Traer
+            </Button>
+          )}
+        </div>
+      )}
+      <span
+        className="absolute right-4 top-4 flex gap-1 rounded-lg bg-bg opacity-0 group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100 transition-opacity"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {hasWorkspaces && (
+          <CardIcon
+            icon="drive_file_move"
+            title="Mover a otro espacio"
+            onClick={() => {
+              setOutfitOpen(false);
+              setMoveOpen((open) => !open);
+            }}
+          />
+        )}
+        <CardIcon icon="sticky_note_2" title="Nota" onClick={() => setEditingNote(true)} />
+        <CardIcon
+          icon="checkroom"
+          title="Qué se pone"
+          onClick={() => {
+            setMoveOpen(false);
+            setOutfitOpen((open) => !open);
+          }}
+        />
+        {actions.onHandOff && (
+          <CardIcon
+            icon="forward"
+            title="Pasar su última respuesta a otro agente"
+            onClick={() => actions.onHandOff!(view.id)}
+          />
+        )}
+        {actions.onClose && (
+          <CardIcon icon="close" title="Cerrar agente" onClick={() => actions.onClose!(view.id)} />
+        )}
+      </span>
+      {outfitOpen && <OutfitMenu view={view} onClose={() => setOutfitOpen(false)} />}
+      {moveOpen && <MoveMenu view={view} onClose={() => setMoveOpen(false)} />}
+    </article>
+  );
+}
+
+function WaitedFor({ since }: { since: number }) {
+  const now = useNow();
+  return (
+    <span
+      className={`text-2xs text-status-permission-text ${now - since >= LONG_WAIT_MS ? 'font-bold' : ''}`}
+    >
+      Te espera {waitedFor(since, now)}
+    </span>
+  );
+}
+
+function CardIcon({ icon, title, onClick }: { icon: string; title: string; onClick: () => void }) {
+  return (
+    <Button size="icon" variant="ghost" title={title} aria-label={title} onClick={onClick}>
+      <span className="material-symbols-sharp text-sm" aria-hidden="true">
+        {icon}
+      </span>
+    </Button>
+  );
+}

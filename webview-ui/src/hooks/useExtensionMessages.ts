@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { HooksConsentRequest } from '../../../core/src/messages.js';
+import type { ClaudeStatus, HooksConsentRequest } from '../../../core/src/messages.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
 import { reconcileExistingAgents } from '../office/engine/existingAgents.js';
@@ -19,7 +19,8 @@ import {
 } from '../office/toolUtils.js';
 import type { OfficeLayout, ToolActivity } from '../office/types.js';
 import { setWallSprites } from '../office/wallTiles.js';
-import { isBrowserRuntime, isE2E } from '../runtime.js';
+import { isBrowserRuntime } from '../runtime.js';
+import { setClaudeLook } from '../terminal/terminalLook.js';
 import { transport } from '../transport/index.js';
 
 /**
@@ -137,6 +138,8 @@ interface ExtensionMessageState {
    *  duplicate to drift. Cleared on answer/dismissal, and by a matching provider's hooksStatus installed=true. */
   consentRequest: HooksConsentRequest | null;
   dismissConsentRequest: (providerId: string | null) => void;
+  /** Whether claude answers on the host (null until the server says). */
+  claudeStatus: ClaudeStatus | null;
   // Areas
   areaMappings: Record<string, string[]>;
   setAreaMappings: (m: Record<string, string[]>) => void;
@@ -214,6 +217,7 @@ export function useExtensionMessages(
   // than dropping it — the server sends one request per provider on the same handshake.
   const [consentQueue, setConsentQueue] = useState<HooksConsentRequest[]>([]);
   const consentRequest = consentQueue[0] ?? null;
+  const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | null>(null);
   const [areaMappings, setAreaMappings] = useState<Record<string, string[]>>({});
   const [showAreas, setShowAreas] = useState(false);
   const [bypassPermissions, setBypassPermissions] = useState(false);
@@ -259,26 +263,6 @@ export function useExtensionMessages(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handler = (msg: any) => {
       const os = getOfficeState();
-      // CI / e2e diagnostic: record every received transport message on the
-      // window-side log. The fixture reads window.__pixelAgentsTestHooks.
-      // messageLog and attaches as JSON so CI failures can see the exact
-      // sequence of messages the webview actually processed. Gated on the e2e
-      // harness flag so this unbounded log never grows in a real session.
-      if (isE2E && typeof window !== 'undefined') {
-        if (!window.__pixelAgentsTestHooks) window.__pixelAgentsTestHooks = {};
-        if (!window.__pixelAgentsTestHooks.messageLog) {
-          window.__pixelAgentsTestHooks.messageLog = [];
-        }
-        window.__pixelAgentsTestHooks.messageLog.push({
-          at: Date.now(),
-          type: msg.type,
-          id: msg.id,
-          toolName: msg.toolName,
-          status: msg.status,
-          toolId: msg.toolId,
-          parentToolId: msg.parentToolId,
-        });
-      }
 
       if (msg.type === 'providerCapabilities') {
         setProviderCapabilities({
@@ -730,6 +714,10 @@ export function useExtensionMessages(
       } else if (msg.type === 'directoriesLoaded') {
         const directories = msg.directories as Directory[];
         setDirectories(directories);
+      } else if (msg.type === 'claudeStatus') {
+        const status = msg as unknown as ClaudeStatus;
+        setClaudeStatus(status);
+        if (status.theme) setClaudeLook(status.theme);
       } else if (msg.type === 'directorySuggestions') {
         setDirectorySuggestions((msg.paths ?? []) as string[]);
       } else if (msg.type === 'directorySaved') {
@@ -898,6 +886,7 @@ export function useExtensionMessages(
     setHooksEnabled,
     hooksInfoShown,
     consentRequest,
+    claudeStatus,
     // Called when a tour ends (answer + Let's Go, the X, Escape) with the providerId that tour was ABOUT, removing
     // that entry so the next provider's ask becomes the head. Keyed by id, not a blind shift: an answered ask's own
     // installed:true moot may already have removed the head, and a shift would then drop the NEXT provider's ask

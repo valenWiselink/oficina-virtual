@@ -11,9 +11,12 @@ import {
   GREETER_TILE_MARGIN,
   INACTIVE_SEAT_TIMER_MIN_SEC,
   INACTIVE_SEAT_TIMER_RANGE_SEC,
+  LIBRARY_AREA_LABEL,
   MAX_PET_ID_LENGTH,
+  MEETING_AREA_LABEL,
   PET_HIT_HALF_WIDTH,
   PET_HIT_HEIGHT,
+  VISIT_ONLY_AREAS,
   WAITING_BUBBLE_DURATION_SEC,
 } from '../../constants.js';
 import { getAnimationFrames, getCatalogEntry, getOnStateType } from '../layout/furnitureCatalog.js';
@@ -268,18 +271,21 @@ export class OfficeState {
 
   /** Get the blocked-tile key for a character's own seat, or null */
   private ownSeatKey(ch: Character): string | null {
+    // On an excursion (meeting sofa, library shelf) that spot is the target.
+    if (ch.excursion) return `${ch.excursion.col},${ch.excursion.row}`;
     if (!ch.seatId) return null;
     const seat = this.seats.get(ch.seatId);
     if (!seat) return null;
     return `${seat.seatCol},${seat.seatRow}`;
   }
 
-  /** Temporarily unblock a character's own seat, run fn, then re-block */
+  /** Temporarily unblock a character's own seat, run fn, then re-block —
+   *  only if it was blocked: an excursion spot can be plain floor. */
   private withOwnSeatUnblocked<T>(ch: Character, fn: () => T): T {
     const key = this.ownSeatKey(ch);
-    if (key) this.blockedTiles.delete(key);
+    const wasBlocked = key !== null && this.blockedTiles.delete(key);
     const result = fn();
-    if (key) this.blockedTiles.add(key);
+    if (wasBlocked) this.blockedTiles.add(key);
     return result;
   }
 
@@ -375,11 +381,14 @@ export class OfficeState {
    */
   private findFreeSeat(directoryName?: string): string | null {
     const electronicsTiles = this.buildElectronicsTileSet();
-    const freeSeats: string[] = [];
+    const allFree: string[] = [];
     for (const [uid, seat] of this.seats) {
-      if (!seat.assigned) freeSeats.push(uid);
+      if (!seat.assigned) allFree.push(uid);
     }
-    if (freeSeats.length === 0) return null;
+    // The meeting room and the library are visited, never anyone's desk —
+    // unless every other seat is taken.
+    const freeSeats = allFree.filter((uid) => !VISIT_ONLY_AREAS.has(this.seatZone(uid) ?? ''));
+    if (freeSeats.length === 0) return this.pickFromSeats(allFree, electronicsTiles);
 
     const areaLabels = directoryName ? this.areaMappings[directoryName] : undefined;
 
@@ -644,6 +653,74 @@ export class OfficeState {
         ch.seatTimer = INACTIVE_SEAT_TIMER_MIN_SEC + Math.random() * INACTIVE_SEAT_TIMER_RANGE_SEC;
       }
     }
+  }
+
+  /**
+   * Spots for excursions. Meeting: the sofa seats of the meeting-room Area,
+   * facing the table. Library: the floor row in front of the shelves (the
+   * topmost walkable row of the library Area), facing up at the books.
+   */
+  private excursionSpots(
+    kind: 'meeting' | 'library',
+  ): Array<{ col: number; row: number; dir: Direction }> {
+    if (kind === 'meeting') {
+      return [...this.seats]
+        .filter(([uid]) => this.seatZone(uid) === MEETING_AREA_LABEL)
+        .map(([, seat]) => ({ col: seat.seatCol, row: seat.seatRow, dir: seat.facingDir }));
+    }
+    const tiles = this.layout.areaTiles ?? [];
+    const inLibrary = this.walkableTiles.filter(
+      (t) => tiles[t.row * this.layout.cols + t.col] === LIBRARY_AREA_LABEL,
+    );
+    const top = Math.min(...inLibrary.map((t) => t.row));
+    return inLibrary.filter((t) => t.row === top).map((t) => ({ ...t, dir: Direction.UP }));
+  }
+
+  /**
+   * Send a character on an excursion (see Character.excursion). Picks a spot
+   * nobody else is using; returns false when there is none (no such room in
+   * the layout, or it is full) and the character stays where it is.
+   */
+  startExcursion(id: number, kind: 'meeting' | 'library'): boolean {
+    const ch = this.characters.get(id);
+    if (!ch) return false;
+    const taken = new Set<string>();
+    for (const other of this.characters.values()) {
+      if (other.id !== id && other.excursion)
+        taken.add(`${other.excursion.col},${other.excursion.row}`);
+    }
+    const spot = this.excursionSpots(kind).find((s) => !taken.has(`${s.col},${s.row}`));
+    if (!spot) return false;
+    ch.excursion = { ...spot, seated: true };
+    return true;
+  }
+
+  /** End an excursion: back to the desk (a subagent, deskless, stands up). */
+  endExcursion(id: number): void {
+    const ch = this.characters.get(id);
+    if (!ch?.excursion) return;
+    ch.excursion = null;
+    if (ch.seatId) {
+      this.sendToSeat(id);
+    } else {
+      ch.state = CharacterState.IDLE;
+      ch.frame = 0;
+    }
+  }
+
+  /**
+   * Seat an agent in its repo's Area (Backend Go, Webapp, …) once the server
+   * says which repo it works in. No-op when it already sits there, when the
+   * layout has no such Area, or when that Area is full (it keeps its desk).
+   */
+  moveToArea(agentId: number, areaLabel: string): void {
+    const ch = this.characters.get(agentId);
+    if (!ch || ch.isSubagent || !ch.seatId || this.seatZone(ch.seatId) === areaLabel) return;
+    const free = [...this.seats]
+      .filter(([uid, seat]) => !seat.assigned && this.seatZone(uid) === areaLabel)
+      .map(([uid]) => uid);
+    const pick = this.pickFromSeats(free, this.buildElectronicsTileSet());
+    if (pick) this.reassignSeat(agentId, pick);
   }
 
   /**

@@ -3,6 +3,7 @@ import type { Terminal } from '@xterm/xterm';
 import { writeClipboardText } from './clipboard.js';
 import { clipboardKeyAction, decodeOsc52 } from './clipboardKeys.js';
 import { terminalCopyText } from './flowCopy.js';
+import { type TerminalShortcut, terminalShortcut } from './terminalShortcuts.js';
 
 const OSC_CLIPBOARD = 52;
 
@@ -25,11 +26,20 @@ export function attachClipboardInput(
   opts: {
     /** Only the pane on screen may write the clipboard from OSC 52. */
     isActive: () => boolean;
+    /** The office's own keys (font size, search); they never reach the PTY.
+     *  Shares this handler because xterm keeps only one per terminal. */
+    onShortcut?: (shortcut: TerminalShortcut) => void;
   },
 ): () => void {
   const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
   term.attachCustomKeyEventHandler((ev) => {
+    const shortcut = opts.onShortcut ? terminalShortcut(ev) : null;
+    if (shortcut) {
+      ev.preventDefault();
+      opts.onShortcut!(shortcut);
+      return false;
+    }
     const action = clipboardKeyAction(ev, isMac, term.hasSelection());
     if (action === 'terminal') return true;
     if (ev.type === 'keydown' && (action === 'copy' || action === 'copyText')) {

@@ -202,6 +202,10 @@ export interface Character {
   isActive: boolean;
   /** Assigned seat uid, or null if no seat */
   seatId: string | null;
+  /** A temporary place that overrides the seat while it lasts — a sofa during
+   *  a meeting, a shelf while researching. The character goes there and stays
+   *  (active or not); clearing it sends the character back to its seat. */
+  excursion?: { col: number; row: number; dir: Direction; seated: boolean } | null;
   /** Active speech bubble type, or null if none showing */
   bubbleType: 'permission' | 'waiting' | null;
   /** Only meaningful while bubbleType === 'waiting': true when the agent went
