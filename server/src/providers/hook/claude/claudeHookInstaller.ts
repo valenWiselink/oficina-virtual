@@ -3,10 +3,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { isDeepStrictEqual } from 'util';
 
-import { HOOK_SCRIPTS_DIR } from '../../../constants.js';
+import { HOOK_SCRIPTS_DIR, PERMISSION_HOOK_TIMEOUT_SEC } from '../../../constants.js';
 import {
   CLAUDE_HOOK_EVENTS,
   CLAUDE_HOOK_SCRIPT_NAME,
+  HOOK_EXE_ENV,
+  HOOK_EXEC_FLAG,
   LEGACY_HOOK_SCRIPT_NAME,
   SETTINGS_BACKUP_SUFFIX,
   SETTINGS_FRESH_FILE_MODE,
@@ -21,6 +23,8 @@ interface ClaudeHookEntry {
   hooks: Array<{
     type: string;
     command: string;
+    /** Exec form (no shell): `command` is spawned directly with these. */
+    args?: string[];
     timeout?: number;
   }>;
 }
@@ -413,8 +417,20 @@ function isOurHook(hook: ClaudeHookEntry['hooks'][number]): boolean {
     hook !== null &&
     typeof hook === 'object' &&
     typeof hook.command === 'string' &&
-    isOurHookCommand(hook.command)
+    (isOurHookCommand(hook.command) || isOurExecHook(hook.args))
   );
+}
+
+/**
+ * The exec form the desktop app writes: `command` is the app's own exe and
+ * `args` is exactly [HOOK_EXEC_FLAG, <our script>]. Identity is the same
+ * anchored suffix rule as a shell command's script token, applied to the
+ * script argument; any other args shape is someone else's.
+ */
+function isOurExecHook(args: unknown): boolean {
+  if (!Array.isArray(args) || args.length !== 2 || args[0] !== HOOK_EXEC_FLAG) return false;
+  const script = args[1];
+  return typeof script === 'string' && isOurHookCommand(`node "${script}"`);
 }
 
 /** Whether the parsed settings hold nothing a backup could preserve: every
@@ -477,7 +493,9 @@ function settingsHoldOnlyOurHooks(settings: ClaudeSettings): boolean {
       for (const hook of entry.hooks) {
         if (!isOurHook(hook)) return false;
         for (const [key, value] of Object.entries(hook)) {
-          if (key === 'command' || key === 'timeout') continue; // vary across installs
+          // command/args: the runtime (node or the desktop app) and the script
+          // path vary across installs; timeout too.
+          if (key === 'command' || key === 'args' || key === 'timeout') continue;
           if (!matchesWriter(referenceHookFields, key, value)) return false;
         }
       }
@@ -526,21 +544,33 @@ function withoutOurEntries(entries: ClaudeHookEntry[]): ClaudeHookEntry[] | null
   return JSON.stringify(filtered) === JSON.stringify(entries) ? null : filtered;
 }
 
-/** Build the shell command that Claude Code will execute for each hook event. */
-function makeHookCommand(): string {
+/**
+ * How Claude Code runs the hook script. From the CLI or a browser office:
+ * `node "<script>"` through Claude Code's shell. From the desktop app
+ * (HOOK_EXE_ENV set to its exe): exec form, no shell and no Node needed —
+ * the app runs the script with its own runtime when given HOOK_EXEC_FLAG.
+ * A PC with only the desktop app installed has no `node` to call.
+ */
+export function makeHookCommand(hookExe: string | undefined = process.env[HOOK_EXE_ENV]): {
+  command: string;
+  args?: string[];
+} {
   const scriptPath = getHookScriptPath();
-  return `node "${scriptPath}"`;
+  if (hookExe) return { command: hookExe, args: [HOOK_EXEC_FLAG, scriptPath] };
+  return { command: `node "${scriptPath}"` };
 }
 
-/** Create a hook entry object for Claude's settings.json. Matcher is empty (catch-all). */
-function makeHookEntry(): ClaudeHookEntry {
+/** Create a hook entry object for Claude's settings.json. Matcher is empty (catch-all).
+ *  PermissionRequest gets a long timeout: its hook waits for a decision from the
+ *  office while the terminal prompt stays answerable in parallel. */
+function makeHookEntry(event?: string): ClaudeHookEntry {
   return {
     matcher: '',
     hooks: [
       {
         type: 'command',
-        command: makeHookCommand(),
-        timeout: 5,
+        ...makeHookCommand(),
+        timeout: event === 'PermissionRequest' ? PERMISSION_HOOK_TIMEOUT_SEC : 5,
       },
     ],
   };
@@ -666,7 +696,7 @@ function installEntries(): Promise<boolean> {
       }
       const entries = hooks[event];
       // Remove any existing Pixel Agents commands (in case the script path changed)
-      const filtered = (withoutOurEntries(entries) ?? entries).concat(makeHookEntry());
+      const filtered = (withoutOurEntries(entries) ?? entries).concat(makeHookEntry(event));
       if (JSON.stringify(filtered) !== JSON.stringify(entries)) {
         hooks[event] = filtered;
         changed = true;

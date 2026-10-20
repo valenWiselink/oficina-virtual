@@ -5,12 +5,16 @@ import * as path from 'path';
 
 import {
   HOOK_API_PREFIX,
+  PERMISSION_HOOK_HTTP_TIMEOUT_MS,
   SERVER_JSON_DIR,
   SERVER_JSON_NAME,
   SERVERS_DIR,
 } from '../../../../constants.js';
 import type { ServerConfig, ServerTarget } from '../../../../serverConfig.js';
 import { isServerConfig, isServerTarget } from '../../../../serverConfig.js';
+
+/** Fire-and-forget events: the server answers 'ok' immediately. */
+const HOOK_POST_TIMEOUT_MS = 2000;
 
 const SERVER_JSON = path.join(os.homedir(), SERVER_JSON_DIR, SERVER_JSON_NAME);
 const SERVERS_REGISTRY_DIR = path.join(os.homedir(), SERVER_JSON_DIR, SERVERS_DIR);
@@ -91,18 +95,43 @@ function readRegistry(): ServerConfig[] {
   return live;
 }
 
+/** A permission decision as Claude Code expects it under hookSpecificOutput. */
+type PermissionDecision = { behavior: 'allow' } | { behavior: 'deny'; message?: string };
+
+/** Parse a server reply into a decision. Anything that is not exactly an
+ *  allow/deny (plain 'ok', `{}`, garbage) means "no decision": the hook then
+ *  prints nothing and the terminal prompt keeps the say. */
+function parseDecision(raw: string): PermissionDecision | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const decision = (parsed as { decision?: unknown }).decision;
+  if (typeof decision !== 'object' || decision === null) return null;
+  const { behavior, message } = decision as { behavior?: unknown; message?: unknown };
+  if (behavior === 'allow') return { behavior: 'allow' };
+  if (behavior !== 'deny') return null;
+  return typeof message === 'string' && message.length > 0
+    ? { behavior: 'deny', message }
+    : { behavior: 'deny' };
+}
+
 /**
- * POST one hook event to one server. Best-effort: every failure path (bad
- * connection, timeout, non-2xx status) resolves quietly -- a dropped delivery
- * to one server must never affect delivery to any other server, nor the
- * script's exit code.
+ * POST one hook event to one server and resolve with the reply body ('' on any
+ * failure). Best-effort: every failure path (bad connection, timeout, non-2xx
+ * status) resolves quietly -- a dropped delivery to one server must never
+ * affect delivery to any other server, nor the script's exit code.
  */
 function postToServer(
   server: ServerTarget,
   body: string,
   eventName: string,
   sid: string,
-): Promise<void> {
+  timeoutMs: number,
+): Promise<string> {
   hookDebug(`POST event=${eventName} sid=${sid} port=${server.port}`);
   return new Promise((resolve) => {
     try {
@@ -117,35 +146,74 @@ function postToServer(
             'Content-Length': Buffer.byteLength(body),
             Authorization: `Bearer ${server.token}`,
           },
-          timeout: 2000,
+          timeout: timeoutMs,
         },
         (res) => {
           hookDebug(
             `POST-done event=${eventName} sid=${sid} status=${res.statusCode} port=${server.port}`,
           );
-          res.resume();
-          resolve();
+          let reply = '';
+          res.setEncoding('utf-8');
+          res.on('data', (chunk: string) => (reply += chunk));
+          res.on('end', () => resolve(res.statusCode === 200 ? reply : ''));
+          res.on('error', () => resolve(''));
         },
       );
       req.on('error', (err) => {
         hookDebug(
           `POST-error event=${eventName} sid=${sid} port=${server.port} err=${err.message}`,
         );
-        resolve();
+        resolve('');
       });
       req.on('timeout', () => {
         hookDebug(`POST-timeout event=${eventName} sid=${sid} port=${server.port}`);
         req.destroy();
-        resolve();
+        resolve('');
       });
       req.end(body);
     } catch (err) {
       hookDebug(
         `POST-error event=${eventName} sid=${sid} port=${server.port} err=${err instanceof Error ? err.message : String(err)}`,
       );
-      resolve();
+      resolve('');
     }
   });
+}
+
+/**
+ * PermissionRequest: wait for the first server that returns a decision and
+ * print it. Servers answering "no decision" (no office open, request answered
+ * in the terminal, hold expired) are skipped; if none decides, nothing is
+ * printed and Claude Code keeps its own prompt — which it shows in parallel
+ * from the start, so the user is never blocked on the office.
+ */
+async function deliverPermissionRequest(
+  servers: ServerTarget[],
+  body: string,
+  sid: string,
+): Promise<void> {
+  const decision = await new Promise<PermissionDecision | null>((resolve) => {
+    let pending = servers.length;
+    for (const server of servers) {
+      void postToServer(
+        server,
+        body,
+        'PermissionRequest',
+        sid,
+        PERMISSION_HOOK_HTTP_TIMEOUT_MS,
+      ).then((reply) => {
+        const parsed = parseDecision(reply);
+        if (parsed) resolve(parsed);
+        else if (--pending === 0) resolve(null);
+      });
+    }
+  });
+  hookDebug(`permission sid=${sid} result=${decision?.behavior ?? 'no-decision'}`);
+  if (!decision) return;
+  const output = JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'PermissionRequest', decision },
+  });
+  await new Promise<void>((resolve) => process.stdout.write(output, () => resolve()));
 }
 
 async function main(): Promise<void> {
@@ -190,7 +258,13 @@ async function main(): Promise<void> {
   }
 
   const body = JSON.stringify(data);
-  await Promise.all(servers.map((server) => postToServer(server, body, eventName, sid)));
+  if (eventName === 'PermissionRequest') {
+    await deliverPermissionRequest(servers, body, sid);
+    return;
+  }
+  await Promise.all(
+    servers.map((server) => postToServer(server, body, eventName, sid, HOOK_POST_TIMEOUT_MS)),
+  );
 }
 
 main()

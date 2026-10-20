@@ -19,12 +19,16 @@ export type ServerMessage =
   | AgentToolsClear
   | AgentToolPermission
   | AgentToolPermissionClear
+  | PermissionPending
+  | PermissionResolved
   | SubagentToolStart
   | SubagentToolDone
   | SubagentClear
   | SubagentToolPermission
+  | SubagentFileLink
   | AgentTeamInfo
   | AgentContextUsage
+  | AgentIdentity
   | LayoutLoaded
   | FurnitureAssetsLoaded
   | CharacterSpritesLoaded
@@ -37,6 +41,8 @@ export type ServerMessage =
   | BypassPermissionsUpdated
   | HooksStatus
   | HooksConsentRequest
+  | ClaudeStatus
+  | FolderPicked
   | ExternalAssetDirectoriesUpdated
   | AreaMappingsLoaded
   | DirectoriesLoaded
@@ -46,13 +52,27 @@ export type ServerMessage =
   | TerminalAvailability
   | TerminalSessionOpened
   | TerminalSessionClosed
+  | AgentLaunchFailed
+  | HandOffDone
+  | AdoptDone
+  | DayLog
+  | DayLogAppended
+  | PrStatusChanged
+  | PrStatuses
+  | AgentChat
+  | AgentChatAppend
   | AgentDiagnostics;
 
 export type ClientMessage =
   | WebviewReady
+  | RequestAgentChat
+  | ShutdownOffice
   | LaunchAgent
   | FocusAgent
   | CloseAgent
+  | PermissionDecision
+  | HandOffResult
+  | AdoptIntoOffice
   | SaveAgentSeats
   | SaveLayout
   | SetSoundEnabled
@@ -75,6 +95,7 @@ export type ClientMessage =
   | SaveDirectory
   | RemoveDirectory
   | RequestDirectorySuggestions
+  | PickFolder
   | RequestDiagnostics;
 
 export interface ProviderCapabilities {
@@ -134,7 +155,15 @@ export interface AgentToolStart {
   permissionActive?: boolean;
   runInBackground?: boolean;
   isTeammateSpawn?: boolean;
+  fileOp?: FileOp;
 }
+
+export interface FileOp {
+  op: FileOpKind;
+  path: string;
+}
+
+export type FileOpKind = 'read' | 'write';
 
 export interface AgentToolDone {
   type: 'agentToolDone';
@@ -156,6 +185,25 @@ export interface AgentToolPermissionClear {
   type: 'agentToolPermissionClear';
   id: number;
 }
+
+export interface PermissionPending {
+  type: 'permissionPending';
+  requestId: string;
+  id?: number;
+  toolName: string;
+  toolInput: Record<string, any>;
+  cwd?: string;
+  createdAt: number;
+}
+
+export interface PermissionResolved {
+  type: 'permissionResolved';
+  requestId: string;
+  id?: number;
+  outcome: PermissionOutcome;
+}
+
+export type PermissionOutcome = 'allow' | 'deny' | 'terminal' | 'expired';
 
 export interface SubagentToolStart {
   type: 'subagentToolStart';
@@ -184,6 +232,14 @@ export interface SubagentToolPermission {
   parentToolId: string;
 }
 
+export interface SubagentFileLink {
+  type: 'subagentFileLink';
+  id: number;
+  fromParentToolId: string;
+  toParentToolId: string;
+  fileName: string;
+}
+
 export interface AgentTeamInfo {
   type: 'agentTeamInfo';
   id: number;
@@ -200,6 +256,39 @@ export interface AgentContextUsage {
   contextTokens: number;
   maxContextTokens: number;
 }
+
+export interface AgentIdentity {
+  type: 'agentIdentity';
+  id: number;
+  nickname?: string;
+  title?: string;
+  ticket?: string;
+  cwd?: string;
+  gitBranch?: string;
+  repo?: string;
+  area?: RepoArea;
+  tasks: AgentTask[];
+  sessionId?: string;
+  yourTurn?: string;
+  yourTurnId?: string;
+  yourTurnAt?: number;
+  yourTurnUrl?: string;
+  lastReplyHead?: string;
+  lastRecordAt?: number;
+  backgroundTasks?: number;
+  backgroundLabel?: string;
+}
+
+export type RepoArea = 'backend' | 'webapp' | 'flutter' | 'otros';
+
+export interface AgentTask {
+  id: string;
+  subject: string;
+  activeForm?: string;
+  status: AgentTaskStatus;
+}
+
+export type AgentTaskStatus = 'pending' | 'in_progress' | 'completed';
 
 export interface LayoutLoaded {
   type: 'layoutLoaded';
@@ -315,6 +404,20 @@ export interface HooksConsentRequest {
   disclosure: string;
 }
 
+export interface ClaudeStatus {
+  type: 'claudeStatus';
+  installed: boolean;
+  version?: string;
+  theme?: TerminalLook;
+}
+
+export type TerminalLook = 'light' | 'dark';
+
+export interface FolderPicked {
+  type: 'folderPicked';
+  path?: string;
+}
+
 export interface ExternalAssetDirectoriesUpdated {
   type: 'externalAssetDirectoriesUpdated';
   dirs: string[];
@@ -371,6 +474,94 @@ export interface TerminalSessionClosed {
   exitCode?: number;
 }
 
+export interface AgentLaunchFailed {
+  type: 'agentLaunchFailed';
+  directoryPath: string;
+  reason: string;
+}
+
+export interface HandOffDone {
+  type: 'handOffDone';
+  toId: number;
+  ok: boolean;
+  reason?: string;
+}
+
+export interface AdoptDone {
+  type: 'adoptDone';
+  id: number;
+  ok: boolean;
+  newId?: number;
+  reason?: string;
+}
+
+export interface DayLog {
+  type: 'dayLog';
+  entries: DayLogEntry[];
+}
+
+export interface DayLogEntry {
+  at: number;
+  agentId?: number;
+  agent: string;
+  kind: DayLogKind;
+  text: string;
+  waitedMs?: number;
+  prUrl?: string;
+  folder?: string;
+}
+
+export type DayLogKind =
+  'permiso' | 'respuesta' | 'termino' | 'tetoca' | 'tarea' | 'cerrado' | 'contexto' | 'mergeado';
+
+export interface DayLogAppended {
+  type: 'dayLogAppended';
+  entry: DayLogEntry;
+}
+
+export interface PrStatusChanged {
+  type: 'prStatus';
+  url: string;
+  state: PrState;
+  title?: string;
+  mergedAt?: string;
+}
+
+export type PrState = 'open' | 'merged' | 'closed';
+
+export interface PrStatuses {
+  type: 'prStatuses';
+  items: PrStatus[];
+}
+
+export interface PrStatus {
+  url: string;
+  state: PrState;
+  title?: string;
+  mergedAt?: string;
+}
+
+export interface AgentChat {
+  type: 'agentChat';
+  id: number;
+  items: ChatItem[];
+}
+
+export interface ChatItem {
+  id: string;
+  role: ChatRole;
+  text: string;
+  at?: number;
+}
+
+export type ChatRole = 'user' | 'assistant' | 'tool';
+
+export interface AgentChatAppend {
+  type: 'agentChatAppend';
+  id: number;
+  items: ChatItem[];
+}
+
 export interface AgentDiagnostics {
   type: 'agentDiagnostics';
   agents: Record<string, any>[];
@@ -380,9 +571,22 @@ export interface WebviewReady {
   type: 'webviewReady';
 }
 
+export interface RequestAgentChat {
+  type: 'requestAgentChat';
+  id: number;
+}
+
+export interface ShutdownOffice {
+  type: 'shutdownOffice';
+}
+
 export interface LaunchAgent {
   type: 'launchAgent';
   directoryPath?: string;
+  nickname?: string;
+  palette?: number;
+  hueShift?: number;
+  prompt?: string;
 }
 
 export interface FocusAgent {
@@ -392,6 +596,26 @@ export interface FocusAgent {
 
 export interface CloseAgent {
   type: 'closeAgent';
+  id: number;
+}
+
+export interface PermissionDecision {
+  type: 'permissionDecision';
+  requestId: string;
+  behavior: PermissionBehavior;
+  message?: string;
+}
+
+export type PermissionBehavior = 'allow' | 'deny';
+
+export interface HandOffResult {
+  type: 'handOffResult';
+  fromId: number;
+  toId: number;
+}
+
+export interface AdoptIntoOffice {
+  type: 'adoptIntoOffice';
   id: number;
 }
 
@@ -510,6 +734,10 @@ export interface RemoveDirectory {
 
 export interface RequestDirectorySuggestions {
   type: 'requestDirectorySuggestions';
+}
+
+export interface PickFolder {
+  type: 'pickFolder';
 }
 
 export interface RequestDiagnostics {

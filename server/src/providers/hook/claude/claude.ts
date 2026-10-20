@@ -102,11 +102,24 @@ function getSessionDirs(workspacePath: string): string[] {
 function buildLaunchCommand(
   sessionId: string,
   cwd: string,
-  opts?: { bypassPermissions?: boolean },
+  opts?: { bypassPermissions?: boolean; resume?: boolean; prompt?: string },
 ): { command: string; args: string[]; env?: Record<string, string> } {
-  const args = ['--session-id', sessionId];
+  // --resume keeps the session id (a new one needs --fork-session), so hooks
+  // and the transcript path stay the same across the office restarting.
+  const args = opts?.resume ? ['--resume', sessionId] : ['--session-id', sessionId];
   if (opts?.bypassPermissions) args.push('--dangerously-skip-permissions');
+  // A first message (a template) is Claude Code's positional prompt: the
+  // session opens interactive with it already sent. Its own argv element,
+  // never part of a parsed string.
+  const prompt = opts?.prompt?.trim();
+  if (prompt && !opts?.resume) args.push(asPositional(prompt));
   return { command: 'claude', args, env: { PWD: cwd } };
+}
+
+/** A prompt starting with "-" would be read as a flag: a leading space keeps
+ *  it a plain argument (Claude reads the message the same). */
+function asPositional(prompt: string): string {
+  return prompt.startsWith('-') ? ` ${prompt}` : prompt;
 }
 
 /** Root that holds every Claude session across all workspaces. Used by the

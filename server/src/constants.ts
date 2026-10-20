@@ -108,7 +108,22 @@ export const HOOK_EVENT_BUFFER_MS = 5_000;
  *  safety net: if SessionStart never arrives (e.g. the CLI crashes mid-transition),
  *  the agent is cleaned up instead of staying as a zombie with pendingClear forever. */
 export const SESSION_END_GRACE_MS = 2000;
-export const MAX_HOOK_BODY_SIZE = 65_536; // 64KB
+/** Large enough for a Write/Edit PermissionRequest carrying a whole file: a 413
+ *  here silently drops the approval card (the terminal prompt still works). */
+export const MAX_HOOK_BODY_SIZE = 4 * 1024 * 1024; // 4MB
+
+// ── Permission decisions from the office ────────────────────
+/** How long the server holds a PermissionRequest open waiting for a decision
+ *  from the office UI. Claude Code shows the terminal prompt in parallel the
+ *  whole time and takes whichever answer comes first (measured 2026-10-19), so
+ *  this only bounds how long the approval card stays answerable. */
+export const PERMISSION_DECISION_WAIT_MS = 570_000;
+/** The hook script's own HTTP wait for that decision. Longer than the server
+ *  hold so the server always answers "no decision" first, shorter than the
+ *  installed hook timeout so Claude Code never kills the hook mid-reply. */
+export const PERMISSION_HOOK_HTTP_TIMEOUT_MS = 585_000;
+/** `timeout` (seconds) written to settings.json for the PermissionRequest hook. */
+export const PERMISSION_HOOK_TIMEOUT_SEC = 600;
 
 // ── Standalone Embedded Terminal ────────────────────────────
 /** PTY module ids tried in order by the loader. @lydell/node-pty ships prebuilt

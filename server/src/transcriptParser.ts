@@ -1,9 +1,12 @@
 const debug = process.env.PIXEL_AGENTS_DEBUG !== '0';
 
 import type { HookProvider } from '../../core/src/provider.js';
+import { chatItemsOf } from './agentChat.js';
+import { identityMessage, observeIdentity } from './agentIdentity.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import { TEXT_IDLE_DELAY_MS, TOOL_DONE_DELAY_MS } from './constants.js';
 import { updateContextUsage } from './contextUsage.js';
+import { fileOpOf } from './fileLinks.js';
 import { hasInlineTeammates, hasPromotedBackgroundAgent } from './teamUtils.js';
 import {
   cancelPermissionTimer,
@@ -135,6 +138,13 @@ export function processTranscriptLine(
     // -- Context window usage (drives every agent's context gauge) --
     updateContextUsage(agentId, agent, agents, record, hookProvider);
 
+    // -- Identity: title, cwd, branch, task list (the office's label and bubble) --
+    if (observeIdentity(agent, record)) agents.broadcast(identityMessage(agentId, agent));
+
+    // -- Chat view: what was said, as it is written --
+    const chat = chatItemsOf(record);
+    if (chat.length > 0) agents.broadcast({ type: 'agentChatAppend', id: agentId, items: chat });
+
     // Resilient content extraction: support both record.message.content and record.content
     // Claude Code may change the JSONL structure across versions
     const assistantContent = record.message?.content ?? record.content;
@@ -226,6 +236,9 @@ export function processTranscriptLine(
                 permissionActive: agent.permissionSent,
                 runInBackground,
                 isTeammateSpawn: isTeammateSpawn || undefined,
+                // Which file a Read/Write/Edit touches: SubagentWatch uses it
+                // to spot hand-offs between the subagents of one meeting.
+                fileOp: fileOpOf(toolName, block.input) ?? undefined,
               });
             }
           }

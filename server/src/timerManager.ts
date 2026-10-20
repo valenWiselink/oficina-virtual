@@ -3,6 +3,19 @@ import { PERMISSION_TIMER_DELAY_MS } from './constants.js';
 import { hasPromotedBackgroundAgent } from './teamUtils.js';
 import type { AgentState } from './types.js';
 
+/**
+ * Whether the timer heuristics may guess "needs permission" / "done" from
+ * transcript silence. Off while hooks are installed: then every state comes
+ * from a hook, and a session that sends none (started before the install)
+ * shows nothing rather than a guess — the office must never claim a state it
+ * does not know.
+ */
+let stateGuessingAllowed = true;
+
+export function setStateGuessingAllowed(allowed: boolean): void {
+  stateGuessingAllowed = allowed;
+}
+
 export function clearAgentActivity(
   agent: AgentState | undefined,
   agentId: number,
@@ -76,6 +89,7 @@ export function startWaitingTimer(
   waitingTimers: Map<number, ReturnType<typeof setTimeout>>,
 ): void {
   cancelWaitingTimer(agentId, waitingTimers);
+  if (!stateGuessingAllowed) return;
   const timer = setTimeout(() => {
     waitingTimers.delete(agentId);
     const agent = agents.get(agentId);
@@ -112,6 +126,7 @@ export function startPermissionTimer(
   permissionExemptTools: ReadonlySet<string>,
 ): void {
   cancelPermissionTimer(agentId, permissionTimers);
+  if (!stateGuessingAllowed) return;
   const timer = setTimeout(() => {
     permissionTimers.delete(agentId);
     const agent = agents.get(agentId);

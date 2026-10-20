@@ -1,3 +1,4 @@
+import { identityMessage } from './agentIdentity.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import { hasPromotedBackgroundAgent } from './teamUtils.js';
 
@@ -10,6 +11,7 @@ import { hasPromotedBackgroundAgent } from './teamUtils.js';
  * 3. Background tools with runInBackground + isTeammateSpawn flags, skipping promoted spawns
  * 4. Waiting status
  * 5. Context usage
+ * 6. Identity
  */
 export function resendAgentActivity(
   send: (message: Record<string, unknown>) => void,
@@ -83,6 +85,11 @@ export function resendAgentActivity(
         contextTokens: agent.contextTokens,
         maxContextTokens: agent.maxContextTokens,
       });
+    }
+
+    // 6. Identity (name, title, ticket, tasks) for the label and bubble
+    if (agent.nickname || agent.sessionTitle || agent.cwd || agent.tasks?.length) {
+      send(identityMessage(id, agent));
     }
   }
 }

@@ -18,6 +18,7 @@ import {
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
+import type { PermissionBroker } from './permissionBroker.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { registerTerminalRoutes } from './terminal/terminalRoutes.js';
 import type { AgentState } from './types.js';
@@ -49,6 +50,9 @@ export interface HttpServerOptions {
   assetCache?: AssetCache;
   /** Callback when a hook event is received */
   onHookEvent?: (providerId: string, event: Record<string, unknown>) => void;
+  /** Holds PermissionRequest hooks open until the office decides. Absent = the
+   *  hook gets 'ok' at once (no decision) and the terminal prompt decides. */
+  permissionBroker?: PermissionBroker;
   /** Invoked when setHooksEnabled is toggled via WebSocket. Standalone installs/uninstalls hooks here. */
   onSetHooksEnabled?: SetHooksEnabledSideEffect;
   /** Invoked when an external asset directory is added/removed. Standalone reloads + re-broadcasts assets here. */
@@ -162,6 +166,22 @@ function registerHookRoute(app: FastifyInstance, options: HttpServerOptions): vo
         options.onHookEvent?.(providerId, event);
       }
 
+      const broker = options.permissionBroker;
+      if (broker && providerId === 'claude') {
+        if (event.hook_event_name !== 'PermissionRequest') {
+          broker.observe(event);
+        } else {
+          // The response closing before we answered means the hook process is
+          // gone (Claude Code took the terminal's answer and killed it).
+          const gone = new AbortController();
+          reply.raw.on('close', () => {
+            if (!reply.raw.writableEnded) gone.abort();
+          });
+          const decision = await broker.hold(event, gone.signal);
+          return reply.send(decision ? JSON.stringify({ decision }) : 'ok');
+        }
+      }
+
       reply.send('ok');
     },
   );
@@ -240,6 +260,7 @@ function registerWebSocketRoute(
     };
 
     const onBroadcast = (message: Record<string, unknown>) => {
+      if (!privileged && PRIVILEGED_ONLY_BROADCASTS.has(String(message.type))) return;
       safeSend(socket, message);
     };
 
@@ -262,6 +283,7 @@ function registerWebSocketRoute(
           onReloadAssets: options.onReloadAssets,
           privileged,
           ptyManager: options.ptyManager,
+          permissionBroker: options.permissionBroker,
         });
       } catch {
         // Malformed JSON, ignore
@@ -275,6 +297,10 @@ function registerWebSocketRoute(
     });
   });
 }
+
+/** Broadcasts a read-only (untokened) client never gets: they name work
+ *  repos and PRs, which the read-only view has no use for. */
+const PRIVILEGED_ONLY_BROADCASTS: ReadonlySet<string> = new Set(['prStatus']);
 
 // ── Auth Helper ────────────────────────────────────────────────
 

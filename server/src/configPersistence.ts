@@ -76,7 +76,8 @@ export interface PixelAgentsConfig {
 const DEFAULT_ADAPTER_SETTINGS: AdapterSettings = {
   soundEnabled: true,
   lastSeenVersion: '',
-  alwaysShowLabels: false,
+  // On: look-alike characters are unreadable unless each says who it is.
+  alwaysShowLabels: true,
   ghostHeadlessAgents: false,
   watchAllSessions: false,
   hooksInfoShown: false,

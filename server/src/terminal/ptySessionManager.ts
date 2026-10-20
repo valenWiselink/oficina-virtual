@@ -326,6 +326,28 @@ export class PtySessionManager {
   }
 }
 
+/**
+ * Variables Claude Code sets for the processes it runs. A server started from
+ * inside a Claude session inherits them, and an agent launched with them
+ * believes it is that session's child: measured 2026-10-19, it starts with
+ * "Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION", which
+ * leaves the office with no transcript to follow and nothing to resume.
+ */
+const PARENT_SESSION_ENV = new Set([
+  'CLAUDECODE',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_CODE_SESSION_ATTENDED',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_SSE_PORT',
+  'CLAUDE_EFFORT',
+  'CLAUDE_PID',
+  'AI_AGENT',
+]);
+
 function spawnPty(
   module: PtyModule,
   options: CreatePtySessionOptions,
@@ -336,7 +358,7 @@ function spawnPty(
   // PTY env must be all-strings.
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) env[key] = value;
+    if (value !== undefined && !PARENT_SESSION_ENV.has(key)) env[key] = value;
   }
   Object.assign(env, options.env ?? {}, { TERM: TERMINAL_TERM_NAME });
 

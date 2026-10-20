@@ -15,6 +15,7 @@ import * as path from 'path';
 import type { HookProvider } from '../../core/src/provider.js';
 import { createAgentState } from './agentState.js';
 import type { AgentStateStore } from './agentStateStore.js';
+import type { DayLog } from './dayLog.js';
 import { DismissalTracker } from './dismissalTracker.js';
 import {
   adoptExternalSessionFromHook,
@@ -38,8 +39,11 @@ import type { HookEvent } from './hookEventHandler.js';
 import { HookEventHandler } from './hookEventHandler.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { PathSet, pathsMatch } from './pathKey.js';
+import type { PrWatch } from './prWatch.js';
+import { duplicateSessionAgents } from './sessionDedupe.js';
 import { SessionRouter } from './sessionRouter.js';
 import { SubagentWatch } from './subagentWatch.js';
+import type { ResumableSessions } from './terminal/resumableSessions.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
 import {
   setBackgroundAgentCompletedCallback,
@@ -48,6 +52,9 @@ import {
   setTeamSwitchCallback,
 } from './transcriptParser.js';
 import type { AgentState } from './types.js';
+import { WorkflowWatch } from './workflowWatch.js';
+
+const DEDUPE_EVERY_MS = 3000;
 
 /** Callbacks that adapters register for platform-specific behavior. */
 export interface RuntimeLifecycleCallbacks {
@@ -73,15 +80,28 @@ export class AgentRuntime {
   readonly activeAgentId = { current: null as number | null };
   private externalScanTimer: ReturnType<typeof setInterval> | null = null;
   private staleCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private dedupeTimer: ReturnType<typeof setInterval> | null = null;
 
   // Configuration refs (mutable, shared with scanners)
   readonly watchAllSessions = { current: false };
   readonly hooksEnabled = { current: true };
 
+  /** Sessions the standalone terminals run, kept so they survive the server
+   *  (relaunched with --resume on the next start). Null outside standalone. */
+  resumableSessions: ResumableSessions | null = null;
+
   // Dependencies
   readonly dismissalTracker = new DismissalTracker();
   /** Shadow-store watcher for unnamed background spawns (sub-agents). */
   readonly subagentWatch: SubagentWatch;
+  /** Agents a session runs through the Workflow tool, shown as its sub-agents. */
+  readonly workflowWatch: WorkflowWatch;
+  /** Today's history, when the host keeps one (standalone office). */
+  dayLog?: DayLog;
+  /** Which of the agents' PRs got merged (standalone, via gh). */
+  prWatch?: PrWatch;
+  /** Shut the standalone office down in order (set by the CLI). */
+  requestShutdown?: () => void;
   private hookEventHandler: HookEventHandler;
   private lifecycleCallbacks: RuntimeLifecycleCallbacks = {};
 
@@ -95,6 +115,8 @@ export class AgentRuntime {
     setFileWatcherHookProvider(provider);
     this.subagentWatch = new SubagentWatch(store);
     setSubagentWatch(this.subagentWatch);
+    this.workflowWatch = new WorkflowWatch(store, this.subagentWatch);
+    this.workflowWatch.start();
     if (provider.team) {
       setTeamProvider(provider.team);
     }
@@ -456,6 +478,17 @@ export class AgentRuntime {
   /** Start stale external agent check (removes agents whose JSONL files are deleted). */
   startStaleCheck(): void {
     if (this.staleCheckTimer) return;
+    // One session, one agent: drop a second agent following the same session.
+    this.dedupeTimer = setInterval(() => {
+      for (const id of duplicateSessionAgents(this.store)) {
+        const agent = this.store.get(id);
+        console.warn(
+          `[Pixel Agents] Agent ${id} duplicates session ${agent?.sessionId?.slice(0, 8)} ` +
+            `(${agent?.jsonlFile}); removing it`,
+        );
+        this.removeAgent(id);
+      }
+    }, DEDUPE_EVERY_MS);
 
     this.staleCheckTimer = startStaleExternalAgentCheck(
       this.store,
@@ -557,6 +590,7 @@ export class AgentRuntime {
   /** Clean up all scanners, timers, and agents. Called on shutdown. */
   dispose(): void {
     this.hookEventHandler.dispose();
+    this.workflowWatch.dispose();
     this.subagentWatch.dispose();
 
     if (this.projectScanTimer.current) {
@@ -570,6 +604,10 @@ export class AgentRuntime {
     if (this.staleCheckTimer) {
       clearInterval(this.staleCheckTimer);
       this.staleCheckTimer = null;
+    }
+    if (this.dedupeTimer) {
+      clearInterval(this.dedupeTimer);
+      this.dedupeTimer = null;
     }
 
     for (const id of [...this.store.keys()]) {

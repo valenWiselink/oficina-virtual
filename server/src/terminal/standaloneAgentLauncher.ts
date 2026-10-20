@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import type { HookProvider } from '../../../core/src/provider.js';
+import { identityMessage } from '../agentIdentity.js';
 import type { AgentRuntime } from '../agentRuntime.js';
 import { createAgentState } from '../agentState.js';
 import type { AgentStateStore } from '../agentStateStore.js';
@@ -26,6 +27,13 @@ import { directoryNameFor, hostDirectory } from '../hostDirectory.js';
 import { assignPaletteIfNeeded } from '../paletteAssigner.js';
 import type { AgentState } from '../types.js';
 import type { PtySessionManager } from './ptySessionManager.js';
+import type { ResumableSession } from './resumableSessions.js';
+import {
+  isCmdSafeArgument,
+  killOrphanedSession,
+  resolveWindowsCommand,
+  runsThroughCmd,
+} from './windowsCommand.js';
 
 export interface LaunchStandaloneAgentDeps {
   store: AgentStateStore;
@@ -43,6 +51,15 @@ export interface LaunchStandaloneAgentOptions {
   bypassPermissions?: boolean;
   cols?: number;
   rows?: number;
+  /** Relaunch this existing session (`--resume`) instead of starting a fresh
+   *  one: the office is coming back after its terminals died with it. */
+  resume?: ResumableSession;
+  /** What the user chose in the launch dialog (validated by the caller). */
+  nickname?: string;
+  palette?: number;
+  hueShift?: number;
+  /** The agent's first message (a template; validated by the caller). */
+  prompt?: string;
 }
 
 /**
@@ -55,37 +72,56 @@ export function launchStandaloneAgent(
 ): number | null {
   const { store, runtime, ptyManager, provider } = deps;
 
-  if (!ptyManager.isAvailable()) {
-    console.error(`[Pixel Agents] Terminal: cannot launch -- ${ptyManager.unavailableReason()}`);
+  const resume = options.resume;
+  const cwd = resume?.cwd ?? options.directoryPath ?? process.cwd();
+
+  // Every failure reaches the office too: a launch that silently does nothing
+  // leaves the user clicking + Agent with no idea why.
+  const fail = (reason: string): null => {
+    console.error(`[Pixel Agents] Terminal: cannot launch in ${cwd} -- ${reason}`);
+    store.broadcast({ type: 'agentLaunchFailed', directoryPath: cwd, reason });
     return null;
+  };
+
+  if (!ptyManager.isAvailable()) {
+    return fail(ptyManager.unavailableReason() ?? 'terminal unavailable');
   }
 
-  const cwd = options.directoryPath ?? process.cwd();
-  const sessionId = crypto.randomUUID();
+  const sessionId = resume?.sessionId ?? crypto.randomUUID();
 
+  const prompt = resume ? undefined : options.prompt;
   const launch = provider.buildLaunchCommand?.(sessionId, cwd, {
     bypassPermissions: options.bypassPermissions,
+    resume: resume !== undefined,
+    prompt,
   });
-  if (!launch) {
-    console.error('[Pixel Agents] Terminal: provider.buildLaunchCommand is not implemented');
-    return null;
-  }
+  if (!launch) return fail('provider.buildLaunchCommand is not implemented');
 
   const dirs = provider.getSessionDirs?.(cwd) ?? [];
-  if (dirs.length === 0) {
-    console.error('[Pixel Agents] Terminal: provider returned no session dirs');
-    return null;
-  }
+  if (dirs.length === 0) return fail('provider returned no session dirs');
   const projectDir = dirs[0];
 
   const id = store.nextAgentId.current++;
+
+  const spawnable =
+    process.platform === 'win32'
+      ? resolveWindowsCommand(launch.command, launch.args)
+      : { command: launch.command, args: launch.args };
+  // Through an npm .cmd shim, cmd.exe re-parses the arguments: a first
+  // message it would act on is refused instead of risking a broken or
+  // hijacked command line (the native claude.exe has no such limit).
+  if (prompt && runsThroughCmd(spawnable) && !isCmdSafeArgument(prompt)) {
+    return fail(
+      'el mensaje inicial tiene caracteres que cmd.exe no deja pasar (" % ! ^ & | < > o saltos de línea): sacalos, o instalá Claude Code nativo',
+    );
+  }
 
   let session;
   try {
     session = ptyManager.create({
       agentId: id,
-      command: launch.command,
-      args: launch.args,
+      command: spawnable.command,
+      args: spawnable.args,
       cwd,
       env: launch.env,
       cols: options.cols,
@@ -94,8 +130,7 @@ export function launchStandaloneAgent(
   } catch (err) {
     // Roll the id back so a failed spawn doesn't burn an agent id.
     store.nextAgentId.current--;
-    console.error(`[Pixel Agents] Terminal: spawn failed: ${String(err)}`);
-    return null;
+    return fail(`spawn failed: ${String(err)}`);
   }
 
   // Pre-register the expected JSONL so the project scanner doesn't mistake it
@@ -117,14 +152,40 @@ export function launchStandaloneAgent(
     // "Side Project" labels its agents that, not "side-project", and the Areas
     // it was assigned in the modal actually match. Falls back to the basename
     // for a cwd that is no Directory at all.
-    directoryName: directoryNameForLaunch(cwd, [hostDirectory()]) ?? directoryNameFor(cwd),
+    directoryName:
+      resume?.directoryName ??
+      directoryNameForLaunch(cwd, [hostDirectory()]) ??
+      directoryNameFor(cwd),
     providerId: provider.id,
   });
+  // The look and name chosen in the launch dialog — or, on a resume, the same
+  // character as before the office went down.
+  agent.nickname = resume?.nickname ?? options.nickname;
+  agent.palette = resume?.palette ?? options.palette;
+  agent.hueShift = resume?.hueShift ?? options.hueShift;
+  agent.cwd = cwd;
+  if (resume) {
+    // The transcript already holds the whole conversation: watch only what
+    // comes next, or the office would replay old activity as if it were live.
+    try {
+      agent.fileOffset = fs.statSync(expectedFile).size;
+    } catch {
+      /* not there (yet): read from the start, like a fresh session */
+    }
+  }
 
   // Server-side, like every other creation path: the palette rides the
   // agentCreated broadcast and is persisted with the agent, so a reload
   // restores the same character without the webview having to save it back.
   assignPaletteIfNeeded(agent, store);
+  runtime.resumableSessions?.add({
+    sessionId,
+    cwd,
+    directoryName: agent.directoryName,
+    nickname: agent.nickname,
+    palette: agent.palette,
+    hueShift: agent.hueShift,
+  });
   store.set(id, agent);
   runtime.activeAgentId.current = id;
 
@@ -139,12 +200,17 @@ export function launchStandaloneAgent(
   // A separate message (rather than a field on agentCreated) keeps the protocol
   // change additive for the sibling branches.
   store.broadcast({ type: 'terminalSessionOpened', agentId: id });
+  // Its name is on the label from the first frame, before any transcript.
+  store.broadcast(identityMessage(id, agent));
 
   // The terminal closing is this surface's equivalent of VS Code's
   // "terminal closed -> clean up orphan" pass in fileWatcher.
   session.onExit((exit) => {
     console.log(`[Pixel Agents] Terminal: Agent ${id} - exited (code ${exit.exitCode})`);
     store.broadcast({ type: 'terminalSessionClosed', agentId: id, exitCode: exit.exitCode });
+    // Closed by the user or exited on its own: nothing to resume. (While the
+    // server shuts down the list is frozen, so dying terminals stay in it.)
+    runtime.resumableSessions?.remove(sessionId);
     if (store.has(id)) {
       runtime.unregisterAgent(agent.sessionId);
       runtime.closeAgent(id);
@@ -157,12 +223,39 @@ export function launchStandaloneAgent(
 }
 
 /**
+ * Bring back the sessions whose terminals died with the previous server run
+ * (shutdown or crash): each is relaunched with `--resume` in its own folder.
+ * A folder that is gone drops its session; a session Claude can no longer
+ * resume exits at once and drops itself through the normal exit path.
+ */
+export function resumeOfficeSessions(
+  deps: LaunchStandaloneAgentDeps,
+  bypassPermissions: boolean,
+): number {
+  const sessions = deps.runtime.resumableSessions;
+  if (!sessions || !deps.ptyManager.isAvailable()) return 0;
+  let resumed = 0;
+  for (const session of sessions.list()) {
+    if (!fs.existsSync(session.cwd)) {
+      sessions.remove(session.sessionId);
+      continue;
+    }
+    const orphans = killOrphanedSession(session.sessionId);
+    if (orphans > 0) {
+      console.log(`[Pixel Agents] Closed ${orphans} orphaned process(es) of ${session.sessionId}`);
+    }
+    if (launchStandaloneAgent(deps, { resume: session, bypassPermissions }) !== null) resumed++;
+  }
+  return resumed;
+}
+
+/**
  * Wait for the session's JSONL to appear, then start watching it.
  *
  * Hooks (the default) already route by sessionId, so this is what backfills tool
  * content and keeps hooks-off standalone working at all. Unlike the VS Code
- * path this does NOT implement /resume reassignment -- standalone always spawns
- * a fresh --session-id, so there's no resume case to detect here.
+ * path this does NOT implement /resume reassignment -- the only resume here is
+ * resumeOfficeSessions, which relaunches with the same session id.
  */
 function startJsonlPoll(deps: LaunchStandaloneAgentDeps, id: number, agent: AgentState): void {
   const { store, runtime } = deps;

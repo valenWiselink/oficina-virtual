@@ -1,7 +1,10 @@
 import * as fs from 'fs';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { MAX_HOOK_BODY_SIZE } from '../src/constants.js';
 
 // Use isolated temp HOME to avoid touching real ~/.pixel-agents/
 let tmpBase: string;
@@ -128,9 +131,30 @@ describe('PixelAgentsServer', () => {
   // 6. Hook endpoint rejects oversized body
   it('hook endpoint returns 413 for oversized body', async () => {
     const config = await server.start();
-    const bigBody = 'x'.repeat(70_000); // > 64KB
-    const res = await postHook(config.port, config.token, bigBody);
-    expect(res.status).toBe(413);
+    // Declared, not sent: the server answers 413 from Content-Length alone and
+    // closes the socket, which a multi-MB upload in flight sees as ECONNRESET.
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port: config.port,
+          path: '/api/hooks/claude',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': MAX_HOOK_BODY_SIZE + 1,
+            Authorization: `Bearer ${config.token}`,
+          },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode);
+        },
+      );
+      req.on('error', reject);
+      req.flushHeaders();
+    });
+    expect(status).toBe(413);
   });
 
   // 7. Hook endpoint rejects invalid JSON

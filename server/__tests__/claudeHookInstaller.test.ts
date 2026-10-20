@@ -116,6 +116,19 @@ describe('claudeHookInstaller', () => {
     expect(areHooksInstalled()).toBe(true);
   });
 
+  // 3b. PermissionRequest waits for a decision from the office, so its hook
+  //     gets a long timeout; every other event stays fire-and-forget.
+  it('gives only PermissionRequest the long timeout', async () => {
+    await installHooks();
+    const hooks = readSettings().hooks as Record<
+      string,
+      Array<{ hooks: Array<{ timeout: number }> }>
+    >;
+    for (const event of CLAUDE_HOOK_EVENTS) {
+      expect(hooks[event][0].hooks[0].timeout).toBe(event === 'PermissionRequest' ? 600 : 5);
+    }
+  });
+
   // 4. areHooksInstalled returns false before install
   it('areHooksInstalled returns false before install', () => {
     expect(areHooksInstalled()).toBe(false);
@@ -912,6 +925,64 @@ describe('claudeHookInstaller', () => {
   });
 
   // ── W4: event-scope reduction + stale-install migration ───────
+
+  describe('desktop app (exec form, no Node)', () => {
+    const exe = 'C:/Program Files/Oficina virtual/Oficina virtual.exe';
+    const script = () => path.join(tmpBase, '.pixel-agents', 'hooks', 'claude-hook.js');
+    const allHooks = () =>
+      Object.values(
+        (readSettings().hooks ?? {}) as Record<
+          string,
+          Array<{ hooks: Array<Record<string, unknown>> }>
+        >,
+      ).flatMap((entries) => entries.flatMap((e) => e.hooks));
+
+    beforeEach(() => {
+      process.env.OFICINA_HOOK_EXE = exe;
+    });
+    afterEach(() => {
+      delete process.env.OFICINA_HOOK_EXE;
+    });
+
+    it('writes the app exe with the hook flag and the script, and counts it as ours', async () => {
+      await installHooks();
+      const hooks = allHooks();
+      expect(hooks.length).toBe(CLAUDE_HOOK_EVENTS.length);
+      for (const h of hooks) {
+        expect(h.command).toBe(exe);
+        expect(h.args).toEqual(['--oficina-hook', script()]);
+      }
+      expect(areHooksInstalled()).toBe(true);
+    });
+
+    it('is idempotent and replaces a previous node install', async () => {
+      delete process.env.OFICINA_HOOK_EXE;
+      await installHooks();
+      process.env.OFICINA_HOOK_EXE = exe;
+      await installHooks();
+      await installHooks();
+      const hooks = allHooks();
+      expect(hooks.length).toBe(CLAUDE_HOOK_EVENTS.length);
+      expect(hooks.every((h) => h.command === exe)).toBe(true);
+    });
+
+    it('uninstall removes the exec-form hooks', async () => {
+      await installHooks();
+      await uninstallHooks();
+      expect(areHooksInstalled()).toBe(false);
+    });
+
+    it('leaves alone an exec-form hook that is not exactly ours', async () => {
+      const foreign = { type: 'command', command: exe, args: ['--other', script()] };
+      fs.writeFileSync(
+        settingsPathFor(),
+        JSON.stringify({ hooks: { Stop: [{ matcher: '', hooks: [foreign] }] } }),
+      );
+      expect(areHooksInstalled()).toBe(false);
+      await uninstallHooks();
+      expect(allHooks()).toEqual([foreign]);
+    });
+  });
 
   it('installs no UserPromptSubmit or TaskCreated hook', async () => {
     await installHooks();

@@ -18,6 +18,7 @@ import {
   SERVERS_DIR,
 } from './constants.js';
 import { createHttpServer } from './httpServer.js';
+import type { PermissionBroker } from './permissionBroker.js';
 import type { ServerConfig, StandaloneAccess } from './serverConfig.js';
 import { isServerConfig, isServerTarget, sameStandaloneAccess } from './serverConfig.js';
 import { loadOrCreateStandaloneToken } from './serverToken.js';
@@ -73,6 +74,8 @@ export class PixelAgentsServer {
     onSetHooksEnabled?: SetHooksEnabledSideEffect;
     onReloadAssets?: ReloadAssetsSideEffect;
     ptyManager?: PtySessionManager;
+    /** Holds PermissionRequest hooks for approval from the office (standalone). */
+    permissionBroker?: PermissionBroker;
     /** Extra privileged Host names (standalone; see wsAuth.privilegedHostnames). */
     allowedHosts?: readonly string[];
     /** Replace the persisted standalone token, revoking every URL that carried
@@ -143,6 +146,7 @@ export class PixelAgentsServer {
       onSetHooksEnabled: options?.onSetHooksEnabled,
       onReloadAssets: options?.onReloadAssets,
       ptyManager: options?.ptyManager,
+      permissionBroker: options?.permissionBroker,
       allowedHosts: standalone?.allowedHosts,
     });
 

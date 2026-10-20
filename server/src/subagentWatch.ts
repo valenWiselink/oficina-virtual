@@ -21,6 +21,8 @@ import type * as fs from 'fs';
 
 import { createAgentState } from './agentState.js';
 import { AgentStateStore } from './agentStateStore.js';
+import type { FileOp } from './fileLinks.js';
+import { FileLinkTracker } from './fileLinks.js';
 import { readNewLines, startFileWatching } from './fileWatcher.js';
 import { pathsMatch } from './pathKey.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
@@ -51,6 +53,8 @@ export class SubagentWatch {
   private readonly subKeys = new Map<number, { leadId: number; spawnToolUseId: string }>();
   /** Shadow id → tool ids started but not yet done (for toolsClear synthesis). */
   private readonly liveToolIds = new Map<number, Set<string>>();
+  /** Who wrote which file, per lead: reveals hand-offs inside a meeting. */
+  private readonly fileLinks = new FileLinkTracker();
 
   constructor(private readonly mainStore: AgentStateStore) {
     this.store.nextAgentId.current = SHADOW_ID_BASE;
@@ -112,6 +116,7 @@ export class SubagentWatch {
 
   /** Stop all watches belonging to a lead (lead's session ended). */
   removeByLead(leadId: number): void {
+    this.fileLinks.forgetLead(leadId);
     for (const [id, key] of [...this.subKeys]) {
       if (key.leadId === leadId) {
         this.remove(id);
@@ -172,6 +177,17 @@ export class SubagentWatch {
           toolId,
           status: message.status,
         });
+        const fileOp = message.fileOp as FileOp | undefined;
+        const link = fileOp ? this.fileLinks.observe(leadId, spawnToolUseId, fileOp) : null;
+        if (link) {
+          this.mainStore.broadcast({
+            type: 'subagentFileLink',
+            id: leadId,
+            fromParentToolId: link.fromParentToolId,
+            toParentToolId: link.toParentToolId,
+            fileName: link.fileName,
+          });
+        }
         break;
       }
       case 'agentToolsClear': {

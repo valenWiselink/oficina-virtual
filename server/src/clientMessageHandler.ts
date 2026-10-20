@@ -1,10 +1,12 @@
 import type { StateAdapter } from '../../core/src/adapter.js';
 import type { HookProvider } from '../../core/src/provider.js';
 import { resendAgentActivity } from './agentActivityResend.js';
+import { readChat } from './agentChat.js';
 import { buildAgentDiagnostics } from './agentDiagnostics.js';
 import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type { LoadedAssets, LoadedCharacterSprites, LoadedPetSprites } from './assetLoader.js';
+import { claudeStatus, claudeTheme } from './claudeCheck.js';
 import {
   getHooksConsent,
   getHooksEnabled,
@@ -19,12 +21,17 @@ import {
   listDirectories,
 } from './directories.js';
 import { collectDirectorySuggestions } from './directorySuggestions.js';
+import { pickFolder } from './folderPicker.js';
 import { hostDirectory } from './hostDirectory.js';
-import { readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
+import { loadLayout, readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
+import type { PermissionBroker } from './permissionBroker.js';
+import { pendingPermissionMessage } from './permissionMessages.js';
 import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
 import { hooksConsentRequest } from './providers/hook/consentGate.js';
 import { claudeProvider, hookProviderById, hookProviders } from './providers/index.js';
+import { adoptIntoOffice } from './terminal/adoptSession.js';
+import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { launchStandaloneAgent } from './terminal/standaloneAgentLauncher.js';
 
@@ -74,6 +81,8 @@ export interface ClientMessageContext {
   /** PTY terminals for standalone-launched agents. Absent in VS Code embedded
    *  mode, where the editor owns terminal lifecycle. */
   ptyManager?: PtySessionManager;
+  /** Held PermissionRequests the office can answer. Absent = no approval cards. */
+  permissionBroker?: PermissionBroker;
 }
 
 // ── Setting key constants (mirror adapters/vscode/constants.ts) ──
@@ -144,14 +153,16 @@ export function handleClientMessage(
       // every message past the read-only gate above).
       if (!runtime || !ctx.ptyManager) break;
       // Permission posture is a persisted per-host setting, never a per-launch
-      // field: the client sends only where to launch. Every launch comes from a
-      // drawer row and carries its Directory's path; no directoryPath falls
-      // back to the server cwd (launchStandaloneAgent's own default).
+      // field: the client sends where to launch, plus the name and colour
+      // chosen in the launch dialog. No directoryPath falls back to the server
+      // cwd (launchStandaloneAgent's own default).
       launchStandaloneAgent(
         { store, runtime, ptyManager: ctx.ptyManager, provider: claudeProvider },
         {
           directoryPath: msg.directoryPath as string | undefined,
           bypassPermissions: adapter?.getSetting(KEY_BYPASS_PERMISSIONS, false) ?? false,
+          ...launchAppearance(msg),
+          prompt: launchPrompt(msg),
         },
       );
       break;
@@ -172,6 +183,73 @@ export function handleClientMessage(
         // never exits) are still removed promptly.
         ctx.ptyManager?.dispose(id);
         runtime.closeAgent(id);
+      }
+      break;
+    }
+
+    case 'adoptIntoOffice': {
+      // Close a session in its outside terminal and resume it in the office.
+      // Async (waits for the old process to exit); the reply goes only to the
+      // asking office.
+      if (!runtime || !ctx.ptyManager) break;
+      const id = Number(msg.id);
+      void adoptIntoOffice(
+        { store, runtime, ptyManager: ctx.ptyManager, provider: claudeProvider },
+        id,
+        adapter?.getSetting(KEY_BYPASS_PERMISSIONS, false) ?? false,
+      ).then((result) =>
+        send({
+          type: 'adoptDone',
+          id,
+          ok: result.ok,
+          newId: result.ok ? result.newId : undefined,
+          reason: result.ok ? undefined : result.reason,
+        }),
+      );
+      break;
+    }
+
+    case 'shutdownOffice': {
+      // Privileged by the gate above: the operator asked to turn it off.
+      console.log('[Pixel Agents] Shutdown requested from the office');
+      ctx.runtime?.requestShutdown?.();
+      break;
+    }
+
+    case 'requestAgentChat': {
+      // The chat view opened: the latest part of that agent's conversation,
+      // to this office only (new lines follow as agentChatAppend).
+      const agent = store.get(Number(msg.id));
+      if (agent?.jsonlFile) {
+        send({ type: 'agentChat', id: Number(msg.id), items: readChat(agent.jsonlFile) });
+      }
+      break;
+    }
+
+    case 'handOffResult': {
+      // Paste one agent's latest answer into another's office terminal
+      // (unsent). The reply goes only to the asking office.
+      const result = handOff(store, ctx.ptyManager, Number(msg.fromId), Number(msg.toId));
+      send({
+        type: 'handOffDone',
+        toId: Number(msg.toId),
+        ok: result.ok,
+        reason: result.ok ? undefined : result.reason,
+      });
+      break;
+    }
+
+    case 'permissionDecision': {
+      // Privileged by the gate above. A stale requestId (answered in the
+      // terminal a moment earlier) is simply gone; the resolved broadcast
+      // already told every office to drop the card.
+      const behavior = msg.behavior;
+      if (typeof msg.requestId !== 'string' || !ctx.permissionBroker) break;
+      if (behavior === 'allow') {
+        ctx.permissionBroker.decide(msg.requestId, { behavior: 'allow' });
+      } else if (behavior === 'deny') {
+        const message = typeof msg.message === 'string' && msg.message ? msg.message : undefined;
+        ctx.permissionBroker.decide(msg.requestId, { behavior: 'deny', message });
       }
       break;
     }
@@ -343,6 +421,10 @@ export function handleClientMessage(
       break;
     }
 
+    case 'pickFolder':
+      void pickFolder().then((path) => send({ type: 'folderPicked', path }));
+      break;
+
     case 'saveDirectory':
     case 'removeDirectory':
     case 'requestDirectorySuggestions':
@@ -443,6 +525,46 @@ function standaloneConsentEffects(
       }
     },
   };
+}
+
+/** Longest nickname kept; the label has room for a short name, not a sentence. */
+const NICKNAME_MAX_LENGTH = 32;
+
+/** The launch dialog's choices, keeping only well-formed values: a bad field
+ *  falls back to the automatic name/colour instead of refusing the launch. */
+/** Longest first message accepted: well under Windows' 32 767-char command line. */
+export const LAUNCH_PROMPT_MAX_LENGTH = 4000;
+
+/** The launch's first message (a template), trimmed; none when empty or too long. */
+export function launchPrompt(msg: Record<string, unknown>): string | undefined {
+  if (typeof msg.prompt !== 'string') return undefined;
+  const prompt = msg.prompt.trim();
+  return prompt && prompt.length <= LAUNCH_PROMPT_MAX_LENGTH ? prompt : undefined;
+}
+
+function launchAppearance(msg: Record<string, unknown>): {
+  nickname?: string;
+  palette?: number;
+  hueShift?: number;
+} {
+  const nickname =
+    typeof msg.nickname === 'string' ? msg.nickname.trim().slice(0, NICKNAME_MAX_LENGTH) : '';
+  const palette =
+    Number.isInteger(msg.palette) &&
+    (msg.palette as number) >= 0 &&
+    (msg.palette as number) < PALETTE_COUNT
+      ? (msg.palette as number)
+      : undefined;
+  const hueShift =
+    palette !== undefined &&
+    Number.isInteger(msg.hueShift) &&
+    (msg.hueShift as number) >= 0 &&
+    (msg.hueShift as number) <= HUE_SHIFT_MAX_DEG
+      ? (msg.hueShift as number)
+      : palette !== undefined
+        ? 0
+        : undefined;
+  return { nickname: nickname || undefined, palette, hueShift };
 }
 
 function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
@@ -619,13 +741,40 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
 
   // 7. Layout last (see step 3): flushes the webview's buffered existingAgents
   // into characters once seats are rebuilt.
-  const savedLayout = readLayoutFromFile();
-  send({ type: 'layoutLoaded', layout: savedLayout ?? cache?.defaultLayout ?? null });
+  // loadLayout (not a plain file read) so a newer bundled revision replaces
+  // an outdated saved office here too, as it already did in VS Code. It may
+  // write the file; a failed write (Windows EPERM) must not cut the handshake
+  // short, so fall back to what can be read.
+  let loaded: ReturnType<typeof loadLayout>;
+  try {
+    loaded = loadLayout(cache?.defaultLayout);
+  } catch (err) {
+    console.error(`[Pixel Agents] Layout load failed, using what is readable: ${String(err)}`);
+    const fallback = readLayoutFromFile() ?? cache?.defaultLayout ?? null;
+    loaded = fallback ? { layout: fallback, wasReset: false } : null;
+  }
+  send({
+    type: 'layoutLoaded',
+    layout: loaded?.layout ?? null,
+    wasReset: loaded?.wasReset || undefined,
+  });
 
   // 8. Agent state, AFTER layoutLoaded -- the characters they target only
   // exist once the layout flush creates them. Without this a reconnecting
   // client shows bare characters until each agent takes another turn.
   resendAgentActivity(send, store);
+  ctx.runtime?.workflowWatch.resend(send);
+  const history = ctx.runtime?.dayLog?.today();
+  if (history) send({ type: 'dayLog', entries: history });
+  // Which of the agents' PRs are merged: what is already known, not news.
+  const prs = ctx.runtime?.prWatch?.all();
+  if (ctx.privileged && prs) send({ type: 'prStatuses', items: prs });
+  // For the first-run welcome: can an agent start here at all?
+  if (ctx.privileged) {
+    void Promise.all([claudeStatus(), claudeTheme()]).then(([status, theme]) =>
+      send({ ...status, theme }),
+    );
+  }
 
   // 9. Re-announce live terminals AFTER existingAgents, so a browser that
   // reloaded (or a second tab) rebuilds its drawer tabs. The PTY outlives the
@@ -637,6 +786,13 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
       if (ctx.ptyManager.has(id)) {
         send({ type: 'terminalSessionOpened', agentId: id });
       }
+    }
+  }
+
+  // 10. Approval cards still answerable, so a reloaded tab shows them too.
+  if (ctx.permissionBroker && ctx.privileged) {
+    for (const request of ctx.permissionBroker.pending()) {
+      send(pendingPermissionMessage(request, store));
     }
   }
 }
@@ -653,7 +809,9 @@ function settingsSnapshot(adapter: StateAdapter | undefined) {
     lastSeenVersion: adapter?.getSetting(KEY_LAST_SEEN_VERSION, '') ?? '',
     extensionVersion: process.env.PIXEL_AGENTS_VERSION ?? '',
     watchAllSessions: adapter?.getSetting(KEY_WATCH_ALL_SESSIONS, false) ?? false,
-    alwaysShowLabels: adapter?.getSetting(KEY_ALWAYS_SHOW_LABELS, false) ?? false,
+    // On by default: an office of look-alike characters is unreadable unless
+    // each one says who it is without hovering.
+    alwaysShowLabels: adapter?.getSetting(KEY_ALWAYS_SHOW_LABELS, true) ?? true,
     ghostHeadlessAgents: adapter?.getSetting(KEY_GHOST_HEADLESS_AGENTS, false) ?? false,
     // A single boolean carrying the CLAUDE provider's preference until the
     // Settings UI grows a per-provider list -- its sole webview reader is the

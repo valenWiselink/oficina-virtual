@@ -30,6 +30,7 @@ const debug = process.env.PIXEL_AGENTS_DEBUG !== '0';
 import type { HookProvider } from '../../core/src/provider.js';
 import type { TeamProvider } from '../../core/src/teamProvider.js';
 import type { ITerminalAdapter } from '../../core/src/terminalAdapter.js';
+import { identityMessage, seedIdentity } from './agentIdentity.js';
 import { createAgentState } from './agentState.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import {
@@ -113,6 +114,13 @@ export function startFileWatching(
   // give an agent adopted or restored mid-session a context gauge without
   // replaying its whole transcript.
   seedContextUsage(agentId, agents, getHookProvider());
+  // Same for its name and tasks. Only when the watch starts past the
+  // beginning: from offset 0 the stream itself replays every record, and
+  // seeding too would list each task twice.
+  const watched = agents.get(agentId);
+  if (watched && watched.fileOffset > 0 && seedIdentity(watched, watched.jsonlFile)) {
+    agents.broadcast(identityMessage(agentId, watched));
+  }
 
   // Single polling approach: reliable on all platforms (macOS, Linux, WSL2, Windows).
   // Previously used triple-redundant fs.watch + fs.watchFile + setInterval, but

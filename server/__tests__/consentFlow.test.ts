@@ -73,10 +73,17 @@ describe('clientMessageHandler: hooks consent flow', () => {
     await settle(); // the request rides the async areHooksInstalled follow-up
   }
 
+  let originalUserProfile: string | undefined;
+
   beforeEach(() => {
     tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-consent-flow-'));
     originalHome = process.env.HOME;
     process.env.HOME = tempHome;
+    // On Windows os.homedir() reads USERPROFILE, not HOME: without this every
+    // test shared (and wrote into) the same real home, so results depended on
+    // test order — and a full run could write the operator's own config.
+    originalUserProfile = process.env.USERPROFILE;
+    process.env.USERPROFILE = tempHome;
 
     store = new AgentStateStore();
     store.setAdapter(new FileStateAdapter({ namespace: 'standalone' }));
@@ -89,6 +96,11 @@ describe('clientMessageHandler: hooks consent flow', () => {
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
     }
     store.dispose();
     fs.rmSync(tempHome, { recursive: true, force: true });

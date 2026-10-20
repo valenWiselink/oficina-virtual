@@ -85,3 +85,11 @@ export const CLAUDE_SMALL_CONTEXT_WINDOW = 200_000;
  *  guessing small for a large model pins every gauge in the red, while the
  *  reverse is a quiet under-read that the runtime's widening still corrects. */
 export const CLAUDE_SMALL_CONTEXT_MODEL_PATTERN = /haiku|claude-[123]|-4-[01]\b/i;
+
+/** Set by the desktop app on the server it starts: the app's exe, which runs
+ *  the hook script with its own runtime (claudeHookInstaller makeHookCommand). */
+export const HOOK_EXE_ENV = 'OFICINA_HOOK_EXE';
+
+/** First argument of the desktop app's exec-form hook: "run this script as
+ *  a hook and exit" (desktop/main.ts). */
+export const HOOK_EXEC_FLAG = '--oficina-hook';

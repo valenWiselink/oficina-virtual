@@ -127,7 +127,9 @@ describe('launchStandaloneAgent', () => {
     // The real claude launch command, spawned in the requested cwd.
 
     expect(harness.spawnArgs).toHaveLength(1);
-    expect(harness.spawnArgs[0].file).toBe('claude');
+    // On Windows the bare name is resolved to its full path (node-pty does not
+    // search PATH there); elsewhere it is spawned as is.
+    expect(path.parse(harness.spawnArgs[0].file).name).toBe('claude');
     expect(harness.spawnArgs[0].args).toEqual(['--session-id', agent?.sessionId]);
     expect(harness.spawnArgs[0].options.cwd).toBe(cwd);
     expect(harness.manager.has(1)).toBe(true);
@@ -158,7 +160,10 @@ describe('launchStandaloneAgent', () => {
     expect(id).toBeNull();
     expect(store.size).toBe(0);
     expect(store.nextAgentId.current).toBe(1);
-    expect(broadcasts).toHaveLength(0);
+    // The office is told why nothing appeared.
+    expect(broadcasts).toEqual([
+      expect.objectContaining({ type: 'agentLaunchFailed', reason: 'no terminal in this test' }),
+    ]);
   });
 
   it('returns null when the provider cannot build a launch command', () => {

@@ -91,15 +91,21 @@ components:
         - $ref: '#/components/schemas/AgentToolsClear'
         - $ref: '#/components/schemas/AgentToolPermission'
         - $ref: '#/components/schemas/AgentToolPermissionClear'
+        # Approval cards (office-answerable PermissionRequest hooks)
+        - $ref: '#/components/schemas/PermissionPending'
+        - $ref: '#/components/schemas/PermissionResolved'
         # Sub-agent activity
         - $ref: '#/components/schemas/SubagentToolStart'
         - $ref: '#/components/schemas/SubagentToolDone'
         - $ref: '#/components/schemas/SubagentClear'
         - $ref: '#/components/schemas/SubagentToolPermission'
+        - $ref: '#/components/schemas/SubagentFileLink'
         # Agent Teams
         - $ref: '#/components/schemas/AgentTeamInfo'
         # Context window
         - $ref: '#/components/schemas/AgentContextUsage'
+        # Identity (label + bubble)
+        - $ref: '#/components/schemas/AgentIdentity'
         # Layout
         - $ref: '#/components/schemas/LayoutLoaded'
         # Assets
@@ -115,6 +121,8 @@ components:
         - $ref: '#/components/schemas/BypassPermissionsUpdated'
         - $ref: '#/components/schemas/HooksStatus'
         - $ref: '#/components/schemas/HooksConsentRequest'
+        - $ref: '#/components/schemas/ClaudeStatus'
+        - $ref: '#/components/schemas/FolderPicked'
         - $ref: '#/components/schemas/ExternalAssetDirectoriesUpdated'
         - $ref: '#/components/schemas/AreaMappingsLoaded'
         - $ref: '#/components/schemas/DirectoriesLoaded'
@@ -125,6 +133,15 @@ components:
         - $ref: '#/components/schemas/TerminalAvailability'
         - $ref: '#/components/schemas/TerminalSessionOpened'
         - $ref: '#/components/schemas/TerminalSessionClosed'
+        - $ref: '#/components/schemas/AgentLaunchFailed'
+        - $ref: '#/components/schemas/HandOffDone'
+        - $ref: '#/components/schemas/AdoptDone'
+        - $ref: '#/components/schemas/DayLog'
+        - $ref: '#/components/schemas/DayLogAppended'
+        - $ref: '#/components/schemas/PrStatusChanged'
+        - $ref: '#/components/schemas/PrStatuses'
+        - $ref: '#/components/schemas/AgentChat'
+        - $ref: '#/components/schemas/AgentChatAppend'
         # Diagnostics
         - $ref: '#/components/schemas/AgentDiagnostics'
       discriminator: type
@@ -132,9 +149,14 @@ components:
     ClientMessage:
       oneOf:
         - $ref: '#/components/schemas/WebviewReady'
+        - $ref: '#/components/schemas/RequestAgentChat'
+        - $ref: '#/components/schemas/ShutdownOffice'
         - $ref: '#/components/schemas/LaunchAgent'
         - $ref: '#/components/schemas/FocusAgent'
         - $ref: '#/components/schemas/CloseAgent'
+        - $ref: '#/components/schemas/PermissionDecision'
+        - $ref: '#/components/schemas/HandOffResult'
+        - $ref: '#/components/schemas/AdoptIntoOffice'
         - $ref: '#/components/schemas/SaveAgentSeats'
         - $ref: '#/components/schemas/SaveLayout'
         - $ref: '#/components/schemas/SetSoundEnabled'
@@ -157,6 +179,7 @@ components:
         - $ref: '#/components/schemas/SaveDirectory'
         - $ref: '#/components/schemas/RemoveDirectory'
         - $ref: '#/components/schemas/RequestDirectorySuggestions'
+        - $ref: '#/components/schemas/PickFolder'
         - $ref: '#/components/schemas/RequestDiagnostics'
       discriminator: type
 
@@ -308,6 +331,23 @@ components:
             True when this spawn tool call carries a name, making the spawn a
             Teammate-to-be. The office must not create a Subtask sub-character
             for it — a teammate character will represent the spawn instead.
+        fileOp:
+          $ref: '#/components/schemas/FileOp'
+
+    FileOp:
+      description: The file a Read/Write/Edit-family tool call touches.
+      type: object
+      additionalProperties: false
+      required: [op, path]
+      properties:
+        op:
+          $ref: '#/components/schemas/FileOpKind'
+        path:
+          type: string
+
+    FileOpKind:
+      type: string
+      enum: [read, write]
 
     AgentToolDone:
       description: Agent finished executing a tool.
@@ -354,6 +394,55 @@ components:
           const: agentToolPermissionClear
         id:
           type: integer
+
+    PermissionPending:
+      description: |
+        A PermissionRequest hook is held open and the office can answer it. The
+        terminal prompt is answerable in parallel; whichever answers first wins.
+      type: object
+      additionalProperties: false
+      required: [type, requestId, toolName, toolInput, createdAt]
+      properties:
+        type:
+          const: permissionPending
+        requestId:
+          type: string
+        id:
+          type: integer
+          description: Office agent of the asking session; absent when it is not on the floor.
+        toolName:
+          type: string
+        toolInput:
+          type: object
+          description: The exact tool input Claude Code will run if allowed.
+        cwd:
+          type: string
+        createdAt:
+          type: integer
+          description: Epoch milliseconds.
+
+    PermissionResolved:
+      description: A held PermissionRequest is no longer answerable; drop its card.
+      type: object
+      additionalProperties: false
+      required: [type, requestId, outcome]
+      properties:
+        type:
+          const: permissionResolved
+        requestId:
+          type: string
+        id:
+          type: integer
+        outcome:
+          $ref: '#/components/schemas/PermissionOutcome'
+
+    PermissionOutcome:
+      description: |
+        How a held PermissionRequest ended: decided in the office (allow/deny),
+        answered in the terminal or settled by the session (terminal), or the
+        hold ran out (expired).
+      type: string
+      enum: [allow, deny, terminal, expired]
 
     SubagentToolStart:
       description: Sub-agent (e.g. Task) started a tool.
@@ -413,6 +502,25 @@ components:
         parentToolId:
           type: string
 
+    SubagentFileLink:
+      description: |
+        A hand-off inside a meeting: the sub-agent `toParentToolId` read a file
+        that its sibling `fromParentToolId` (same lead `id`) wrote.
+      type: object
+      additionalProperties: false
+      required: [type, id, fromParentToolId, toParentToolId, fileName]
+      properties:
+        type:
+          const: subagentFileLink
+        id:
+          type: integer
+        fromParentToolId:
+          type: string
+        toParentToolId:
+          type: string
+        fileName:
+          type: string
+
     AgentTeamInfo:
       description: Agent Teams metadata (lead, teammate, tmux usage).
       type: object
@@ -433,6 +541,98 @@ components:
           type: integer
         teamUsesTmux:
           type: boolean
+
+    AgentIdentity:
+      description: |
+        Who an agent is, for its label and bubble: the nickname given at launch,
+        the session title (/rename beats Claude's generated one), the WISE
+        ticket found in name/title/branch, working directory, branch, and the
+        agent's own task list. Every field comes from the session's records.
+      type: object
+      additionalProperties: false
+      required: [type, id, tasks]
+      properties:
+        type:
+          const: agentIdentity
+        id:
+          type: integer
+        nickname:
+          type: string
+        title:
+          type: string
+        ticket:
+          type: string
+        cwd:
+          type: string
+        gitBranch:
+          type: string
+        repo:
+          type: string
+          description: Main repository folder (also for a git worktree).
+        area:
+          $ref: '#/components/schemas/RepoArea'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentTask'
+        sessionId:
+          type: string
+          description: The Claude Code session it follows (stable across office restarts).
+        yourTurn:
+          type: string
+          description: |
+            What the agent's latest answer leaves for the operator ("mergear
+            PR #812"): its own "Te toca:" line, else the pull requests it
+            linked. Shown only once the turn has finished.
+        yourTurnId:
+          type: string
+          description: Record the yourTurn came from, to mark it done per answer.
+        yourTurnAt:
+          type: number
+          description: When that answer was written (ms since epoch, from the record).
+        yourTurnUrl:
+          type: string
+          description: First pull-request link in that answer (for an "Abrir PR" button).
+        lastReplyHead:
+          type: string
+          description: Start of the latest answer, one line, at most 140 characters.
+        lastRecordAt:
+          type: number
+          description: Time of the session's latest record (ms since epoch).
+        backgroundTasks:
+          type: integer
+          description: |
+            Background work the agent launched (run_in_background shells,
+            workflows) that has not reported back yet: its turn may have ended,
+            but it will go on when that work finishes.
+        backgroundLabel:
+          type: string
+          description: What the latest such work is (its description or command).
+
+    AgentTask:
+      description: One entry of an agent's task list.
+      type: object
+      additionalProperties: false
+      required: [id, subject, status]
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        activeForm:
+          type: string
+          description: Present-continuous phrase shown while the task runs.
+        status:
+          $ref: '#/components/schemas/AgentTaskStatus'
+
+    AgentTaskStatus:
+      type: string
+      enum: [pending, in_progress, completed]
+
+    RepoArea:
+      description: Office area for the agent's repository kind.
+      type: string
+      enum: [backend, webapp, flutter, otros]
 
     AgentContextUsage:
       description: |
@@ -713,6 +913,44 @@ components:
         enabled:
           type: boolean
 
+    ClaudeStatus:
+      description: |
+        Whether the Claude Code CLI answers on this machine, for the first-run
+        welcome: without it no agent can start. Sent on the connect handshake.
+      type: object
+      additionalProperties: false
+      required: [type, installed]
+      properties:
+        type:
+          const: claudeStatus
+        installed:
+          type: boolean
+        version:
+          type: string
+          description: What "claude --version" printed, when it answered.
+        theme:
+          $ref: '#/components/schemas/TerminalLook'
+
+    TerminalLook:
+      description: |
+        The background Claude Code's chosen theme (~/.claude.json "theme") is
+        made for. The terminal follows it unless the user picks one.
+      type: string
+      enum: [light, dark]
+
+    FolderPicked:
+      description: >-
+        The folder chosen in the host's picker; no path when it was
+        cancelled or the host has no picker.
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          const: folderPicked
+        path:
+          type: string
+
     HooksStatus:
       description: |
         Actual hook installation state, as opposed to the hooksEnabled
@@ -967,6 +1205,275 @@ components:
         exitCode:
           type: integer
 
+    AgentLaunchFailed:
+      description: A launch (+ Agent or a resume) could not start its terminal.
+      type: object
+      additionalProperties: false
+      required: [type, directoryPath, reason]
+      properties:
+        type:
+          const: agentLaunchFailed
+        directoryPath:
+          type: string
+        reason:
+          type: string
+
+    AdoptDone:
+      description: Outcome of an adoptIntoOffice, sent to the office that asked.
+      type: object
+      additionalProperties: false
+      required: [type, id, ok]
+      properties:
+        type:
+          const: adoptDone
+        id:
+          type: integer
+        ok:
+          type: boolean
+        newId:
+          type: integer
+          description: The agent id the session now has in the office.
+        reason:
+          type: string
+
+    ChatItem:
+      description: |
+        One line of an agent's conversation as a chat: something you wrote,
+        something it answered, or a one-line note of a tool it used. Read
+        from the session's own transcript.
+      type: object
+      additionalProperties: false
+      required: [id, role, text]
+      properties:
+        id:
+          type: string
+        role:
+          $ref: '#/components/schemas/ChatRole'
+        text:
+          type: string
+        at:
+          type: number
+          description: When it was written (ms since epoch, from the record).
+
+    ChatRole:
+      description: Who a chat line is from (a tool line is the agent using one).
+      type: string
+      enum: [user, assistant, tool]
+
+    AgentChat:
+      description: The latest part of an agent's conversation, for its chat view.
+      type: object
+      additionalProperties: false
+      required: [type, id, items]
+      properties:
+        type:
+          const: agentChat
+        id:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatItem'
+
+    AgentChatAppend:
+      description: New lines of an agent's conversation, as they are written.
+      type: object
+      additionalProperties: false
+      required: [type, id, items]
+      properties:
+        type:
+          const: agentChatAppend
+        id:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatItem'
+
+    ShutdownOffice:
+      description: |
+        Turn the standalone office off (Ajustes): the same orderly shutdown as
+        Ctrl+C — sessions are kept to resume the next time it opens.
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          const: shutdownOffice
+
+    RequestAgentChat:
+      description: Ask for an agent's conversation (its chat view opened).
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: requestAgentChat
+        id:
+          type: integer
+
+    DayLog:
+      description: Today's history so far, sent to a client that just connected.
+      type: object
+      additionalProperties: false
+      required: [type, entries]
+      properties:
+        type:
+          const: dayLog
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayLogEntry'
+
+    DayLogAppended:
+      description: One new line of today's history.
+      type: object
+      additionalProperties: false
+      required: [type, entry]
+      properties:
+        type:
+          const: dayLogAppended
+        entry:
+          $ref: '#/components/schemas/DayLogEntry'
+
+    DayLogEntry:
+      description: |
+        Something that happened to an agent today, as the server saw it
+        (permission asked or answered, turn finished, "te toca", task done,
+        session closed, context nearly full).
+      type: object
+      additionalProperties: false
+      required: [at, kind, agent, text]
+      properties:
+        at:
+          type: number
+          description: When (ms since epoch, server clock).
+        agentId:
+          type: integer
+        agent:
+          type: string
+          description: The agent's name at the time.
+        kind:
+          $ref: '#/components/schemas/DayLogKind'
+        text:
+          type: string
+        waitedMs:
+          type: number
+          description: For an answered permission, how long it waited for you.
+        prUrl:
+          type: string
+        folder:
+          type: string
+          description: |
+            The folder the agent worked in (last segment), so the day can be
+            told by project even after the agent is closed.
+
+    DayLogKind:
+      type: string
+      enum: [permiso, respuesta, termino, tetoca, tarea, cerrado, contexto, mergeado]
+
+    PrState:
+      description: A pull request's state on GitHub, as `gh pr view` reports it.
+      type: string
+      enum: [open, merged, closed]
+
+    PrStatus:
+      description: |
+        What the server learned about one PR an agent produced (from its
+        "te toca" or today's history), asking the GitHub CLI.
+      type: object
+      additionalProperties: false
+      required: [url, state]
+      properties:
+        url:
+          type: string
+          description: https://github.com/<owner>/<repo>/pull/<n>
+        state:
+          $ref: '#/components/schemas/PrState'
+        title:
+          type: string
+        mergedAt:
+          type: string
+          description: ISO time of the merge, when merged.
+
+    PrStatusChanged:
+      description: |
+        A PR's state was first learned or changed (privileged clients only).
+        A change to "merged" is the office's cue to celebrate.
+      type: object
+      additionalProperties: false
+      required: [type, url, state]
+      properties:
+        type:
+          const: prStatus
+        url:
+          type: string
+        state:
+          $ref: '#/components/schemas/PrState'
+        title:
+          type: string
+        mergedAt:
+          type: string
+
+    PrStatuses:
+      description: |
+        Every PR state known so far, sent on the connect handshake to a
+        privileged client (already merged ones are history, not news).
+      type: object
+      additionalProperties: false
+      required: [type, items]
+      properties:
+        type:
+          const: prStatuses
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrStatus'
+
+    AdoptIntoOffice:
+      description: |
+        Close the session of agent `id` in its outside terminal and resume it
+        in an office terminal (same conversation, --resume). Refused for
+        Claude Desktop sessions and while the session is mid-turn.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: adoptIntoOffice
+        id:
+          type: integer
+
+    HandOffDone:
+      description: Outcome of a handOffResult, sent to the office that asked.
+      type: object
+      additionalProperties: false
+      required: [type, toId, ok]
+      properties:
+        type:
+          const: handOffDone
+        toId:
+          type: integer
+        ok:
+          type: boolean
+        reason:
+          type: string
+
+    HandOffResult:
+      description: |
+        Paste agent `fromId`'s latest answer into agent `toId`'s office
+        terminal, unsent, so the user can add an instruction and press Enter.
+      type: object
+      additionalProperties: false
+      required: [type, fromId, toId]
+      properties:
+        type:
+          const: handOffResult
+        fromId:
+          type: integer
+        toId:
+          type: integer
+
     # ── Client message variants ────────────────────────────────────
 
     WebviewReady:
@@ -989,6 +1496,19 @@ components:
         directoryPath:
           type: string
           description: Path of the Directory to launch into.
+        nickname:
+          type: string
+          description: Name the user gives the agent (shown on its label).
+        palette:
+          type: integer
+          description: Character colour (sprite sheet index).
+        hueShift:
+          type: integer
+        prompt:
+          type: string
+          description: |
+            First message for the agent (a template), passed to Claude Code as
+            its initial prompt. Ignored on a resume.
 
     FocusAgent:
       description: Focus an agent's terminal.
@@ -1011,6 +1531,27 @@ components:
           const: closeAgent
         id:
           type: integer
+
+    PermissionDecision:
+      description: Answer a held PermissionRequest from the office.
+      type: object
+      additionalProperties: false
+      required: [type, requestId, behavior]
+      properties:
+        type:
+          const: permissionDecision
+        requestId:
+          type: string
+        behavior:
+          $ref: '#/components/schemas/PermissionBehavior'
+        message:
+          type: string
+          description: For deny only. Tells Claude why.
+
+    PermissionBehavior:
+      description: The office's answer to a held PermissionRequest.
+      type: string
+      enum: [allow, deny]
 
     SaveAgentSeats:
       description: Persist seat assignments for current agents.
@@ -1287,6 +1828,18 @@ components:
           const: removeDirectory
         path:
           type: string
+
+    PickFolder:
+      description: >-
+        Open the operating system's folder picker on the host (Windows), so a
+        folder is chosen instead of typed. Answered with folderPicked to this
+        client only.
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          const: pickFolder
 
     RequestDirectorySuggestions:
       description: >-

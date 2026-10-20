@@ -31,10 +31,18 @@ import {
   TERMINAL_DISABLED_BY_FLAG_REASON,
   WILDCARD_HOSTNAMES,
 } from './constants.js';
+import { DayLog } from './dayLog.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
+import { PermissionBroker } from './permissionBroker.js';
+import { pendingPermissionMessage, resolvedPermissionMessages } from './permissionMessages.js';
+import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/claudeHookInstaller.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
+import { watchAgentPrs } from './prWatchWiring.js';
 import { PixelAgentsServer } from './server.js';
 import { PtySessionManager } from './terminal/ptySessionManager.js';
+import { ResumableSessions } from './terminal/resumableSessions.js';
+import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
+import { setStateGuessingAllowed } from './timerManager.js';
 import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
 
 // ── Argument parsing ──────────────────────────────────────────
@@ -196,6 +204,18 @@ function reportTerminalStatus(
 // ── Main ──────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  // The desktop app's uninstaller: take our hooks out of Claude Code's
+  // settings (they point at the exe being removed) and exit.
+  if (process.argv.includes('--uninstall-hooks')) {
+    try {
+      await uninstallClaudeHooks();
+      process.exit(0);
+    } catch (err) {
+      console.error(`[Pixel Agents] ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  }
+
   let args: CliArgs;
   try {
     args = parseArgs(process.argv.slice(2));
@@ -245,10 +265,29 @@ async function main(): Promise<void> {
   try {
     // Create runtime first (before server.start, so we can pass it in)
     const runtime = new AgentRuntime(store, claudeProvider);
+    // Before any client can launch: every launched session is recorded here.
+    if (ptyManager.enabled) runtime.resumableSessions = new ResumableSessions();
+    // Today's history (standalone only: it writes under ~/.pixel-agents).
+    runtime.dayLog = new DayLog(store);
+    runtime.dayLog.start();
+    runtime.prWatch = watchAgentPrs(store, runtime.dayLog);
 
     // Wire hook events: HTTP POST -> runtime -> hookEventHandler -> agents
     server.onHookEvent((providerId, event) => {
       runtime.handleHookEvent(providerId, event);
+    });
+
+    // Approval cards: PermissionRequest hooks wait here for a decision from the
+    // office while the terminal prompt stays answerable in parallel.
+    const permissionBroker = new PermissionBroker({
+      onPending: (request) => store.broadcast(pendingPermissionMessage(request, store)),
+      // Runs after the request left the broker, so pending() is what remains.
+      onResolved: (request, outcome) => {
+        const remaining = permissionBroker.pending();
+        for (const message of resolvedPermissionMessages(request, outcome, store, remaining)) {
+          store.broadcast(message);
+        }
+      },
     });
 
     // onSetHooksEnabled side effect: install/uninstall the named provider's
@@ -281,10 +320,12 @@ async function main(): Promise<void> {
           return;
         }
         console.log('[Pixel Agents] Hooks installed (user toggle)');
+        if (provider.id === claudeProvider.id) setStateGuessingAllowed(false);
       } else {
         try {
           await provider.uninstallHooks();
           console.log('[Pixel Agents] Hooks uninstalled (user toggle)');
+          if (provider.id === claudeProvider.id) setStateGuessingAllowed(true);
         } catch (err) {
           console.error(`[Pixel Agents] ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -339,6 +380,7 @@ async function main(): Promise<void> {
       onSetHooksEnabled,
       onReloadAssets,
       ptyManager,
+      permissionBroker,
       allowedHosts: args.allowedHosts,
       rotateToken: args.rotateToken,
     });
@@ -381,6 +423,7 @@ async function main(): Promise<void> {
         try {
           await claudeProvider.installHooks(`http://127.0.0.1:${config.port}`, config.token);
           console.log('[Pixel Agents] Hooks installed');
+          setStateGuessingAllowed(false);
         } catch (err) {
           console.error(`[Pixel Agents] ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -391,6 +434,16 @@ async function main(): Promise<void> {
       console.log(
         '[Pixel Agents] Hooks disabled — enable "Instant Detection (Hooks)" in the UI settings to install them.',
       );
+    }
+
+    // After the hook install, so resumed sessions report through hooks from
+    // their first event.
+    const resumed = resumeOfficeSessions(
+      { store, runtime, ptyManager, provider: claudeProvider },
+      adapter.getSetting('pixel-agents.bypassPermissions', false),
+    );
+    if (resumed > 0) {
+      console.log(`[Pixel Agents] Resumed ${resumed} session(s) from the previous run`);
     }
 
     // Start scanning for external sessions (Claude running in user's terminal)
@@ -426,14 +479,29 @@ async function main(): Promise<void> {
       // Kill child terminals before the runtime tears their agents down, and
       // wait for them: exiting now would cancel the SIGKILL escalation and
       // leave a child that ignores SIGHUP orphaned on a dead server.
+      // The terminals die here, their sessions do not: keep them resumable.
+      runtime.resumableSessions?.freeze();
       await ptyManager.disposeAll();
+      permissionBroker.dispose();
       runtime.dispose();
       server.stop();
       process.exit(0);
     }
 
+    // "Apagar la oficina" (Ajustes): the same orderly shutdown as Ctrl+C.
+    runtime.requestShutdown = () => void shutdown();
     process.on('SIGINT', () => void shutdown());
     process.on('SIGTERM', () => void shutdown());
+    // Windows: closing the console window raises SIGHUP, Ctrl+Break SIGBREAK.
+    // Without these the process dies mid-teardown and the dying terminals'
+    // exit handlers could drop sessions that must stay resumable.
+    process.on('SIGHUP', () => void shutdown());
+    if (process.platform === 'win32') process.on('SIGBREAK', () => void shutdown());
+    // The desktop app (desktop/main.ts) asks over its IPC channel: on Windows
+    // a signal from the parent is a hard kill, which would skip this teardown.
+    process.on('message', (message) => {
+      if (message === 'oficina:shutdown') void shutdown();
+    });
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);

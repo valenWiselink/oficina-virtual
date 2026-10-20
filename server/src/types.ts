@@ -85,6 +85,42 @@ export interface AgentState {
   palette?: number;
   /** Hue shift in degrees (0-360). Rotates the base palette colors. */
   hueShift?: number;
+
+  // -- Identity (server/src/agentIdentity.ts) --
+  /** Name the user gave the agent when launching it from the office. */
+  nickname?: string;
+  /** Session title: the user's /rename, else the one Claude Code generates. */
+  sessionTitle?: string;
+  /** True once the title came from /rename: Claude's generated title no longer replaces it. */
+  sessionTitleIsCustom?: boolean;
+  /** Working directory of the session, as its transcript records it. */
+  cwd?: string;
+  /** Git branch the session runs on (absent when detached / unknown). */
+  gitBranch?: string;
+  /** The agent's own task list (TaskCreate/TaskUpdate or TodoWrite). */
+  tasks?: AgentTask[];
+  /** Latest text answer of the main conversation (for handing it to another agent). */
+  lastReply?: string;
+  /** What that answer leaves for the operator to do ("mergear PR #812"), and
+   *  the record it came from (so "done" can be marked per answer). */
+  yourTurn?: { text: string; id: string; at?: number; prUrl?: string };
+  /** When the session last wrote a record (ms, from the record's timestamp). */
+  lastRecordAt?: number;
+  /** Background work it launched and that has not reported back yet, by the
+   *  launching tool_use id (a shell with run_in_background, a workflow…). */
+  background?: Map<string, { label: string; at: number }>;
+  /** Background task id (from the launch result) → its tool_use id. */
+  backgroundIds?: Map<string, string>;
+}
+
+/** One entry of an agent's task list, as Claude Code keeps it. */
+export interface AgentTask {
+  /** Claude's task id (TaskCreate result), or the tool_use id until it is known. */
+  id: string;
+  subject: string;
+  /** Present-continuous phrase Claude shows while the task runs. */
+  activeForm?: string;
+  status: 'pending' | 'in_progress' | 'completed';
 }
 
 export interface PersistedAgent {
