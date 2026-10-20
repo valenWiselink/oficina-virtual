@@ -1,15 +1,31 @@
-import {
-  BADGE_GLYPH_COLOR,
-  CLAWD_ACCESSORY_COLORS,
-  CLAWD_BOSS_COLORS,
-  CLAWD_EFFORT_COLORS,
-  CLAWD_EYE_COLOR,
-  CLAWD_PROP_COLORS,
-} from '../constants.js';
+import { BADGE_GLYPH_COLOR, CLAWD_BOSS_COLORS, CLAWD_EFFORT_COLORS } from '../constants.js';
 import type { Outfit } from '../identity/clawdOutfit.js';
 import type { AgentKind } from './agentViews.js';
-import { type EffortLevel, effortMarks } from './clawdLook.js';
-import { drawOutfit, drawWatch, type Paint, repoAccessoryShown } from './clawdOutfits.js';
+import {
+  type BubbleRim,
+  type ClawdForm,
+  type ClawdMaterial,
+  type EffortLevel,
+  effortMarks,
+  headDrop,
+} from './clawdLook.js';
+import {
+  drawArms,
+  drawBody,
+  drawCape,
+  drawCrest,
+  drawEyes,
+  strokeBubble,
+  traceBubble,
+} from './clawdModelArt.js';
+import {
+  drawAccessory,
+  drawOutfit,
+  drawProp,
+  drawWatch,
+  type Paint,
+  repoAccessoryShown,
+} from './clawdOutfits.js';
 import type { ActivityProp } from './clawdTricks.js';
 
 /** Theme read once from CSS (the canvas cannot use var()). */
@@ -117,6 +133,11 @@ export interface Pose {
   effort?: EffortLevel;
   /** A supervisor: wears a tie. */
   boss?: boolean;
+  /** His model (clawdLook.ts): the body it evolves into and its material. */
+  form?: ClawdForm;
+  material?: ClawdMaterial;
+  /** Clock for the model's own motions (a shine, a cape); absent = still. */
+  anim?: number;
 }
 
 export function poseFor(kind: AgentKind, seed: number, t: number): Pose {
@@ -140,7 +161,8 @@ export function poseFor(kind: AgentKind, seed: number, t: number): Pose {
 
 /**
  * Clawd on a 16×14 grid, snapped to device pixels so he stays crisp: body with
- * a darker base, eyes, arm nubs and four legs. (x, foot) is his foot center.
+ * a darker base, eyes, arm nubs and four legs, shaped by his model
+ * (clawdModelArt.ts). (x, foot) is his foot center.
  */
 export function drawClawd(
   ctx: CanvasRenderingContext2D,
@@ -169,50 +191,42 @@ export function drawClawd(
     ctx.fillRect(ox + gx * p, oy + gy * p, w * p, h * p);
   };
   const by = pose.bob ?? 0;
+  // A hatchling is shorter: his face and all he wears on his head sit lower.
+  const hy = by + headDrop(pose.form);
+  const outfit = pose.outfit ?? 'none';
+  const repo = repoAccessoryShown(pose.area, outfit, pose.prop);
+  if (pose.form === 'legend') drawCape(R, hy, by, pose.anim);
   for (const lx of [2, 4, 11, 13]) {
     const up = pose.footUp && lx === 13 ? 1 : 0;
     R(lx, 11 + by - up, 1, 3 - by, color);
   }
-  R(1, by, 14, 10, color);
-  R(1, by + 10, 14, 1, dark);
-  const la = pose.watch ? 2 + by : 4 + by + (pose.type === 1 ? 1 : 0);
-  const ra = 4 + by + (pose.type === 0 ? 1 : 0);
-  R(0, la, 1, 2, color);
-  if (pose.wave !== undefined) {
-    R(15, by + (pose.wave ? 1 : 2), 1, 2, color);
-    R(16, by + (pose.wave ? -1 : 0), 1, 2, color);
-  } else {
-    R(15, ra, 1, 2, color);
-  }
+  drawBody(R, color, dark, by, pose);
+  const { la, ra } = drawArms(
+    R,
+    color,
+    by,
+    pose.form,
+    {
+      type: pose.type,
+      wave: pose.wave,
+      watch: pose.watch,
+      leftHeld: pose.prop === 'coffee' || (repo && pose.area === 'flutter'),
+      rightHeld: pose.prop === 'wrench',
+    },
+    pose.anim,
+  );
   const lx = pose.watch ? -1 : (pose.look?.dx ?? 0);
-  const ey = 2 + by + (pose.look?.dy ?? 0);
-  if (pose.happy) {
-    for (const ex of [3, 10]) {
-      R(ex, ey + 1, 1, 1, CLAWD_EYE_COLOR);
-      R(ex + 1, ey, 1, 1, CLAWD_EYE_COLOR);
-      R(ex + 2, ey + 1, 1, 1, CLAWD_EYE_COLOR);
-    }
-  } else if (pose.sleep) {
-    R(3, ey + 1, 2, 1, CLAWD_EYE_COLOR);
-    R(10, ey + 1, 2, 1, CLAWD_EYE_COLOR);
-  } else if (pose.blink) {
-    R(4 + lx, ey + 1, 1, 1, CLAWD_EYE_COLOR);
-    R(11 + lx, ey + 1, 1, 1, CLAWD_EYE_COLOR);
-  } else if (pose.effort === 'low') {
-    // Low effort: calm, half-lidded eyes.
-    R(4 + lx, ey + 1, 1, 1, CLAWD_EYE_COLOR);
-    R(11 + lx, ey + 1, 1, 1, CLAWD_EYE_COLOR);
-  } else {
-    R(4 + lx, ey, 1, 2, CLAWD_EYE_COLOR);
-    R(11 + lx, ey, 1, 2, CLAWD_EYE_COLOR);
-  }
+  const ey = 2 + hy + (pose.look?.dy ?? 0);
+  const bigEyes = pose.form === 'hatchling';
+  drawEyes(R, pose, lx, ey, bigEyes);
   // By slot (clawdOutfits.ts): the activity prop, the repo's accessory where
-  // its slot is free, then your outfit on his head.
-  const outfit = pose.outfit ?? 'none';
-  if (pose.prop) drawProp(R, pose.prop, la, ra, ey);
-  if (repoAccessoryShown(pose.area, outfit, pose.prop)) drawAccessory(R, pose.area, by, la);
-  if (outfit !== 'none') drawOutfit(R, outfit, by);
-  drawEffortMarks(R, effortMarks(pose.effort), by);
+  // its slot is free, then your outfit on his head; the model's crest only
+  // where the head is free.
+  if (pose.prop) drawProp(R, pose.prop, la, ra, ey, bigEyes);
+  if (repo) drawAccessory(R, pose.area, hy, la);
+  if (outfit !== 'none') drawOutfit(R, outfit, hy);
+  else if (!(repo && pose.area === 'backend')) drawCrest(R, pose.form, hy, pose.anim);
+  drawEffortMarks(R, effortMarks(pose.effort), hy);
   if (pose.boss) drawTie(R, by);
   if (pose.watch) drawWatch(R, la);
   ctx.restore();
@@ -244,50 +258,6 @@ function drawEffortMarks(R: Paint, marks: number, by: number) {
   R(12, by - 1, 3, 1, c.sweat);
 }
 
-/** The repo accessory, on the same pixel grid as Clawd. */
-function drawAccessory(R: Paint, area: string | undefined, by: number, leftArm: number) {
-  const c = CLAWD_ACCESSORY_COLORS;
-  if (area === 'backend') {
-    R(3, by - 2, 10, 1, c.helmet);
-    R(2, by - 1, 12, 1, c.helmet);
-    R(1, by - 1, 1, 1, c.helmetEdge);
-    R(14, by - 1, 1, 1, c.helmetEdge);
-  } else if (area === 'webapp') {
-    R(13, by - 1, 1, 1, c.pencilWood);
-    R(14, by - 2, 1, 1, c.pencilWood);
-    R(15, by - 3, 1, 1, c.pencilTip);
-  } else if (area === 'flutter') {
-    R(-2, leftArm - 1, 2, 3, c.phone);
-    R(-2, leftArm, 1, 1, c.phoneScreen);
-  }
-}
-
-/** What he holds for what he is doing, on his pixel grid. */
-function drawProp(R: Paint, prop: ActivityProp, leftArm: number, rightArm: number, eyeY: number) {
-  const c = CLAWD_PROP_COLORS;
-  if (prop === 'glasses') {
-    // A frame around each eye (x 4 and 11) and a bridge between them.
-    for (const fx of [3, 10]) {
-      R(fx, eyeY - 1, 3, 1, c.glasses);
-      R(fx, eyeY + 2, 3, 1, c.glasses);
-      R(fx, eyeY, 1, 2, c.glasses);
-      R(fx + 2, eyeY, 1, 2, c.glasses);
-    }
-    R(6, eyeY, 4, 1, c.glasses);
-  } else if (prop === 'wrench') {
-    // Held up in the right hand: handle, then the open jaw on top.
-    R(16, rightArm - 3, 1, 4, c.wrench);
-    R(15, rightArm - 5, 3, 2, c.wrenchDark);
-    R(16, rightArm - 5, 1, 1, c.wrench);
-  } else {
-    // A mug in the left hand, coffee showing at the rim.
-    R(-3, leftArm - 1, 3, 3, c.mug);
-    R(-3, leftArm - 1, 3, 1, c.coffee);
-    R(-4, leftArm, 1, 1, c.mugEdge);
-    R(-2, leftArm - 3, 1, 1, c.mugEdge); // a wisp of steam
-  }
-}
-
 export const clawdHeight = (scale: number, dpr: number) =>
   (14 * Math.max(1, Math.round(scale * dpr))) / dpr;
 
@@ -299,7 +269,8 @@ export function isPulsing(waitedMs: number): boolean {
   return s < 30 || (s >= 300 && s < 303) || (s >= 900 && s < 903);
 }
 
-/** The node disc: tinted fill in the agent's colour, outline by state. */
+/** The node disc: tinted fill in the agent's colour, outline colour by state
+ *  and outline shape by model (`rim`, turning with `spin`). */
 export function drawNodeDisc(
   ctx: CanvasRenderingContext2D,
   th: GraphTheme,
@@ -311,6 +282,7 @@ export function drawNodeDisc(
   t: number,
   selected: boolean,
   pulsing = false,
+  rim: { shape: BubbleRim; spin: number } = { shape: 'single', spin: 0 },
 ) {
   if (kind === 'needs' && pulsing) {
     for (let j = 0; j < 3; j++) {
@@ -329,7 +301,7 @@ export function drawNodeDisc(
   }
   const busy = kind === 'work' || kind === 'meet' || kind === 'research';
   const breathe = busy ? 1 + 0.03 * Math.sin(t * 2.2 + x) : 1;
-  circle(ctx, x, y, r * breathe);
+  traceBubble(ctx, x, y, r * breathe, rim.shape, rim.spin);
   ctx.fillStyle = rgba(kind === 'research' ? th.research : color, 0.13);
   ctx.fill();
   ctx.strokeStyle =
@@ -341,7 +313,7 @@ export function drawNodeDisc(
           ? th.line2
           : rgba(color, 0.6);
   ctx.lineWidth = kind === 'needs' ? 2.5 : 1.5;
-  ctx.stroke();
+  strokeBubble(ctx, x, y, r * breathe, rim.shape, rim.spin);
 }
 
 export function drawThinkDots(

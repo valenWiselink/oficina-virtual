@@ -1,4 +1,4 @@
-import { CLAWD_OUTFIT_COLORS } from '../constants.js';
+import { CLAWD_ACCESSORY_COLORS, CLAWD_OUTFIT_COLORS, CLAWD_PROP_COLORS } from '../constants.js';
 import type { Outfit } from '../identity/clawdOutfit.js';
 import type { ActivityProp } from './clawdTricks.js';
 
@@ -64,4 +64,57 @@ export function drawOutfit(R: Paint, outfit: Outfit, by: number): void {
 /** The watch on his raised left arm while he checks the time (impatient). */
 export function drawWatch(R: Paint, armY: number): void {
   R(-1, armY + 1, 1, 1, CLAWD_OUTFIT_COLORS.watch);
+}
+
+/** The repo accessory, on the same pixel grid as Clawd. */
+export function drawAccessory(R: Paint, area: string | undefined, by: number, leftArm: number) {
+  const c = CLAWD_ACCESSORY_COLORS;
+  if (area === 'backend') {
+    R(3, by - 2, 10, 1, c.helmet);
+    R(2, by - 1, 12, 1, c.helmet);
+    R(1, by - 1, 1, 1, c.helmetEdge);
+    R(14, by - 1, 1, 1, c.helmetEdge);
+  } else if (area === 'webapp') {
+    R(13, by - 1, 1, 1, c.pencilWood);
+    R(14, by - 2, 1, 1, c.pencilWood);
+    R(15, by - 3, 1, 1, c.pencilTip);
+  } else if (area === 'flutter') {
+    R(-2, leftArm - 1, 2, 3, c.phone);
+    R(-2, leftArm, 1, 1, c.phoneScreen);
+  }
+}
+
+/** What he holds for what he is doing, on his pixel grid. */
+export function drawProp(
+  R: Paint,
+  prop: ActivityProp,
+  leftArm: number,
+  rightArm: number,
+  eyeY: number,
+  bigEyes: boolean,
+) {
+  const c = CLAWD_PROP_COLORS;
+  if (prop === 'glasses') {
+    // A frame around each eye (x 4 and 11, a hatchling's are two wide) and a
+    // bridge between them.
+    const w = bigEyes ? 4 : 3;
+    for (const fx of bigEyes ? [2, 10] : [3, 10]) {
+      R(fx, eyeY - 1, w, 1, c.glasses);
+      R(fx, eyeY + 2, w, 1, c.glasses);
+      R(fx, eyeY, 1, 2, c.glasses);
+      R(fx + w - 1, eyeY, 1, 2, c.glasses);
+    }
+    R(6, eyeY, 4, 1, c.glasses);
+  } else if (prop === 'wrench') {
+    // Held up in the right hand: handle, then the open jaw on top.
+    R(16, rightArm - 3, 1, 4, c.wrench);
+    R(15, rightArm - 5, 3, 2, c.wrenchDark);
+    R(16, rightArm - 5, 1, 1, c.wrench);
+  } else {
+    // A mug in the left hand, coffee showing at the rim.
+    R(-3, leftArm - 1, 3, 3, c.mug);
+    R(-3, leftArm - 1, 3, 1, c.coffee);
+    R(-4, leftArm, 1, 1, c.mugEdge);
+    R(-2, leftArm - 3, 1, 1, c.mugEdge); // a wisp of steam
+  }
 }

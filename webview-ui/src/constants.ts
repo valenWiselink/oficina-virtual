@@ -911,5 +911,18 @@ export const CLAWD_OUTFIT_COLORS = {
   phonesShine: '#a4adb8',
   watch: '#3b4048',
 } as const;
+/** What each model's Clawd grows (clawdModelArt.ts): the hatchling's sprout
+ *  and eye shine, the legend's golden claw tips, antennae and cape, and the
+ *  glints on metal and hologram. */
+export const CLAWD_MODEL_COLORS = {
+  stem: '#4f8f45',
+  leaf: '#78c065',
+  shine: '#ffffff',
+  gold: '#e8bf3a',
+  goldLight: '#fff1b0',
+  stalk: '#3a3531',
+  cape: '#a3283c',
+  capeDark: '#771b2b',
+} as const;
 /** The glyph (! or ✓) inside a status badge. */
 export const BADGE_GLYPH_COLOR = '#ffffff';

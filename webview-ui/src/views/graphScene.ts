@@ -7,7 +7,7 @@ import type { AgentView } from './agentViews.js';
 import { clawdColor } from './clawdColor.js';
 import { impatience } from './clawdImpatience.js';
 import { type ClawdLife, isAsleep } from './clawdLife.js';
-import { effortLevel, effortMarks, modelScale } from './clawdLook.js';
+import { effortLevel, effortMarks, modelLook } from './clawdLook.js';
 import { activityProp, arrivalMotion, trickMotion } from './clawdTricks.js';
 import {
   type Bounds,
@@ -119,7 +119,7 @@ export function layout(nodes: Map<string, SimNode>, list: AgentView[]) {
     }
     const id = `a${v.id}`;
     live.add(id);
-    upsert(nodes, id, ax, ay, radiusFor(v.kind) * modelScale(v.model));
+    upsert(nodes, id, ax, ay, radiusFor(v.kind) * lookOf(v).scale);
     const parent = nodes.get(id)!;
     const radius = meetingRadius(v.subagents.length);
     parent.group = id;
@@ -190,6 +190,9 @@ function upsert(nodes: Map<string, SimNode>, id: string, ax: number, ay: number,
 }
 
 const colorOf = (v: AgentView) => clawdColor(v.palette, v.hueShift);
+/** His model's look: what the session reports, else what the office launched
+ *  it with. */
+const lookOf = (v: AgentView) => modelLook(v.model ?? v.runModel);
 
 /** Draw a Clawd standing on a world point (he is drawn in screen pixels). */
 function clawdAt(
@@ -420,6 +423,10 @@ function livePose(
     // What the session reports, else what the office launched it with.
     effort: effortLevel(v.effort ?? v.runEffort),
     boss: isSupervisor(v),
+    form: lookOf(v).form,
+    material: lookOf(v).material,
+    // The model's own motions (shine, cape, snips) stay still in calm mode.
+    anim: f.calm ? undefined : f.t + v.id,
   };
   if (isAsleep(v, f.now)) Object.assign(pose, { sleep: true, blink: false });
   if (life.blinking(v.id, f.now)) pose.blink = true;
@@ -467,7 +474,10 @@ function drawAgentBody(
   if (!f.calm && effortMarks(effortLevel(v.effort ?? v.runEffort)) === 3) {
     drawEffortFlame(ctx, n.x, n.y, n.r, f.t + v.id);
   }
-  drawNodeDisc(ctx, th, n.x, n.y, n.r, color, v.kind, f.t, at.selected, at.pulsing);
+  drawNodeDisc(ctx, th, n.x, n.y, n.r, color, v.kind, f.t, at.selected, at.pulsing, {
+    shape: lookOf(v).rim,
+    spin: f.calm ? 0 : f.t + v.id,
+  });
   // Clawd fills his disc, as in the preview (the disc grows with activity).
   const scale = n.r / 15;
   const { pose, lift } = livePose(v, f, life, at.index);
