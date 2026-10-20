@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 
 import { repoAreaOf } from './repoArea.js';
+import { supervisors } from './supervisors/supervision.js';
 import type { AgentState, AgentTask } from './types.js';
 
 /** Bytes read from each end of a transcript to seed identity for a session the
@@ -33,7 +34,7 @@ function str(value: unknown): string | undefined {
  */
 export function observeIdentity(agent: AgentState, record: Record<string, unknown>): boolean {
   let changed = false;
-  const set = <K extends 'sessionTitle' | 'cwd' | 'gitBranch'>(
+  const set = <K extends 'sessionTitle' | 'cwd' | 'gitBranch' | 'entrypoint'>(
     key: K,
     value: string | undefined,
   ) => {
@@ -57,6 +58,16 @@ export function observeIdentity(agent: AgentState, record: Record<string, unknow
   const branch = str(record.gitBranch);
   // "HEAD" is a detached checkout, not a branch name worth showing.
   if (branch && branch !== 'HEAD') set('gitBranch', branch);
+  set('entrypoint', str(record.entrypoint));
+  // The effort a turn ran with: on the main chain's assistant records only
+  // (a subagent's turn says nothing about this agent).
+  if (record.type === 'assistant' && record.isSidechain !== true) {
+    const effort = str(record.effort);
+    if (effort && agent.effort !== effort) {
+      agent.effort = effort;
+      changed = true;
+    }
+  }
 
   if (observeTasks(agent, record)) changed = true;
   if (observeLastReply(agent, record)) changed = true;
@@ -323,6 +334,7 @@ export function ticketOf(agent: AgentState): string | undefined {
 /** `agentIdentity`: everything the office's label and bubble show for an agent. */
 export function identityMessage(id: number, agent: AgentState): Record<string, unknown> {
   const { repo, area } = repoAreaOf(agent.cwd);
+  const supervisedBy = supervisors().supervisorsOf(agent.sessionId);
   return {
     type: 'agentIdentity',
     id,
@@ -332,6 +344,13 @@ export function identityMessage(id: number, agent: AgentState): Record<string, u
     ticket: ticketOf(agent),
     cwd: agent.cwd,
     gitBranch: agent.gitBranch,
+    entrypoint: agent.entrypoint,
+    effort: agent.effort,
+    runModel: agent.runModel,
+    runEffort: agent.runEffort,
+    canSetRun: agent.officeTerminal ? true : undefined,
+    supervision: agent.supervision,
+    supervisedBy: supervisedBy.length > 0 ? supervisedBy : undefined,
     repo,
     area,
     tasks: agent.tasks ?? [],

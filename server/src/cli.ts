@@ -39,6 +39,8 @@ import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { watchAgentPrs } from './prWatchWiring.js';
 import { PixelAgentsServer } from './server.js';
+import { supervisors } from './supervisors/supervision.js';
+import { SupervisorRelay } from './supervisors/supervisorRelay.js';
 import { PtySessionManager } from './terminal/ptySessionManager.js';
 import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
@@ -272,8 +274,19 @@ async function main(): Promise<void> {
     runtime.dayLog.start();
     runtime.prWatch = watchAgentPrs(store, runtime.dayLog);
 
+    // Supervisor agents: who supervises whom, and what reaches them (their
+    // agents' permissions, questions and finished turns).
+    supervisors().attach(store);
+    const supervisorRelay = new SupervisorRelay({
+      store,
+      registry: supervisors(),
+      terminalOf: (id) => ptyManager.get(id),
+    });
+    store.on('broadcast', (message: Record<string, unknown>) => supervisorRelay.observe(message));
+
     // Wire hook events: HTTP POST -> runtime -> hookEventHandler -> agents
     server.onHookEvent((providerId, event) => {
+      supervisorRelay.observeHook(event);
       runtime.handleHookEvent(providerId, event);
     });
 
@@ -385,6 +398,8 @@ async function main(): Promise<void> {
       rotateToken: args.rotateToken,
     });
     currentConfig = { port: config.port, token: config.token };
+    // Supervisors reach the office's MCP endpoint over loopback.
+    supervisors().setOfficeUrl(`http://127.0.0.1:${config.port}`);
     if (args.rotateToken) {
       console.log(
         '[Pixel Agents] Server token rotated: URLs carrying the old token no longer grant access. Open the new URL below on each device.',

@@ -7,6 +7,7 @@ import type { AgentStateStore } from './agentStateStore.js';
 import { TEXT_IDLE_DELAY_MS, TOOL_DONE_DELAY_MS } from './constants.js';
 import { updateContextUsage } from './contextUsage.js';
 import { fileOpOf } from './fileLinks.js';
+import { updateSessionSpend } from './sessionSpend.js';
 import { hasInlineTeammates, hasPromotedBackgroundAgent } from './teamUtils.js';
 import {
   cancelPermissionTimer,
@@ -135,6 +136,8 @@ export function processTranscriptLine(
       });
     }
 
+    // -- Spend and model first, so the gauge's broadcast below carries them --
+    updateSessionSpend(agent, record);
     // -- Context window usage (drives every agent's context gauge) --
     updateContextUsage(agentId, agent, agents, record, hookProvider);
 

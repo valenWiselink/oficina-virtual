@@ -102,12 +102,25 @@ function getSessionDirs(workspacePath: string): string[] {
 function buildLaunchCommand(
   sessionId: string,
   cwd: string,
-  opts?: { bypassPermissions?: boolean; resume?: boolean; prompt?: string },
+  opts?: {
+    bypassPermissions?: boolean;
+    resume?: boolean;
+    prompt?: string;
+    model?: string;
+    effort?: string;
+    extraArgs?: string[];
+  },
 ): { command: string; args: string[]; env?: Record<string, string> } {
   // --resume keeps the session id (a new one needs --fork-session), so hooks
   // and the transcript path stay the same across the office restarting.
   const args = opts?.resume ? ['--resume', sessionId] : ['--session-id', sessionId];
   if (opts?.bypassPermissions) args.push('--dangerously-skip-permissions');
+  // Model and effort chosen in the office, session-only flags (unlike /model,
+  // which also changes the user's default). Validated upstream (agentEdits).
+  if (opts?.model) args.push('--model', opts.model);
+  if (opts?.effort) args.push('--effort', opts.effort);
+  // A supervisor's --mcp-config / --append-system-prompt-file / --allowedTools.
+  if (opts?.extraArgs) args.push(...opts.extraArgs);
   // A first message (a template) is Claude Code's positional prompt: the
   // session opens interactive with it already sent. Its own argv element,
   // never part of a parsed string.

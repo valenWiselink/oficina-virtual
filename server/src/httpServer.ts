@@ -19,6 +19,8 @@ import {
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
 import type { PermissionBroker } from './permissionBroker.js';
+import { supervisors } from './supervisors/supervision.js';
+import { registerSupervisorMcp } from './supervisors/supervisorMcp.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { registerTerminalRoutes } from './terminal/terminalRoutes.js';
 import type { AgentState } from './types.js';
@@ -118,6 +120,19 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
     allowedHostnames,
     ptyManager: options.ptyManager,
   });
+  // Supervisor agents' tools (standalone): each supervisor has a token of its own.
+  if (!options.embedded) {
+    registerSupervisorMcp(
+      app,
+      {
+        store: options.store,
+        registry: supervisors(),
+        broker: options.permissionBroker,
+        terminalOf: (id) => options.ptyManager?.get(id),
+      },
+      allowedHostnames,
+    );
+  }
 
   // ── Listen ──────────────────────────────────────────────────
 

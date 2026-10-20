@@ -3,6 +3,7 @@ import type { HookProvider } from '../../core/src/provider.js';
 import { resendAgentActivity } from './agentActivityResend.js';
 import { readChat } from './agentChat.js';
 import { buildAgentDiagnostics } from './agentDiagnostics.js';
+import { cleanEffort, cleanModel, editAgent, setAgentRun, setSupervision } from './agentEdits.js';
 import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type { LoadedAssets, LoadedCharacterSprites, LoadedPetSprites } from './assetLoader.js';
@@ -24,12 +25,15 @@ import { collectDirectorySuggestions } from './directorySuggestions.js';
 import { pickFolder } from './folderPicker.js';
 import { hostDirectory } from './hostDirectory.js';
 import { loadLayout, readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
+import { openInExplorer } from './openPath.js';
 import type { PermissionBroker } from './permissionBroker.js';
 import { pendingPermissionMessage } from './permissionMessages.js';
 import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
 import { hooksConsentRequest } from './providers/hook/consentGate.js';
 import { claudeProvider, hookProviderById, hookProviders } from './providers/index.js';
+import { parseScope } from './supervisors/supervision.js';
+import { applySupervisionTeam, broadcastSupervision } from './supervisors/supervisionMessages.js';
 import { adoptIntoOffice } from './terminal/adoptSession.js';
 import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
@@ -163,10 +167,78 @@ export function handleClientMessage(
           bypassPermissions: adapter?.getSetting(KEY_BYPASS_PERMISSIONS, false) ?? false,
           ...launchAppearance(msg),
           prompt: launchPrompt(msg),
+          model: cleanModel(msg.model),
+          effort: cleanEffort(msg.effort),
         },
       );
       break;
     }
+
+    case 'editAgent':
+      // Name and colour, for any agent (the office's or an outside one).
+      editAgent(store, runtime?.resumableSessions ?? undefined, Number(msg.id), msg);
+      break;
+
+    case 'setAgentRun': {
+      // Model and effort: relaunches an office terminal with --resume. Async;
+      // the reply goes only to the asking office.
+      const id = Number(msg.id);
+      if (!runtime || !ctx.ptyManager) {
+        send({ type: 'agentRunResult', id, ok: false, reason: 'Esta oficina no tiene terminales' });
+        break;
+      }
+      void setAgentRun(
+        { store, runtime, ptyManager: ctx.ptyManager, provider: claudeProvider },
+        id,
+        msg,
+        adapter?.getSetting(KEY_BYPASS_PERMISSIONS, false) ?? false,
+      ).then((result) =>
+        send({
+          type: 'agentRunResult',
+          id,
+          ok: result.ok,
+          newId: result.ok ? result.newId : undefined,
+          reason: result.ok ? undefined : result.reason,
+        }),
+      );
+      break;
+    }
+
+    case 'setSupervision': {
+      // Make an office agent a supervisor (or a plain agent again): relaunches
+      // it with --resume plus its MCP and role. Reply to the asking office only.
+      const id = Number(msg.id);
+      const scope = parseScope(msg.scope);
+      const answer = (ok: boolean, reason?: string, newId?: number) =>
+        send({ type: 'supervisionResult', id, ok, reason, newId });
+      if (!runtime || !ctx.ptyManager) {
+        answer(false, 'Esta oficina no tiene terminales');
+        break;
+      }
+      if (scope === undefined) {
+        answer(false, 'No entendí a quién tiene que supervisar');
+        break;
+      }
+      void setSupervision(
+        { store, runtime, ptyManager: ctx.ptyManager, provider: claudeProvider },
+        id,
+        scope,
+        adapter?.getSetting(KEY_BYPASS_PERMISSIONS, false) ?? false,
+      ).then((result) => {
+        answer(
+          result.ok,
+          result.ok ? undefined : result.reason,
+          result.ok ? result.newId : undefined,
+        );
+        if (result.ok) broadcastSupervision(store);
+      });
+      break;
+    }
+
+    case 'supervisionTeam':
+      // The members the browser computed for a workspace / hand-picked supervisor.
+      applySupervisionTeam(store, msg);
+      break;
 
     case 'closeAgent': {
       // Two shapes now: a PTY-backed agent we launched (kill the process -- the
@@ -423,6 +495,10 @@ export function handleClientMessage(
 
     case 'pickFolder':
       void pickFolder().then((path) => send({ type: 'folderPicked', path }));
+      break;
+
+    case 'openPath':
+      openInExplorer(msg.path);
       break;
 
     case 'saveDirectory':

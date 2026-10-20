@@ -47,3 +47,19 @@ export function handOff(
   session.write(`${PASTE_START}${handOffText(spokenName(from), from.lastReply)}${PASTE_END}`);
   return { ok: true };
 }
+
+/** How long after the paste the Enter goes: the TUI must have taken the paste. */
+const ENTER_AFTER_MS = 80;
+
+/**
+ * Write a message into an agent's terminal and send it (bracketed paste, then
+ * Enter): how the office talks to a supervisor and a supervisor to its
+ * agents. If the agent is mid-turn, Claude Code queues it for after.
+ */
+export function sendToTerminal(session: { write(data: string): void }, text: string): void {
+  // Line breaks as \r, the way xterm.js sends a paste: Windows' console drops
+  // a bare \n, which glued the lines together (measured 2026-10-20).
+  const clean = text.replace(/\x1b/g, '').replace(/\r?\n/g, '\r');
+  session.write(`${PASTE_START}${clean}${PASTE_END}`);
+  setTimeout(() => session.write('\r'), ENTER_AFTER_MS);
+}

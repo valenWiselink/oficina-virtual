@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { TERMINAL_MIRROR_SCROLLBACK_LINES } from '../src/constants.js';
 import type { IPty, PtyModule, PtyModuleResolution } from '../src/terminal/ptyModule.js';
-import { PtySessionManager } from '../src/terminal/ptySessionManager.js';
+import { agentEnv, PtySessionManager } from '../src/terminal/ptySessionManager.js';
 
 /**
  * Fake PTY. Tests never spawn a real process: they'd be slow, platform-specific,
@@ -361,5 +361,19 @@ describe('PtySession snapshot', () => {
     const snapshot = stripAnsi(await session.snapshot());
     expect(snapshot).toContain(`L${String(total - 1).padStart(6, '0')}`);
     expect(snapshot).not.toContain('L000000');
+  });
+});
+
+describe('agentEnv', () => {
+  it('drops Electron and parent-session variables an agent must not inherit', () => {
+    const env = agentEnv({
+      PATH: 'C:/bin',
+      ELECTRON_RUN_AS_NODE: '1',
+      electron_no_attach_console: '1',
+      CLAUDECODE: '1',
+      OFICINA_HOOK_EXE: 'C:/app/Oficina virtual.exe',
+      EMPTY: undefined,
+    });
+    expect(env).toEqual({ PATH: 'C:/bin', OFICINA_HOOK_EXE: 'C:/app/Oficina virtual.exe' });
   });
 });

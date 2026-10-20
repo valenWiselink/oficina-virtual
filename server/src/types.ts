@@ -1,5 +1,8 @@
 import type * as vscode from 'vscode';
 
+import type { SpendTally } from './sessionSpend.js';
+import type { SupervisionScope } from './supervisors/supervision.js';
+
 export interface AgentState {
   id: number;
   sessionId: string;
@@ -57,6 +60,9 @@ export interface AgentState {
   /** True once this transcript produced a main-chain turn, after which
    *  sidechain records belong to sub-agents and stop moving the gauge. */
   sawMainChainUsage?: boolean;
+  /** What the session spent so far and the model answering it
+   *  (server/src/sessionSpend.ts); absent until a turn with usage is seen. */
+  spendTally?: SpendTally;
 
   // -- Agent Teams --
   teamName?: string;
@@ -97,6 +103,21 @@ export interface AgentState {
   cwd?: string;
   /** Git branch the session runs on (absent when detached / unknown). */
   gitBranch?: string;
+  /** Where the session runs, as Claude Code records it: 'cli' (a terminal),
+   *  'claude-desktop' (the desktop app, which the office can't take over)... */
+  entrypoint?: string;
+  /** Reasoning effort of its latest main-chain turn, as the transcript records
+   *  it ("high", "xhigh"...). */
+  effort?: string;
+  /** Model and effort chosen from the office (launch dialog or "Editar"):
+   *  the --model / --effort it runs with; absent = Claude Code's default. */
+  runModel?: string;
+  runEffort?: string;
+  /** Runs in one of the office's own terminals (the only ones whose model and
+   *  effort the office can change: it relaunches them). */
+  officeTerminal?: boolean;
+  /** Set when it is a supervisor (supervisors/supervision.ts): what it watches over. */
+  supervision?: SupervisionScope;
   /** The agent's own task list (TaskCreate/TaskUpdate or TodoWrite). */
   tasks?: AgentTask[];
   /** Latest text answer of the main conversation (for handing it to another agent). */
@@ -155,4 +176,12 @@ export interface PersistedAgent {
   palette?: number;
   /** Hue shift in degrees (0-360). Persisted alongside palette. */
   hueShift?: number;
+}
+
+/** Tokens a session's requests used, by kind (sum over its API requests). */
+export interface SessionSpend {
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
 }

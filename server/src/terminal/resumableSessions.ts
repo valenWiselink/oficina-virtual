@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { SERVER_JSON_DIR } from '../constants.js';
+import type { SupervisionScope } from '../supervisors/supervision.js';
 
 /** One Claude session the office launched and still owns. */
 export interface ResumableSession {
@@ -12,6 +13,11 @@ export interface ResumableSession {
   nickname?: string;
   palette?: number;
   hueShift?: number;
+  /** Chosen in the office (--model / --effort); kept for every relaunch. */
+  model?: string;
+  effort?: string;
+  /** A supervisor: what it watches over (relaunched with its MCP and role). */
+  supervision?: SupervisionScope;
 }
 
 const FILE_NAME = 'oficina-sesiones.json';

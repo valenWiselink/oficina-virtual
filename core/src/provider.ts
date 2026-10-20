@@ -134,8 +134,17 @@ export interface HookProvider {
   buildLaunchCommand?(
     sessionId: string,
     cwd: string,
-    /** prompt: the agent's first message (ignored on a resume). */
-    opts?: { bypassPermissions?: boolean; resume?: boolean; prompt?: string },
+    /** prompt: the agent's first message (ignored on a resume); model and
+     *  effort: chosen in the office (validated by the caller); extraArgs:
+     *  more flags built by the office (a supervisor's MCP and role). */
+    opts?: {
+      bypassPermissions?: boolean;
+      resume?: boolean;
+      prompt?: string;
+      model?: string;
+      effort?: string;
+      extraArgs?: string[];
+    },
   ): {
     command: string;
     args: string[];

@@ -25,6 +25,7 @@ import { directoryNameForLaunch } from '../directories.js';
 import { startFileWatching } from '../fileWatcher.js';
 import { directoryNameFor, hostDirectory } from '../hostDirectory.js';
 import { assignPaletteIfNeeded } from '../paletteAssigner.js';
+import { type SupervisionScope, supervisors } from '../supervisors/supervision.js';
 import type { AgentState } from '../types.js';
 import type { PtySessionManager } from './ptySessionManager.js';
 import type { ResumableSession } from './resumableSessions.js';
@@ -60,6 +61,22 @@ export interface LaunchStandaloneAgentOptions {
   hueShift?: number;
   /** The agent's first message (a template; validated by the caller). */
   prompt?: string;
+  /** --model / --effort chosen in the office (validated by the caller); a
+   *  resume brings its own. */
+  model?: string;
+  effort?: string;
+}
+
+/** A supervisor's extra launch flags (its MCP and role files), none otherwise.
+ *  A failure to write them launches it as a plain agent rather than not at all. */
+function supervisorArgs(sessionId: string, scope: SupervisionScope | undefined): string[] {
+  if (!scope) return [];
+  try {
+    return supervisors().prepareLaunch(sessionId, scope);
+  } catch (err) {
+    console.error(`[Pixel Agents] Supervisor files for ${sessionId}: ${String(err)}`);
+    return [];
+  }
 }
 
 /**
@@ -90,10 +107,16 @@ export function launchStandaloneAgent(
   const sessionId = resume?.sessionId ?? crypto.randomUUID();
 
   const prompt = resume ? undefined : options.prompt;
+  const model = resume ? resume.model : options.model;
+  const effort = resume ? resume.effort : options.effort;
+  const supervision = resume?.supervision;
   const launch = provider.buildLaunchCommand?.(sessionId, cwd, {
     bypassPermissions: options.bypassPermissions,
     resume: resume !== undefined,
     prompt,
+    model,
+    effort,
+    extraArgs: supervisorArgs(sessionId, supervision),
   });
   if (!launch) return fail('provider.buildLaunchCommand is not implemented');
 
@@ -164,6 +187,10 @@ export function launchStandaloneAgent(
   agent.palette = resume?.palette ?? options.palette;
   agent.hueShift = resume?.hueShift ?? options.hueShift;
   agent.cwd = cwd;
+  agent.runModel = model;
+  agent.runEffort = effort;
+  agent.officeTerminal = true;
+  agent.supervision = supervision;
   if (resume) {
     // The transcript already holds the whole conversation: watch only what
     // comes next, or the office would replay old activity as if it were live.
@@ -185,6 +212,9 @@ export function launchStandaloneAgent(
     nickname: agent.nickname,
     palette: agent.palette,
     hueShift: agent.hueShift,
+    model,
+    effort,
+    supervision,
   });
   store.set(id, agent);
   runtime.activeAgentId.current = id;

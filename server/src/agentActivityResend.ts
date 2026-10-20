@@ -1,5 +1,6 @@
 import { identityMessage } from './agentIdentity.js';
 import type { AgentStateStore } from './agentStateStore.js';
+import { contextUsageMessage } from './contextUsage.js';
 import { hasPromotedBackgroundAgent } from './teamUtils.js';
 
 /**
@@ -79,12 +80,7 @@ export function resendAgentActivity(
 
     // 5. Context usage
     if (agent.contextTokens > 0) {
-      send({
-        type: 'agentContextUsage',
-        id,
-        contextTokens: agent.contextTokens,
-        maxContextTokens: agent.maxContextTokens,
-      });
+      send(contextUsageMessage(id, agent));
     }
 
     // 6. Identity (name, title, ticket, tasks) for the label and bubble

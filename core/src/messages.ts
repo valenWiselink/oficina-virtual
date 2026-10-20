@@ -55,6 +55,9 @@ export type ServerMessage =
   | AgentLaunchFailed
   | HandOffDone
   | AdoptDone
+  | AgentRunResult
+  | SupervisionResult
+  | AgentAppearance
   | DayLog
   | DayLogAppended
   | PrStatusChanged
@@ -73,6 +76,10 @@ export type ClientMessage =
   | PermissionDecision
   | HandOffResult
   | AdoptIntoOffice
+  | EditAgent
+  | SetAgentRun
+  | SetSupervision
+  | SupervisionTeam
   | SaveAgentSeats
   | SaveLayout
   | SetSoundEnabled
@@ -96,6 +103,7 @@ export type ClientMessage =
   | RemoveDirectory
   | RequestDirectorySuggestions
   | PickFolder
+  | OpenPath
   | RequestDiagnostics;
 
 export interface ProviderCapabilities {
@@ -255,6 +263,11 @@ export interface AgentContextUsage {
   id: number;
   contextTokens: number;
   maxContextTokens: number;
+  model?: string;
+  spentInput?: number;
+  spentCacheRead?: number;
+  spentCacheWrite?: number;
+  spentOutput?: number;
 }
 
 export interface AgentIdentity {
@@ -265,6 +278,13 @@ export interface AgentIdentity {
   ticket?: string;
   cwd?: string;
   gitBranch?: string;
+  entrypoint?: string;
+  effort?: string;
+  runModel?: string;
+  runEffort?: string;
+  canSetRun?: boolean;
+  supervision?: SupervisionScope;
+  supervisedBy?: number[];
   repo?: string;
   area?: RepoArea;
   tasks: AgentTask[];
@@ -278,6 +298,14 @@ export interface AgentIdentity {
   backgroundTasks?: number;
   backgroundLabel?: string;
 }
+
+export interface SupervisionScope {
+  kind: AnonymousSchema_106;
+  workspaceId?: string;
+  name?: string;
+}
+
+export type AnonymousSchema_106 = 'workspace' | 'agents' | 'all';
 
 export type RepoArea = 'backend' | 'webapp' | 'flutter' | 'otros';
 
@@ -495,6 +523,29 @@ export interface AdoptDone {
   reason?: string;
 }
 
+export interface AgentRunResult {
+  type: 'agentRunResult';
+  id: number;
+  ok: boolean;
+  reason?: string;
+  newId?: number;
+}
+
+export interface SupervisionResult {
+  type: 'supervisionResult';
+  id: number;
+  ok: boolean;
+  reason?: string;
+  newId?: number;
+}
+
+export interface AgentAppearance {
+  type: 'agentAppearance';
+  id: number;
+  palette: number;
+  hueShift: number;
+}
+
 export interface DayLog {
   type: 'dayLog';
   entries: DayLogEntry[];
@@ -587,7 +638,11 @@ export interface LaunchAgent {
   palette?: number;
   hueShift?: number;
   prompt?: string;
+  model?: string;
+  effort?: AnonymousSchema_335;
 }
+
+export type AnonymousSchema_335 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -617,6 +672,40 @@ export interface HandOffResult {
 export interface AdoptIntoOffice {
   type: 'adoptIntoOffice';
   id: number;
+}
+
+export interface EditAgent {
+  type: 'editAgent';
+  id: number;
+  nickname?: string;
+  palette?: number;
+}
+
+export interface SetAgentRun {
+  type: 'setAgentRun';
+  id: number;
+  model?: string | null;
+  effort?: string | null;
+}
+
+export interface SetSupervision {
+  type: 'setSupervision';
+  id: number;
+  scope: AnonymousSchema_358;
+}
+
+export interface AnonymousSchema_358 {
+  kind: AnonymousSchema_359;
+  workspaceId?: string;
+  name?: string;
+}
+
+export type AnonymousSchema_359 = 'none' | 'workspace' | 'agents' | 'all';
+
+export interface SupervisionTeam {
+  type: 'supervisionTeam';
+  supervisorId: number;
+  members: string[];
 }
 
 export interface SaveAgentSeats {
@@ -738,6 +827,11 @@ export interface RequestDirectorySuggestions {
 
 export interface PickFolder {
   type: 'pickFolder';
+}
+
+export interface OpenPath {
+  type: 'openPath';
+  path: string;
 }
 
 export interface RequestDiagnostics {

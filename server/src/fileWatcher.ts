@@ -35,6 +35,7 @@ import { createAgentState } from './agentState.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import {
   CLEAR_IDLE_THRESHOLD_MS,
+  CONTEXT_SEED_TAIL_BYTES,
   EXTERNAL_ACTIVE_THRESHOLD_MS,
   EXTERNAL_SCAN_INTERVAL_MS,
   EXTERNAL_STALE_CHECK_INTERVAL_MS,
@@ -43,10 +44,12 @@ import {
   GLOBAL_SCAN_ACTIVE_MIN_SIZE,
   PROJECT_SCAN_INTERVAL_MS,
 } from './constants.js';
-import { seedContextUsage } from './contextUsage.js';
+import { contextUsageMessage, seedContextUsage } from './contextUsage.js';
 import type { DismissalTracker } from './dismissalTracker.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { pathsMatch } from './pathKey.js';
+import { endedWaiting, tailLines } from './resumeState.js';
+import { seedSessionSpend } from './sessionSpend.js';
 import type { SubagentWatch } from './subagentWatch.js';
 import { cancelPermissionTimer, cancelWaitingTimer, clearAgentActivity } from './timerManager.js';
 import { getHookProvider, processTranscriptLine } from './transcriptParser.js';
@@ -114,12 +117,29 @@ export function startFileWatching(
   // give an agent adopted or restored mid-session a context gauge without
   // replaying its whole transcript.
   seedContextUsage(agentId, agents, getHookProvider());
+  // The session's spend so far: the whole transcript up to here, in the
+  // background (from offset 0 the stream itself counts it).
+  void seedSessionSpend(agentId, agents, (id) => {
+    const seeded = agents.get(id);
+    if (seeded && seeded.contextTokens > 0) agents.broadcast(contextUsageMessage(id, seeded));
+  });
   // Same for its name and tasks. Only when the watch starts past the
   // beginning: from offset 0 the stream itself replays every record, and
   // seeding too would list each task twice.
   const watched = agents.get(agentId);
   if (watched && watched.fileOffset > 0 && seedIdentity(watched, watched.jsonlFile)) {
     agents.broadcast(identityMessage(agentId, watched));
+  }
+  // Picked up mid-session: if its turn had ended, it is "Terminó" (or "Te
+  // toca") again, not an idle agent that falls asleep.
+  if (
+    watched &&
+    watched.fileOffset > 0 &&
+    !watched.isWaiting &&
+    endedWaiting(tailLines(watched.jsonlFile, CONTEXT_SEED_TAIL_BYTES))
+  ) {
+    watched.isWaiting = true;
+    agents.broadcast({ type: 'agentStatus', id: agentId, status: 'waiting', awaitingInput: false });
   }
 
   // Single polling approach: reliable on all platforms (macOS, Linux, WSL2, Windows).

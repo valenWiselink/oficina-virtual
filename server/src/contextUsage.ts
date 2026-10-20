@@ -7,6 +7,7 @@ import {
   CONTEXT_WINDOW_TIERS,
   DEFAULT_MAX_CONTEXT_TOKENS,
 } from './constants.js';
+import { spendFields } from './sessionSpend.js';
 import type { AgentState } from './types.js';
 
 /**
@@ -83,12 +84,18 @@ function applyContextTokens(
   // genuinely changes the window, and the provider knows it while we're only
   // guessing from what we've seen.
   agent.maxContextTokens = widenContextWindow(tokens, declaredWindow ?? agent.maxContextTokens);
-  agents.broadcast({
+  agents.broadcast(contextUsageMessage(agentId, agent));
+}
+
+/** `agentContextUsage`: the gauge, plus the model and what the session spent. */
+export function contextUsageMessage(agentId: number, agent: AgentState): Record<string, unknown> {
+  return {
     type: 'agentContextUsage',
     id: agentId,
     contextTokens: agent.contextTokens,
     maxContextTokens: agent.maxContextTokens,
-  });
+    ...spendFields(agent),
+  };
 }
 
 /**

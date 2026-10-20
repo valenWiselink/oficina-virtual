@@ -136,6 +136,9 @@ components:
         - $ref: '#/components/schemas/AgentLaunchFailed'
         - $ref: '#/components/schemas/HandOffDone'
         - $ref: '#/components/schemas/AdoptDone'
+        - $ref: '#/components/schemas/AgentRunResult'
+        - $ref: '#/components/schemas/SupervisionResult'
+        - $ref: '#/components/schemas/AgentAppearance'
         - $ref: '#/components/schemas/DayLog'
         - $ref: '#/components/schemas/DayLogAppended'
         - $ref: '#/components/schemas/PrStatusChanged'
@@ -157,6 +160,10 @@ components:
         - $ref: '#/components/schemas/PermissionDecision'
         - $ref: '#/components/schemas/HandOffResult'
         - $ref: '#/components/schemas/AdoptIntoOffice'
+        - $ref: '#/components/schemas/EditAgent'
+        - $ref: '#/components/schemas/SetAgentRun'
+        - $ref: '#/components/schemas/SetSupervision'
+        - $ref: '#/components/schemas/SupervisionTeam'
         - $ref: '#/components/schemas/SaveAgentSeats'
         - $ref: '#/components/schemas/SaveLayout'
         - $ref: '#/components/schemas/SetSoundEnabled'
@@ -180,6 +187,7 @@ components:
         - $ref: '#/components/schemas/RemoveDirectory'
         - $ref: '#/components/schemas/RequestDirectorySuggestions'
         - $ref: '#/components/schemas/PickFolder'
+        - $ref: '#/components/schemas/OpenPath'
         - $ref: '#/components/schemas/RequestDiagnostics'
       discriminator: type
 
@@ -566,6 +574,36 @@ components:
           type: string
         gitBranch:
           type: string
+        entrypoint:
+          type: string
+          description: |
+            Where the session runs, as Claude Code records it: 'cli' (a
+            terminal, which the office can take over), 'claude-desktop' (the
+            desktop app, which keeps it), 'sdk-cli'...
+        effort:
+          type: string
+          description: |
+            Reasoning effort of the latest main-chain turn, as the transcript
+            records it ('low' ... 'max').
+        runModel:
+          type: string
+          description: Model chosen from the office (--model); absent = Claude Code's default.
+        runEffort:
+          type: string
+          description: Effort chosen from the office (--effort); absent = Claude Code's default.
+        canSetRun:
+          type: boolean
+          description: |
+            Runs in an office terminal, so setAgentRun can relaunch it with
+            another model or effort.
+        supervision:
+          $ref: '#/components/schemas/SupervisionScope'
+          description: Set when the agent is a supervisor - what it watches over.
+        supervisedBy:
+          type: array
+          items:
+            type: integer
+          description: Ids of the live supervisors watching over this agent (absent = none).
         repo:
           type: string
           description: Main repository folder (also for a git worktree).
@@ -654,6 +692,21 @@ components:
         contextTokens:
           type: integer
         maxContextTokens:
+          type: integer
+        model:
+          type: string
+          description: Model of the agent's newest turn (e.g. claude-opus-5-5).
+        spentInput:
+          type: integer
+          description: |
+            Session totals, summed once per API request since the session began:
+            uncached prompt tokens, cache reads, cache writes and output. Unlike
+            contextTokens they only grow.
+        spentCacheRead:
+          type: integer
+        spentCacheWrite:
+          type: integer
+        spentOutput:
           type: integer
 
     LayoutLoaded:
@@ -1218,6 +1271,77 @@ components:
         reason:
           type: string
 
+    AgentRunResult:
+      description: |
+        Outcome of setAgentRun: the agent's new id once relaunched, or why not
+        (in Spanish, for the office to show).
+      type: object
+      additionalProperties: false
+      required: [type, id, ok]
+      properties:
+        type:
+          const: agentRunResult
+        id:
+          type: integer
+        ok:
+          type: boolean
+        reason:
+          type: string
+        newId:
+          type: integer
+
+    SupervisionResult:
+      description: |
+        Outcome of setSupervision: the agent's new id once relaunched with (or
+        without) its supervisor tools, or why not (in Spanish).
+      type: object
+      additionalProperties: false
+      required: [type, id, ok]
+      properties:
+        type:
+          const: supervisionResult
+        id:
+          type: integer
+        ok:
+          type: boolean
+        reason:
+          type: string
+        newId:
+          type: integer
+
+    SupervisionScope:
+      description: |
+        What a supervisor agent watches over: a workspace of the browser (its
+        members come with supervisionTeam), agents picked by hand (same), or
+        every agent of the office (computed by the server).
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [workspace, agents, all]
+        workspaceId:
+          type: string
+        name:
+          type: string
+          description: The workspace's name, for the supervisor's role prompt.
+
+    AgentAppearance:
+      description: An agent's character colour changed (editAgent).
+      type: object
+      additionalProperties: false
+      required: [type, id, palette, hueShift]
+      properties:
+        type:
+          const: agentAppearance
+        id:
+          type: integer
+        palette:
+          type: integer
+        hueShift:
+          type: integer
+
     AdoptDone:
       description: Outcome of an adoptIntoOffice, sent to the office that asked.
       type: object
@@ -1509,6 +1633,101 @@ components:
           description: |
             First message for the agent (a template), passed to Claude Code as
             its initial prompt. Ignored on a resume.
+        model:
+          type: string
+          description: |
+            --model for the session: opus, sonnet, haiku, fable or a full
+            "claude-…" id. Absent = Claude Code's default. Kept for relaunches.
+        effort:
+          type: string
+          enum: [low, medium, high, xhigh, max]
+          description: --effort for the session. Absent = Claude Code's default.
+
+    EditAgent:
+      description: |
+        Rename and/or recolour any agent (the office's or an outside one).
+        nickname '' clears it (the label falls back to the session title);
+        a palette out of range is ignored and a new palette resets hueShift.
+        Kept across office restarts. Answered by agentIdentity and, for the
+        colour, agentAppearance to every office.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: editAgent
+        id:
+          type: integer
+        nickname:
+          type: string
+        palette:
+          type: integer
+
+    SetAgentRun:
+      description: |
+        Another model and/or effort for an agent in an office terminal: the
+        server closes it and resumes the same session with --model/--effort
+        (never /model, which would also change the user's default). null or
+        absent = Claude Code's default. Refused while the agent is working.
+        Answered with agentRunResult to this client only.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: setAgentRun
+        id:
+          type: integer
+        model:
+          type: [string, 'null']
+        effort:
+          type: [string, 'null']
+
+    SetSupervision:
+      description: |
+        Make an office-terminal agent a supervisor, change what it watches
+        over, or make it a plain agent again (kind none). The server relaunches
+        it with --resume plus its MCP config and role prompt (or without
+        them). Refused while it is working. Answered with supervisionResult to
+        this client only.
+      type: object
+      additionalProperties: false
+      required: [type, id, scope]
+      properties:
+        type:
+          const: setSupervision
+        id:
+          type: integer
+        scope:
+          type: object
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind:
+              type: string
+              enum: [none, workspace, agents, all]
+            workspaceId:
+              type: string
+            name:
+              type: string
+
+    SupervisionTeam:
+      description: |
+        The members (session ids) of a "workspace" or "agents" supervisor, as
+        the browser computes them (workspaces live there). Sent whenever they
+        change; ignored for "all" supervisors.
+      type: object
+      additionalProperties: false
+      required: [type, supervisorId, members]
+      properties:
+        type:
+          const: supervisionTeam
+        supervisorId:
+          type: integer
+        members:
+          type: array
+          items:
+            type: string
 
     FocusAgent:
       description: Focus an agent's terminal.
@@ -1840,6 +2059,20 @@ components:
       properties:
         type:
           const: pickFolder
+
+    OpenPath:
+      description: >-
+        A path clicked in an agent's terminal: an existing folder opens in the
+        host's file explorer, a file is shown selected in its folder (never
+        run). Anything that is not an existing absolute path is ignored.
+      type: object
+      additionalProperties: false
+      required: [type, path]
+      properties:
+        type:
+          const: openPath
+        path:
+          type: string
 
     RequestDirectorySuggestions:
       description: >-

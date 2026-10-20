@@ -348,18 +348,36 @@ const PARENT_SESSION_ENV = new Set([
   'AI_AGENT',
 ]);
 
+/**
+ * The environment an agent starts with: the server's, minus the parent
+ * Claude session's variables and Electron's. The desktop app runs this server
+ * with ELECTRON_RUN_AS_NODE=1; an agent inheriting it ran its hooks
+ * ("Oficina virtual.exe --oficina-hook …") as plain Node, which answered
+ * "bad option: --oficina-hook" on every hook (measured 2026-10-20). Undefined
+ * values go too: the PTY env must be all-strings.
+ */
+export function agentEnv(parent: NodeJS.ProcessEnv): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parent)) {
+    if (
+      value === undefined ||
+      PARENT_SESSION_ENV.has(key) ||
+      key.toUpperCase().startsWith('ELECTRON_')
+    ) {
+      continue;
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
 function spawnPty(
   module: PtyModule,
   options: CreatePtySessionOptions,
   cols: number,
   rows: number,
 ): IPty {
-  // Drop undefined values: process.env is `string | undefined`-valued, but the
-  // PTY env must be all-strings.
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && !PARENT_SESSION_ENV.has(key)) env[key] = value;
-  }
+  const env = agentEnv(process.env);
   Object.assign(env, options.env ?? {}, { TERM: TERMINAL_TERM_NAME });
 
   return module.spawn(options.command, options.args, {

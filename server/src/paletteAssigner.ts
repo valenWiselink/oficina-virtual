@@ -6,6 +6,7 @@
  */
 
 import { pickDiversePalette } from '../../core/src/paletteUtils.js';
+import { applySavedLook } from './agentLooks.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import { PALETTE_COUNT } from './constants.js';
 import type { AgentState } from './types.js';
@@ -33,6 +34,8 @@ export function setPaletteCount(count: number): void {
  * @param store - The agent state store (used to count existing palettes)
  */
 export function assignPaletteIfNeeded(agent: AgentState, store: AgentStateStore): void {
+  // A name and colour chosen in the office for this session ("Editar") win.
+  applySavedLook(agent);
   if (agent.palette !== undefined) return;
 
   const count = currentPaletteCount;

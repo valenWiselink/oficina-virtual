@@ -62,6 +62,13 @@ describe('observeIdentity', () => {
     expect(observeIdentity(agent, { type: 'user', cwd: 'F:\\repo' })).toBe(false);
   });
 
+  it('knows where the session runs (a terminal or the desktop app)', () => {
+    const agent = blank();
+    expect(observeIdentity(agent, { type: 'user', entrypoint: 'claude-desktop' })).toBe(true);
+    expect(agent.entrypoint).toBe('claude-desktop');
+    expect(identityMessage(1, agent).entrypoint).toBe('claude-desktop');
+  });
+
   it('builds the task list from TaskCreate / result id / TaskUpdate', () => {
     const agent = blank();
     observeIdentity(agent, taskCreate('tu1', 'Arreglar checkout', 'Arreglando el checkout'));
@@ -267,5 +274,22 @@ describe('background work', () => {
       },
     });
     expect(identityMessage(1, agent).backgroundTasks).toBe(0);
+  });
+});
+
+describe('effort', () => {
+  it("takes the effort of the main chain's turns, not a subagent's", () => {
+    const agent = blank();
+    const turn = (effort: string, isSidechain = false) => ({
+      type: 'assistant',
+      effort,
+      isSidechain,
+      message: { content: [] },
+    });
+    expect(observeIdentity(agent, turn('high'))).toBe(true);
+    expect(agent.effort).toBe('high');
+    observeIdentity(agent, turn('low', true));
+    expect(agent.effort).toBe('high');
+    expect(identityMessage(1, agent)).toMatchObject({ effort: 'high' });
   });
 });
