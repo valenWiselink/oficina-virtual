@@ -7,6 +7,7 @@ import type { AgentStateStore } from './agentStateStore.js';
 import { TEXT_IDLE_DELAY_MS, TOOL_DONE_DELAY_MS } from './constants.js';
 import { updateContextUsage } from './contextUsage.js';
 import { fileOpOf } from './fileLinks.js';
+import { isSyntheticUser } from './resumeState.js';
 import { updateSessionSpend } from './sessionSpend.js';
 import { hasInlineTeammates, hasPromotedBackgroundAgent } from './teamUtils.js';
 import {
@@ -275,6 +276,9 @@ export function processTranscriptLine(
       );
     } else if (record.type === 'progress') {
       processProgressRecord(agentId, record, agents, waitingTimers, permissionTimers);
+    } else if (record.type === 'user' && isSyntheticUser(record)) {
+      // Written by Claude Code, not typed: an idle compaction would otherwise
+      // turn a finished agent into "Pensando…" with nothing running.
     } else if (record.type === 'user') {
       const content = record.message?.content ?? record.content;
       if (Array.isArray(content)) {

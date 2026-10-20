@@ -7,6 +7,7 @@ import {
   inWorkspace,
   moveWorkspace,
   needsByWorkspace,
+  folderOf,
   newcomersToAssign,
   withoutWorkspace,
   workspaceOf,
@@ -85,14 +86,23 @@ describe('bookkeeping', () => {
     expect(followKeys({ nombre: 'per' }, moved)).toEqual({ 'sesion-uuid': 'per' });
   });
 
-  it('an agent launched while a workspace is on screen joins it', () => {
-    const s = state({ current: 'per' });
+  it('an agent you launched joins the workspace you launched it from', () => {
+    const launch = { folder: 'WebApp', workspaceId: 'per' };
     const agents = [agent(1, 'viejo', 'webapp'), agent(2, 'nuevo', 'webapp')];
-    expect(newcomersToAssign(new Set([1]), agents, s)).toEqual([
-      { key: 'nuevo', workspaceId: 'per' },
-    ]);
-    expect(newcomersToAssign(null, agents, s)).toEqual([]);
-    expect(newcomersToAssign(new Set([1]), agents, state())).toEqual([]);
+    expect(newcomersToAssign(new Set([1]), agents, [launch])).toEqual([{ key: 'nuevo', launch }]);
+    expect(newcomersToAssign(null, agents, [launch])).toEqual([]);
+  });
+
+  it('agents that only come back (a restart) stay where they were', () => {
+    const agents = [agent(1, 'a', 'webapp'), agent(2, 'b', 'oficina-virtual')];
+    expect(newcomersToAssign(new Set(), agents, [])).toEqual([]);
+    const launch = { folder: 'webapp', workspaceId: 'per' };
+    expect(newcomersToAssign(new Set(), agents, [launch])).toEqual([{ key: 'a', launch }]);
+  });
+
+  it('names a folder by its last segment', () => {
+    expect(folderOf('F:\\proyectos\\Wiselink\\webapp\\')).toBe('webapp');
+    expect(folderOf('/home/x/oficina-virtual')).toBe('oficina-virtual');
   });
 });
 

@@ -9,7 +9,14 @@ import {
   workspaceOf,
   type WorkspaceState,
 } from './workspaceRules.js';
-import { assignAgent, followAgentKeys, useWorkspaces, workspaceState } from './workspaceStore.js';
+import {
+  assignAgent,
+  claimLaunch,
+  followAgentKeys,
+  pendingLaunches,
+  useWorkspaces,
+  workspaceState,
+} from './workspaceStore.js';
 
 export interface WorkspaceViews {
   state: WorkspaceState;
@@ -24,7 +31,7 @@ export interface WorkspaceViews {
 /**
  * The agents of the workspace on screen, and the bookkeeping that keeps
  * workspaces right as agents come and go: an agent launched while a
- * workspace is on screen joins it, and a manual assignment follows an agent
+ * workspace is on screen (from the office) joins it, and a manual assignment follows an agent
  * whose key changes (its session id arriving after its name).
  */
 export function useWorkspaceViews(views: AgentView[]): WorkspaceViews {
@@ -36,8 +43,11 @@ export function useWorkspaceViews(views: AgentView[]): WorkspaceViews {
     seen.current = new Map(views.map((v) => [v.id, v.key]));
     followAgentKeys(changedKeys(before, views));
     const ids = before ? new Set(before.keys()) : null;
-    for (const n of newcomersToAssign(ids, views, workspaceState())) {
-      assignAgent(n.key, n.workspaceId);
+    for (const n of newcomersToAssign(ids, views, pendingLaunches())) {
+      claimLaunch(n.launch);
+      if (workspaceState().workspaces.some((w) => w.id === n.launch.workspaceId)) {
+        assignAgent(n.key, n.launch.workspaceId);
+      }
     }
     // The signature is what changes: views is a new array every render.
   }, [signature]); // eslint-disable-line react-hooks/exhaustive-deps

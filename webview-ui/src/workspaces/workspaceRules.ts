@@ -122,20 +122,47 @@ export function followKeys(
   return next;
 }
 
+/** An agent you launched from the office while a workspace was on screen. */
+export interface Launch {
+  /** Folder name (last path segment) it was launched in. */
+  folder: string;
+  workspaceId: string;
+}
+
+/** The folder name of a path, as workspaces and agents name folders. */
+export function folderOf(path: string): string {
+  return (
+    path
+      .replace(/[\\/]+$/, '')
+      .split(/[\\/]/)
+      .pop() ?? path
+  );
+}
+
 /**
- * Agents that just appeared (not in `before`) while a workspace is on screen
- * join it, even when a folder rule would put them elsewhere: you launched
- * them there. The first look (`before` null) and ALL assign nobody.
+ * Agents that just appeared (not in `before`) and match one of your launches
+ * join the workspace you launched them from, even when a folder rule would
+ * put them elsewhere. Agents that only come back (the office restarted, a
+ * session resumed) match no launch and stay where they were — measured
+ * 2026-10-20: the 1.0.4 restart had piled every agent into the open
+ * workspace. The first look (`before` null) assigns nobody; each launch
+ * places one agent.
  */
 export function newcomersToAssign(
   before: ReadonlySet<number> | null,
   agents: ReadonlyArray<Placeable & { id: number }>,
-  state: WorkspaceState,
-): Array<{ key: string; workspaceId: string }> {
-  if (!before || state.current === ALL) return [];
-  return agents
-    .filter((a) => !before.has(a.id) && workspaceOf(a, state) !== state.current)
-    .map((a) => ({ key: a.key, workspaceId: state.current }));
+  launches: readonly Launch[],
+): Array<{ key: string; launch: Launch }> {
+  if (!before) return [];
+  const open = [...launches];
+  const placed: Array<{ key: string; launch: Launch }> = [];
+  for (const a of agents) {
+    if (before.has(a.id) || !a.dir) continue;
+    const at = open.findIndex((l) => sameFolder(l.folder, a.dir!));
+    if (at < 0) continue;
+    placed.push({ key: a.key, launch: open.splice(at, 1)[0] });
+  }
+  return placed;
 }
 
 /** Agents whose key changed since the last look (`before`: id → key). */

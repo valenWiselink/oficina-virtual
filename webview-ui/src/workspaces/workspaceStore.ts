@@ -2,7 +2,9 @@ import { useSyncExternalStore } from 'react';
 
 import {
   ALL,
+  folderOf,
   followKeys,
+  type Launch,
   moveWorkspace,
   withoutWorkspace,
   type Workspace,
@@ -106,6 +108,27 @@ export function followAgentKeys(moved: ReadonlyArray<{ from: string; to: string 
 
 export function workspaceState(): WorkspaceState {
   return state;
+}
+
+/** Launches from the office still waiting for their agent to show up. */
+const LAUNCH_TTL_MS = 5 * 60_000;
+let launches: Array<Launch & { at: number }> = [];
+
+/** You launched an agent in `directoryPath`: it joins the workspace on screen. */
+export function noteLaunch(directoryPath: string): void {
+  if (state.current === ALL) return;
+  launches.push({ folder: folderOf(directoryPath), workspaceId: state.current, at: Date.now() });
+}
+
+export function pendingLaunches(): Launch[] {
+  const now = Date.now();
+  launches = launches.filter((l) => now - l.at < LAUNCH_TTL_MS);
+  return launches;
+}
+
+/** The launch found its agent. */
+export function claimLaunch(launch: Launch): void {
+  launches = launches.filter((l) => l !== launch);
 }
 
 function subscribe(listener: () => void): () => void {

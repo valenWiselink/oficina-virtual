@@ -18,6 +18,18 @@ const NEUTRAL = new Set([
   'queue-operation',
 ]);
 
+/** A user record Claude Code writes itself, not a prompt: the summary a
+ *  compaction leaves (even an idle one, with nobody typing), command caveats,
+ *  hook context. It starts no turn — measured 2026-10-20, idle compaction left
+ *  finished agents showing "Pensando…". */
+export function isSyntheticUser(r: {
+  isCompactSummary?: boolean;
+  isMeta?: boolean;
+  isVisibleInTranscriptOnly?: boolean;
+}): boolean {
+  return r.isCompactSummary === true || r.isMeta === true || r.isVisibleInTranscriptOnly === true;
+}
+
 /** True when the newest turn-relevant record of the main conversation closes
  *  a turn: a turn_duration, or an answer with no tool call pending. */
 export function endedWaiting(lines: readonly string[]): boolean {
@@ -29,6 +41,8 @@ export function endedWaiting(lines: readonly string[]): boolean {
       subtype?: string;
       isSidechain?: boolean;
       isMeta?: boolean;
+      isCompactSummary?: boolean;
+      isVisibleInTranscriptOnly?: boolean;
       message?: { content?: unknown };
     };
     try {
@@ -36,7 +50,7 @@ export function endedWaiting(lines: readonly string[]): boolean {
     } catch {
       continue;
     }
-    if (r.isSidechain === true || r.isMeta === true || !r.type || NEUTRAL.has(r.type)) continue;
+    if (r.isSidechain === true || isSyntheticUser(r) || !r.type || NEUTRAL.has(r.type)) continue;
     if (r.type === 'system') {
       if (r.subtype === 'turn_duration') return true;
       continue;

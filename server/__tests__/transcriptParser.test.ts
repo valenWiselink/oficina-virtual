@@ -349,3 +349,30 @@ describe('transcriptParser: teammate spawn results (new-harness implicit teams)'
     expect(agent.isTeamLead).toBeUndefined();
   });
 });
+
+describe('transcriptParser: records Claude Code writes itself', () => {
+  it('an idle compaction leaves a finished agent waiting, not "Pensando…"', () => {
+    setHookProvider(claudeProvider);
+    const agents = new AgentStateStore();
+    const agent = createTestAgent({ isWaiting: true });
+    agents.set(1, agent);
+    const statuses: unknown[] = [];
+    agents.on('broadcast', (msg) => {
+      const m = msg as { type: string; status?: string };
+      if (m.type === 'agentStatus') statuses.push(m.status);
+    });
+    const line = (r: object) =>
+      processTranscriptLine(1, JSON.stringify(r), agents, new Map(), new Map());
+    line({ type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted' });
+    line({
+      type: 'user',
+      isCompactSummary: true,
+      message: { content: 'This session is being continued…' },
+    });
+    line({ type: 'user', isMeta: true, message: { content: '<local-command-caveat>…' } });
+    expect(statuses).toEqual([]);
+    expect(agent.isWaiting).toBe(true);
+    line({ type: 'user', message: { content: 'corrélo vos' } });
+    expect(statuses).toEqual(['active']);
+  });
+});

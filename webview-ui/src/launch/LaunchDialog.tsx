@@ -8,6 +8,7 @@ import { Modal } from '../components/ui/Modal.js';
 import { TextInput } from '../components/ui/TextInput.js';
 import type { Directory } from '../hooks/useExtensionMessages.js';
 import { transport } from '../transport/index.js';
+import { noteLaunch } from '../workspaces/workspaceStore.js';
 import { ClawdColorPicker } from './ClawdColorPicker.js';
 import { CLAWD_COLOR_NAMES } from './clawdColors.js';
 import {
@@ -80,6 +81,7 @@ export function useLaunchDialog(taken: () => readonly TakenLook[]): {
       model: pending.model ?? undefined,
       effort: (pending.effort ?? undefined) as LaunchAgent['effort'],
     });
+    noteLaunch(pending.directory.path);
     setPending(null);
   };
 

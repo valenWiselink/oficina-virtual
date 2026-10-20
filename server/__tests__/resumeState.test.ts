@@ -39,4 +39,16 @@ describe('endedWaiting', () => {
     expect(endedWaiting(lines)).toBe(true);
     expect(endedWaiting([])).toBe(false);
   });
+
+  it('an idle compaction does not reopen a finished turn', () => {
+    expect(
+      endedWaiting([
+        answer([{ type: 'text' }]),
+        rec({ type: 'system', subtype: 'compact_boundary' }),
+        rec({ type: 'user', isCompactSummary: true, message: { content: 'This session…' } }),
+        rec({ type: 'attachment' }),
+        rec({ type: 'system', subtype: 'informational' }),
+      ]),
+    ).toBe(true);
+  });
 });
