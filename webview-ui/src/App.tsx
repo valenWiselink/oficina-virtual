@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
+import { useEditAgent } from './agents/useEditAgent.js';
+import { useSupervisionSync } from './agents/useSupervisionSync.js';
 import { BroadcastDialog } from './command/BroadcastDialog.js';
 import { CommandPalette } from './command/CommandPalette.js';
 import { useCommandPaletteShortcut } from './command/usePaletteShortcut.js';
@@ -29,6 +31,7 @@ import { useTerminalDock } from './hooks/useTerminalDock.js';
 import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { markYourTurnDone } from './identity/yourTurnStore.js';
 import { useLaunchDialog } from './launch/LaunchDialog.js';
+import type { TakenLook } from './launch/launchMemory.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
 import { playCheerSound } from './notificationSound.js';
@@ -51,6 +54,7 @@ import { useNeedsYouSignals } from './views/useNeedsYouSignals.js';
 import { useOfficeKeys } from './views/useOfficeKeys.js';
 import { useOfficeView } from './views/useOfficeView.js';
 import { useWorkspaceLayer } from './workspaces/useWorkspaceLayer.js';
+import { useWorkspaces } from './workspaces/workspaceStore.js';
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null };
@@ -160,8 +164,11 @@ function App() {
     dock: terminalDock,
   });
 
-  // Every launch (desktop drawer and mobile bar) asks name and colour first.
-  const { requestLaunch, launchDialog } = useLaunchDialog();
+  // Every launch (desktop drawer and mobile bar) asks name and colour first,
+  // avoiding the names and colours already in the office (views come later).
+  const takenRef = useRef<() => TakenLook[]>(() => []);
+  const takenLooks = useCallback(() => takenRef.current(), []);
+  const { requestLaunch, launchDialog } = useLaunchDialog(takenLooks);
   const launchIntoDirectory = requestLaunch;
   const mobileShell = useMobileShell({
     getOfficeState,
@@ -220,6 +227,10 @@ function App() {
     agentStatuses,
   });
   kindRef.current = (id) => agentViews.find((v) => v.id === id)?.kind;
+  takenRef.current = () => agentViews.map((v) => ({ name: v.name, palette: v.palette }));
+  const workspaceState = useWorkspaces();
+  const { requestEdit, editDialog } = useEditAgent(agentViews);
+  useSupervisionSync(agentViews, workspaceState);
   useNeedsYouSignals(agentViews);
 
   const { reveal: revealTerminal } = terminalDrawer;
@@ -322,6 +333,7 @@ function App() {
         onAdopt: terminalAvailable ? requestAdopt : undefined,
         onHandOff: requestHandOff,
         onClose: handleCloseAgent,
+        onEdit: requestEdit,
         onYourTurnDone: (turnId) => {
           markYourTurnDone(turnId);
           const done = agentViews.find((v) => v.yourTurnId === turnId);
@@ -462,6 +474,7 @@ function App() {
           {terminalAvailable ? (
             <TerminalDrawer
               agentIds={terminalAgentIds}
+              onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
               tabIds={workspaces.tabIds}
               shownAgentId={terminalDrawer.shownAgentId}
               onSelectAgent={terminalDrawer.select}
@@ -485,6 +498,7 @@ function App() {
             !isDebugMode && (
               <AgentCardBar
                 agentIds={agents}
+                onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
                 focusedAgentId={focusedAgentId}
                 getAppearance={terminalDrawer.getAppearance}
                 labelFor={(id) => agentViews.find((v) => v.id === id)?.name}
@@ -501,6 +515,7 @@ function App() {
       {workspaces.dialog}
       {handOffDialog}
       {adoptDialog}
+      {editDialog}
       <LaunchFailedNotice />
       {!isMobile && !officeReadOnly && (
         <>

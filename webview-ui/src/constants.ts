@@ -878,6 +878,23 @@ export const CLAWD_PROP_COLORS = {
   mugEdge: '#bdb2a4',
   coffee: '#6b4228',
 } as const;
+/** A supervisor's tie (graphDraw.ts), and the dashed line to its team. */
+export const CLAWD_BOSS_COLORS = {
+  tie: '#2f4a7a',
+  knot: '#1f3357',
+  collar: '#f6f1ea',
+  link: 'rgba(47, 74, 122, 0.55)',
+} as const;
+/** How hard a Clawd works (clawdLook.ts): the headband from "alto" up, a drop
+ *  of sweat from "muy alto", and the flame around his bubble at "máximo". */
+export const CLAWD_EFFORT_COLORS = {
+  band: '#d8433f',
+  bandDark: '#9e2b28',
+  sweat: '#7cc6f2',
+  flame: '#ff8a2a',
+  flameCore: '#ffd166',
+  clear: 'rgba(255, 138, 42, 0)',
+} as const;
 /** What you dress each Clawd in (clawdOutfits.ts): mid-tones with a darker
  *  edge so they read on light and dark paper alike; nothing amber (that is
  *  "needs you"). Plus the watch an impatient Clawd checks. */

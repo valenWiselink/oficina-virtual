@@ -50,6 +50,8 @@ interface TerminalDrawerProps {
   /** The terminal kept beside the active one, if any. */
   pinnedId: number | null;
   onTogglePin: (agentId: number) => void;
+  /** The "+" tile under the tabs: a new agent, like "+ Agente". */
+  onNewAgent?: () => void;
 }
 
 /** Per dock: layout of [cards, panel] (cards always face the office), the
@@ -152,6 +154,7 @@ export function TerminalDrawer(props: TerminalDrawerProps) {
     <div className={`shrink-0 flex ${layout.box}`}>
       <AgentCardBar
         agentIds={props.tabIds ?? agentIds}
+        onNewAgent={props.onNewAgent}
         activeAgentId={shownAgentId}
         orientation={vertical ? 'horizontal' : 'vertical'}
         getAppearance={props.getAppearance}

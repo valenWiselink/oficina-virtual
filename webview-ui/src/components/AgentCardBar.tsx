@@ -20,6 +20,9 @@ interface AgentCardBarProps {
   statusFor: (agentId: number) => TabStatus | null;
   onSelect: (agentId: number) => void;
   onClose: (agentId: number) => void;
+  /** A dashed "+" tile after the cards, like "+ Agente" (it joins the
+   *  workspace on screen). */
+  onNewAgent?: () => void;
 }
 
 /**
@@ -42,8 +45,9 @@ export function AgentCardBar({
   statusFor,
   onSelect,
   onClose,
+  onNewAgent,
 }: AgentCardBarProps) {
-  if (agentIds.length === 0) return null;
+  if (agentIds.length === 0 && !onNewAgent) return null;
   const row = orientation === 'horizontal';
 
   return (
@@ -72,6 +76,19 @@ export function AgentCardBar({
           />
         ))}
       </div>
+      {onNewAgent && (
+        <button
+          type="button"
+          onClick={onNewAgent}
+          title="Nuevo agente"
+          aria-label="Nuevo agente"
+          className="shrink-0 w-52 h-52 rounded-xl border-2 border-dashed border-border bg-transparent text-text-muted hover:text-accent hover:border-accent cursor-pointer flex items-center justify-center transition-colors"
+        >
+          <span className="material-symbols-sharp text-2xl" aria-hidden="true">
+            add
+          </span>
+        </button>
+      )}
     </div>
   );
 }

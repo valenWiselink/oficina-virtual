@@ -1192,11 +1192,33 @@ export class OfficeState {
     ch.isHeadless = headless;
   }
 
-  setAgentContext(id: number, contextTokens: number, maxContextTokens: number): void {
+  setAgentContext(
+    id: number,
+    contextTokens: number,
+    maxContextTokens: number,
+    usage: Pick<Character, 'model' | 'spend'> = {},
+  ): void {
     const ch = this.characters.get(id);
     if (!ch) return;
     ch.contextTokens = contextTokens;
     ch.maxContextTokens = maxContextTokens;
+    if (usage.model) ch.model = usage.model;
+    if (usage.spend) ch.spend = usage.spend;
+  }
+
+  /** A new colour for an agent ("Editar"); its sub-agents take it too. */
+  setAgentAppearance(id: number, palette: number, hueShift: number): void {
+    const ch = this.characters.get(id);
+    if (!ch) return;
+    ch.palette = palette;
+    ch.hueShift = hueShift;
+    for (const [subId, meta] of this.subagentMeta) {
+      const sub = meta.parentAgentId === id ? this.characters.get(subId) : undefined;
+      if (sub) {
+        sub.palette = palette;
+        sub.hueShift = hueShift;
+      }
+    }
   }
 
   update(dt: number): void {

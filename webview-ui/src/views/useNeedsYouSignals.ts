@@ -17,7 +17,8 @@ const NOTIFY_AFTER_MS = 30_000;
  * notice here is for the rest, once each, without extra sound.
  */
 export function useNeedsYouSignals(views: AgentView[]): void {
-  const needing = views.filter((v) => v.kind === 'needs');
+  // A supervised agent's needs come to you through its supervisor.
+  const needing = views.filter((v) => v.kind === 'needs' && v.supervisedBy.length === 0);
   const count = needing.length;
 
   useEffect(() => {

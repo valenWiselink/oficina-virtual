@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react';
 import {
   ALL,
   followKeys,
+  moveWorkspace,
   withoutWorkspace,
   type Workspace,
   type WorkspaceState,
@@ -74,6 +75,13 @@ export function updateWorkspace(id: string, changes: { name: string; folders: st
 
 export function deleteWorkspace(id: string): void {
   commit(withoutWorkspace(state, id));
+}
+
+/** Reorder the tabs: `id` goes just before `beforeId` (null: last). */
+export function reorderWorkspace(id: string, beforeId: string | null): void {
+  const workspaces = moveWorkspace(state.workspaces, id, beforeId);
+  if (workspaces.every((w, i) => w === state.workspaces[i])) return;
+  commit({ ...state, workspaces });
 }
 
 export function selectWorkspace(id: string): void {

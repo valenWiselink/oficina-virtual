@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button.js';
 import { useAppTheme } from '../effects/appTheme.js';
 import { useCalmMode } from '../effects/calmMode.js';
 import { useDayTint } from '../effects/dayTint.js';
+import { useWorkspaces } from '../workspaces/workspaceStore.js';
 import type { AgentView } from './agentViews.js';
 import { type BoardActions, BoardCard } from './BoardCard.js';
 import { onCelebration } from './celebrate.js';
@@ -29,6 +30,7 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
   const tint = useDayTint();
   const theme = useAppTheme();
   const lifeRef = useRef(new ClawdLife());
+  const { current: workspace } = useWorkspaces();
   const [slow, setSlow] = useState(false);
   const hasPins = useHasPins();
 
@@ -39,6 +41,7 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
     tint,
     theme,
     life: lifeRef.current,
+    cameraKey: workspace,
     onSelect: (id) => {
       setSelectedId(id);
       if (id === null) return;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ClaudeStatus, HooksConsentRequest } from '../../../core/src/messages.js';
+import { isSupervised } from '../identity/identityStore.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
 import { reconcileExistingAgents } from '../office/engine/existingAgents.js';
@@ -556,7 +557,8 @@ export function useExtensionMessages(
         os.setAgentActive(id, status === 'active');
         if (status === 'waiting') {
           os.showWaitingBubble(id, msg.awaitingInput === true);
-          playDoneSound();
+          // A supervised agent's news reaches you through its supervisor.
+          if (!isSupervised(id)) playDoneSound();
         }
       } else if (msg.type === 'agentToolPermission') {
         const id = msg.id as number;
@@ -569,7 +571,7 @@ export function useExtensionMessages(
           };
         });
         os.showPermissionBubble(id);
-        playPermissionSound();
+        if (!isSupervised(id)) playPermissionSound();
       } else if (msg.type === 'subagentToolPermission') {
         const id = msg.id as number;
         const parentToolId = msg.parentToolId as string;
@@ -831,7 +833,21 @@ export function useExtensionMessages(
         );
       } else if (msg.type === 'agentContextUsage') {
         const id = msg.id as number;
-        os.setAgentContext(id, msg.contextTokens as number, msg.maxContextTokens as number);
+        const spent = msg.spentInput !== undefined;
+        os.setAgentContext(id, msg.contextTokens as number, msg.maxContextTokens as number, {
+          model: msg.model as string | undefined,
+          spend: spent
+            ? {
+                input: msg.spentInput as number,
+                cacheRead: (msg.spentCacheRead as number) ?? 0,
+                cacheWrite: (msg.spentCacheWrite as number) ?? 0,
+                output: (msg.spentOutput as number) ?? 0,
+              }
+            : undefined,
+        });
+      } else if (msg.type === 'agentAppearance') {
+        // Recoloured from "Editar" (here or in another office).
+        os.setAgentAppearance(msg.id as number, msg.palette as number, msg.hueShift as number);
       }
     };
     const unsubscribe = transport.onMessage(handler);

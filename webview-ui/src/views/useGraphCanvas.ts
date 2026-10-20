@@ -42,7 +42,13 @@ interface GraphInputs {
   onSelect: (id: number | null) => void;
   /** Sustained slow frames: effects went off; tell the user. */
   onSlow: () => void;
+  /** Whose camera this is (the workspace on screen): each keeps its own. */
+  cameraKey: string;
 }
+
+/** Each workspace's zoom and position, kept while the office is open (also
+ *  across switching to the board and back). */
+const savedCameras = new Map<string, { cam: Camera; autoFit: boolean }>();
 
 type Box = { x: number; y: number; w: number; h: number };
 const inBox = (b: Box | null, x: number, y: number) =>
@@ -83,6 +89,17 @@ export function useGraphCanvas(
     let cam: Camera = { x: 0, y: 0, zoom: 1 };
     let target: Camera | null = null;
     let autoFit = true;
+    let cameraKey = inputsRef.current.cameraKey;
+    /** Put the camera of `key` on: its saved one, else fit the new content. */
+    const restoreCamera = (key: string) => {
+      const saved = savedCameras.get(key);
+      cameraKey = key;
+      target = null;
+      autoFit = saved?.autoFit ?? true;
+      if (saved) cam = saved.cam;
+    };
+    const saveCamera = () => savedCameras.set(cameraKey, { cam, autoFit });
+    restoreCamera(cameraKey);
     let detail = false;
     let out: SceneOut | null = null;
     let minimap: Box | null = null;
@@ -140,6 +157,10 @@ export function useGraphCanvas(
       const dt = Math.min(0.05, ms / 1000);
       t += dt;
       const { views, selectedId, calm, life, tint, theme } = inputsRef.current;
+      if (inputsRef.current.cameraKey !== cameraKey) {
+        saveCamera();
+        restoreCamera(inputsRef.current.cameraKey);
+      }
       if (theme !== themeShown) {
         themeShown = theme;
         th = readTheme();
@@ -296,6 +317,7 @@ export function useGraphCanvas(
     };
 
     return () => {
+      saveCamera();
       cancelAnimationFrame(raf);
       observer.disconnect();
       canvas.removeEventListener('wheel', onWheel);

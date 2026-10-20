@@ -16,6 +16,7 @@ import {
 import { registerAgentInput } from '../terminal/agentInput.js';
 import { attachClipboardInput } from '../terminal/clipboardInput.js';
 import { zoomTerminalFont } from '../terminal/fontZoom.js';
+import { findWindowsPaths } from '../terminal/pathLinks.js';
 import { attachPromptMarks } from '../terminal/promptMarks.js';
 import {
   attachSearch,
@@ -28,6 +29,7 @@ import { isTypingInTerminal } from '../terminal/terminalDom.js';
 import { terminalLinkOpener } from '../terminal/terminalLinks.js';
 import { useTerminalColorize, useTerminalScheme } from '../terminal/terminalLook.js';
 import { attachTouchInput } from '../terminal/touchInput.js';
+import { transport } from '../transport/index.js';
 
 interface TerminalPaneProps {
   agentId: number;
@@ -141,6 +143,19 @@ export function TerminalPane({
     term.loadAddon(fit);
     // Plain URLs printed as text (most of what an agent prints) become clickable.
     term.loadAddon(new WebLinksAddon(openLink, { urlRegex: TERMINAL_URL_PATTERN }));
+    // Windows paths too: a click shows them in the Explorer (never runs them).
+    term.registerLinkProvider({
+      provideLinks: (y, callback) => {
+        const line = term.buffer.active.getLine(y - 1)?.translateToString(true) ?? '';
+        const links = findWindowsPaths(line).map((m) => ({
+          range: { start: { x: m.start + 1, y }, end: { x: m.end, y } },
+          text: m.text,
+          decorations: { underline: true, pointerCursor: true },
+          activate: () => transport.send({ type: 'openPath', path: m.text }),
+        }));
+        callback(links.length > 0 ? links : undefined);
+      },
+    });
     const search = attachSearch(term, () => schemeRef.current.search);
     registerSearchRef.current?.(agentId, search.handle);
     termRef.current = term;
@@ -329,6 +344,9 @@ export function TerminalPane({
           // global `* { font-pixel }` base rule. Fed from the same constant
           // xterm measures its cell grid with, so CSS can't drift from metrics.
           '--font-terminal': TERMINAL_FONT_FAMILY,
+          // The scrollbar thumb is drawn from the scheme's text colour, so it
+          // shows on light and dark schemes alike (index.css).
+          '--terminal-fg': scheme.theme.foreground,
         } as CSSProperties
       }
     />

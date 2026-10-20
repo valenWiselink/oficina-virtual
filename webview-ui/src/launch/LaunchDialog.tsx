@@ -1,5 +1,8 @@
 import { useCallback, useState } from 'react';
 
+import type { LaunchAgent } from '../../../core/src/messages.js';
+import { EFFORT_CHOICES, MODEL_CHOICES } from '../agents/agentEdits.js';
+import { Choices } from '../agents/Choices.js';
 import { Button } from '../components/ui/Button.js';
 import { Modal } from '../components/ui/Modal.js';
 import { TextInput } from '../components/ui/TextInput.js';
@@ -7,7 +10,12 @@ import type { Directory } from '../hooks/useExtensionMessages.js';
 import { transport } from '../transport/index.js';
 import { ClawdColorPicker } from './ClawdColorPicker.js';
 import { CLAWD_COLOR_NAMES } from './clawdColors.js';
-import { recallLaunchChoice, rememberLaunchChoice } from './launchMemory.js';
+import {
+  freshLaunchChoice,
+  recallLaunchChoice,
+  rememberLaunchChoice,
+  type TakenLook,
+} from './launchMemory.js';
 import { NicknameDice } from './NicknameDice.js';
 import { TemplatePicker } from './TemplatePicker.js';
 
@@ -15,6 +23,8 @@ interface PendingLaunch {
   directory: Directory;
   nickname: string;
   palette: number;
+  model: string | null;
+  effort: string | null;
   /** First message (a template's, edited or not). */
   prompt: string;
   template: string;
@@ -22,30 +32,44 @@ interface PendingLaunch {
 
 /**
  * Every launch goes through a small dialog: the agent's name and colour,
- * pre-filled with what was chosen last time in that folder. Returns the
- * function that starts it and the dialog to render.
+ * pre-filled with what was chosen last time in that folder (numbered and in
+ * another colour when an agent in the office already has them, see
+ * freshLaunchChoice). Returns the function that starts it and the dialog.
  */
-export function useLaunchDialog(): {
+export function useLaunchDialog(taken: () => readonly TakenLook[]): {
   requestLaunch: (directory: Directory) => void;
   launchDialog: React.ReactNode;
 } {
   const [pending, setPending] = useState<PendingLaunch | null>(null);
 
-  const requestLaunch = useCallback((directory: Directory) => {
-    const last = recallLaunchChoice(directory.path);
-    setPending({
-      directory,
-      nickname: last?.nickname ?? '',
-      palette: last && last.palette < CLAWD_COLOR_NAMES.length ? last.palette : 0,
-      prompt: '',
-      template: 'nada',
-    });
-  }, []);
+  const requestLaunch = useCallback(
+    (directory: Directory) => {
+      const start = freshLaunchChoice(
+        recallLaunchChoice(directory.path),
+        taken(),
+        CLAWD_COLOR_NAMES.length,
+      );
+      setPending({
+        directory,
+        ...start,
+        model: start.model ?? null,
+        effort: start.effort ?? null,
+        prompt: '',
+        template: 'nada',
+      });
+    },
+    [taken],
+  );
 
   const launch = (): void => {
     if (!pending) return;
     const nickname = pending.nickname.trim();
-    rememberLaunchChoice(pending.directory.path, { nickname, palette: pending.palette });
+    rememberLaunchChoice(pending.directory.path, {
+      nickname,
+      palette: pending.palette,
+      model: pending.model,
+      effort: pending.effort,
+    });
     transport.send({
       type: 'launchAgent',
       directoryPath: pending.directory.path,
@@ -53,6 +77,8 @@ export function useLaunchDialog(): {
       palette: pending.palette,
       hueShift: 0,
       prompt: pending.prompt.trim() || undefined,
+      model: pending.model ?? undefined,
+      effort: (pending.effort ?? undefined) as LaunchAgent['effort'],
     });
     setPending(null);
   };
@@ -122,6 +148,19 @@ export function useLaunchDialog(): {
           <ClawdColorPicker
             value={pending.palette}
             onChange={(palette) => setPending({ ...pending, palette })}
+          />
+
+          <Choices
+            legend="Modelo"
+            choices={MODEL_CHOICES}
+            value={pending.model}
+            onChange={(model) => setPending({ ...pending, model })}
+          />
+          <Choices
+            legend="Esfuerzo"
+            choices={EFFORT_CHOICES}
+            value={pending.effort}
+            onChange={(effort) => setPending({ ...pending, effort })}
           />
 
           <div className="flex gap-8 justify-end pt-4">

@@ -14,6 +14,11 @@ transport.onMessage((msg) => {
   else if (msg.type === 'agentClosed') identities.delete(msg.id);
 });
 
+/** A supervisor watches over it: its pings go through the supervisor. */
+export function isSupervised(id: number | undefined): boolean {
+  return id !== undefined && (identities.get(id)?.supervisedBy?.length ?? 0) > 0;
+}
+
 export function getIdentity(id: number): AgentIdentity | undefined {
   return identities.get(id);
 }

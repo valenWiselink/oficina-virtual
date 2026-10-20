@@ -1,9 +1,10 @@
 import type { PaneMode } from '../chat/chatMode.js';
-import { CLAWD_BODY_COLORS } from '../constants.js';
 import { useNow } from '../hooks/useNow.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
 import { type AgentView, KIND_COLOR, waitedFor } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
+import { clawdColor } from '../views/clawdColor.js';
+import { modelShortName, usageDetail } from '../views/usageText.js';
 import { Button } from './ui/Button.js';
 
 /** Height of a terminal's header strip, in px. */
@@ -44,7 +45,7 @@ export function TerminalHeader({
   onModeChange,
 }: TerminalHeaderProps) {
   const now = useNow();
-  const color = view ? CLAWD_BODY_COLORS[view.palette % CLAWD_BODY_COLORS.length] : undefined;
+  const color = view ? clawdColor(view.palette, view.hueShift) : undefined;
   return (
     <div
       className="flex items-center gap-6 px-8 bg-bg border-b border-border min-w-0"
@@ -65,7 +66,7 @@ export function TerminalHeader({
           {view?.waitingSince !== undefined && ` · te espera ${waitedFor(view.waitingSince, now)}`}
         </span>
       </div>
-      {view?.contextPct !== undefined && <ContextMeter pct={view.contextPct} />}
+      {view && (view.contextPct !== undefined || view.model) && <ContextMeter view={view} />}
       <HeaderActions view={view} actions={actions} />
       <div className="flex rounded-lg bg-bg-thumb p-1 shrink-0" role="group" aria-label="Ver como">
         {(['chat', 'terminal'] as const).map((m) => (
@@ -138,19 +139,34 @@ function HeaderActions({ view, actions }: { view?: AgentView; actions: BoardActi
 }
 
 /** Context used: grey, red only from 90% (amber would claim it needs you). */
-function ContextMeter({ pct }: { pct: number }) {
+/** Model and context at a glance ("Opus 5.5 ▬▬ 14%"); the tooltip spells out
+ *  the window and what the session read and wrote. */
+function ContextMeter({ view }: { view: AgentView }) {
+  const pct = view.contextPct;
+  const detail = usageDetail(view);
   return (
     <span
-      className="w-40 h-4 rounded-full bg-bg-thumb overflow-hidden shrink-0"
-      title={`Contexto usado: ${pct}%`}
+      className="flex items-center gap-5 shrink-0 text-2xs text-text-muted cursor-default"
+      title={detail}
+      aria-label={detail}
     >
-      <span
-        className="block h-full rounded-full"
-        style={{
-          width: `${Math.min(100, pct)}%`,
-          background: pct >= 90 ? 'var(--color-danger)' : 'var(--color-text-muted)',
-        }}
-      />
+      {view.model && <span className="font-semibold">{modelShortName(view.model)}</span>}
+      {pct !== undefined && (
+        <>
+          <span className="w-40 h-4 rounded-full bg-bg-thumb overflow-hidden">
+            <span
+              className="block h-full rounded-full"
+              style={{
+                width: `${Math.min(100, pct)}%`,
+                background: pct >= 90 ? 'var(--color-danger)' : 'var(--color-text-muted)',
+              }}
+            />
+          </span>
+          <span className={`tabular-nums ${pct >= 90 ? 'text-danger font-semibold' : ''}`}>
+            {pct}%
+          </span>
+        </>
+      )}
     </span>
   );
 }

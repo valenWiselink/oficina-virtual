@@ -1,5 +1,10 @@
-import type { AgentIdentity, PermissionPending } from '../../../core/src/messages.js';
+import type {
+  AgentIdentity,
+  PermissionPending,
+  SupervisionScope,
+} from '../../../core/src/messages.js';
 import { statusText } from '../identity/statusText.js';
+import type { Spend } from './usageText.js';
 
 /** What an agent is doing, as the views show it. */
 export type AgentKind = 'needs' | 'meet' | 'research' | 'work' | 'think' | 'done' | 'idle';
@@ -51,6 +56,32 @@ export interface AgentView {
   progress?: string;
   /** 0-100, how much of the context window is used. */
   contextPct?: number;
+  /** The context in tokens and its window, for the detail line. */
+  contextTokens?: number;
+  maxContextTokens?: number;
+  /** Model of its newest turn (claude-opus-5-5). */
+  model?: string;
+  /** What its session spent so far (usageText.ts words it). */
+  spend?: Spend;
+  /** It runs in the Claude desktop app: the office shows it but can't bring
+   *  it in (no "Traer"). */
+  inClaudeApp?: boolean;
+  /** Effort of its newest turn, as the transcript says ("high"). */
+  effort?: string;
+  /** Model and effort chosen from the office (absent = Claude Code's default). */
+  runModel?: string;
+  runEffort?: string;
+  /** It runs in an office terminal, so its model and effort can be changed. */
+  canSetRun: boolean;
+  /** Set when it is a supervisor: what it watches over (a workspace, agents
+   *  picked by hand, or everyone). */
+  supervision?: SupervisionScope;
+  /** Ids of the supervisors watching over it (empty = none). */
+  supervisedBy: number[];
+  /** Their names, for the card ("Lo supervisa «Jefa»"). */
+  supervisorNames: string[];
+  /** For a supervisor: how many agents it watches over right now. */
+  teamSize: number;
   subagents: SubagentView[];
   /** The office owns its terminal (can type into it, pass results to it). */
   hasTerminal: boolean;
@@ -91,6 +122,8 @@ export interface CharacterFacts {
   bubbleType: 'permission' | 'waiting' | null;
   contextTokens: number;
   maxContextTokens: number;
+  model?: string;
+  spend?: Spend;
   agentName?: string;
   directoryName?: string;
 }
@@ -162,7 +195,7 @@ function liveTool(rows: ToolRow[] | undefined): ToolRow | undefined {
  * turn in progress); with none of it, the agent is idle — never guessed busy.
  */
 export function buildAgentViews(input: ViewInputs): AgentView[] {
-  return input.agentIds.flatMap((id) => {
+  const views: AgentView[] = input.agentIds.flatMap((id) => {
     const ch = input.characters.get(id);
     if (!ch) return [];
     const identity = input.identity(id);
@@ -260,6 +293,17 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
           ch.contextTokens > 0
             ? Math.round((ch.contextTokens / ch.maxContextTokens) * 100)
             : undefined,
+        contextTokens: ch.contextTokens > 0 ? ch.contextTokens : undefined,
+        maxContextTokens: ch.contextTokens > 0 ? ch.maxContextTokens : undefined,
+        model: ch.model,
+        spend: ch.spend,
+        inClaudeApp: identity?.entrypoint === 'claude-desktop',
+        effort: identity?.effort,
+        runModel: identity?.runModel,
+        runEffort: identity?.runEffort,
+        canSetRun: identity?.canSetRun === true,
+        supervision: identity?.supervision,
+        supervisedBy: identity?.supervisedBy ?? [],
         subagents: subs,
         hasTerminal: input.terminalAgentIds.includes(id),
         permission,
@@ -273,7 +317,20 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
         area: identity?.area,
         waitingSince: permission?.createdAt ?? (asksYou ? identity?.yourTurnAt : undefined),
         blocking: kind === 'needs' && !asksYou,
+        supervisorNames: [],
+        teamSize: 0,
       },
     ];
   });
+  return withSupervisionNames(views);
+}
+
+/** Who watches over each agent, by name, and how many each supervisor has. */
+function withSupervisionNames(views: AgentView[]): AgentView[] {
+  const nameOf = new Map(views.map((v) => [v.id, v.name]));
+  return views.map((v) => ({
+    ...v,
+    supervisorNames: v.supervisedBy.flatMap((id) => nameOf.get(id) ?? []),
+    teamSize: views.filter((o) => o.supervisedBy.includes(v.id)).length,
+  }));
 }

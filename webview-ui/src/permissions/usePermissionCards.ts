@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { TRANSPORT_STATE_CONNECTED } from '../../../core/src/constants.js';
 import type { PermissionPending } from '../../../core/src/messages.js';
+import { isSupervised } from '../identity/identityStore.js';
 import { transport } from '../transport/index.js';
 import { notifyWindows, requestNotificationPermissionOnFirstGesture } from './windowsNotify.js';
 
@@ -35,8 +36,11 @@ export function usePermissionCards(
         setCards((prev) =>
           prev.some((c) => c.requestId === msg.requestId) ? prev : [...prev, msg],
         );
-        const who = describeAgentRef.current(msg);
-        notifyWindows(`${who} necesita permiso`, msg.toolName, msg.requestId);
+        // A supervised agent's request reaches you through its supervisor.
+        if (!isSupervised(msg.id)) {
+          const who = describeAgentRef.current(msg);
+          notifyWindows(`${who} necesita permiso`, msg.toolName, msg.requestId);
+        }
       } else if (msg.type === 'permissionResolved') {
         setCards((prev) => prev.filter((c) => c.requestId !== msg.requestId));
       }

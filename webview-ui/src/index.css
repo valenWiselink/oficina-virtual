@@ -208,27 +208,33 @@
     -webkit-touch-callout: none;
   }
 
-  /* xterm's viewport owns the terminal's native scrollbar. Same pixel
-     treatment as .thin-scrollbar below, but with a transparent track: when
-     nothing overflows (a full-screen TUI like Claude Code) no strip paints at
-     all, and with scrollback only the slim square thumb shows. */
+  /* xterm's viewport owns the terminal's native scrollbar: always visible
+     (not an overlay that waits for the pointer), its thumb drawn from the
+     scheme's text colour (--terminal-fg, set by TerminalPane) so it shows on
+     light and dark schemes; the track stays transparent, so with no
+     scrollback (a full-screen TUI like Claude Code) nothing paints. */
   .xterm .xterm-viewport::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
   }
   .xterm .xterm-viewport::-webkit-scrollbar-track {
     background: transparent;
   }
   .xterm .xterm-viewport::-webkit-scrollbar-thumb {
-    background: var(--color-bg-thumb);
-    border-radius: 0;
+    background: color-mix(in srgb, var(--terminal-fg, var(--color-text)) 34%, transparent);
+    border-radius: 4px;
   }
-  .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover,
+  .xterm .xterm-viewport::-webkit-scrollbar-thumb:active {
     background: var(--color-accent);
   }
-  /* Firefox fallback */
-  .xterm .xterm-viewport {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-bg-thumb) transparent;
+  /* Firefox only: in Chromium the standard properties override the rules
+     above and turn the bar into an overlay that hides until hovered. */
+  @supports not selector(::-webkit-scrollbar) {
+    .xterm .xterm-viewport {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--terminal-fg, var(--color-text)) 34%, transparent)
+        transparent;
+    }
   }
 
   /* Touch text selection chrome over a terminal pane. selectionOverlay.ts

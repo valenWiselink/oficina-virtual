@@ -1,11 +1,14 @@
 import {
   BADGE_GLYPH_COLOR,
   CLAWD_ACCESSORY_COLORS,
+  CLAWD_BOSS_COLORS,
+  CLAWD_EFFORT_COLORS,
   CLAWD_EYE_COLOR,
   CLAWD_PROP_COLORS,
 } from '../constants.js';
 import type { Outfit } from '../identity/clawdOutfit.js';
 import type { AgentKind } from './agentViews.js';
+import { type EffortLevel, effortMarks } from './clawdLook.js';
 import { drawOutfit, drawWatch, type Paint, repoAccessoryShown } from './clawdOutfits.js';
 import type { ActivityProp } from './clawdTricks.js';
 
@@ -109,6 +112,11 @@ export interface Pose {
   footUp?: boolean;
   /** …or left arm up to his eyes, checking his watch. */
   watch?: boolean;
+  /** How hard his session thinks (clawdLook.ts): calm eyes when low, then a
+   *  headband and sweat. */
+  effort?: EffortLevel;
+  /** A supervisor: wears a tie. */
+  boss?: boolean;
 }
 
 export function poseFor(kind: AgentKind, seed: number, t: number): Pose {
@@ -190,6 +198,10 @@ export function drawClawd(
   } else if (pose.blink) {
     R(4 + lx, ey + 1, 1, 1, CLAWD_EYE_COLOR);
     R(11 + lx, ey + 1, 1, 1, CLAWD_EYE_COLOR);
+  } else if (pose.effort === 'low') {
+    // Low effort: calm, half-lidded eyes.
+    R(4 + lx, ey + 1, 1, 1, CLAWD_EYE_COLOR);
+    R(11 + lx, ey + 1, 1, 1, CLAWD_EYE_COLOR);
   } else {
     R(4 + lx, ey, 1, 2, CLAWD_EYE_COLOR);
     R(11 + lx, ey, 1, 2, CLAWD_EYE_COLOR);
@@ -200,8 +212,36 @@ export function drawClawd(
   if (pose.prop) drawProp(R, pose.prop, la, ra, ey);
   if (repoAccessoryShown(pose.area, outfit, pose.prop)) drawAccessory(R, pose.area, by, la);
   if (outfit !== 'none') drawOutfit(R, outfit, by);
+  drawEffortMarks(R, effortMarks(pose.effort), by);
+  if (pose.boss) drawTie(R, by);
   if (pose.watch) drawWatch(R, la);
   ctx.restore();
+}
+
+/** A supervisor's shirt collar and tie, low on his body (up by the eyes it
+ *  read as an open mouth). */
+function drawTie(R: Paint, by: number) {
+  const c = CLAWD_BOSS_COLORS;
+  R(5, by + 6, 2, 1, c.collar);
+  R(9, by + 6, 2, 1, c.collar);
+  R(6, by + 7, 1, 1, c.collar);
+  R(9, by + 7, 1, 1, c.collar);
+  R(7, by + 7, 2, 1, c.knot);
+  R(7, by + 8, 2, 1, c.tie);
+  R(7, by + 9, 2, 1, c.tie);
+}
+
+/** Effort on his forehead: a headband with its knot (alto), then a drop of
+ *  sweat beside it (muy alto, máximo). The flame is the bubble's (graphScene). */
+function drawEffortMarks(R: Paint, marks: number, by: number) {
+  if (marks < 1) return;
+  const c = CLAWD_EFFORT_COLORS;
+  R(1, by + 1, 14, 1, c.band);
+  R(15, by + 1, 1, 1, c.bandDark);
+  R(16, by + 2, 1, 1, c.band);
+  if (marks < 2) return;
+  R(13, by - 2, 1, 1, c.sweat);
+  R(12, by - 1, 3, 1, c.sweat);
 }
 
 /** The repo accessory, on the same pixel grid as Clawd. */
@@ -727,4 +767,27 @@ export function drawBackground(
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = rgba(th.line2, 0.6);
   for (let x = 13; x < w; x += 26) for (let y = 13; y < h; y += 26) ctx.fillRect(x, y, 1, 1);
+}
+
+/** The flame around a bubble at maximum effort: a warm glow that flickers. */
+export function drawEffortFlame(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  t: number,
+) {
+  const c = CLAWD_EFFORT_COLORS;
+  const flicker = 0.5 + 0.5 * Math.sin(t * 9) * Math.sin(t * 5.3 + 1);
+  const glow = ctx.createRadialGradient(x, y, r * 0.92, x, y, r * (1.32 + 0.08 * flicker));
+  glow.addColorStop(0, c.flameCore);
+  glow.addColorStop(0.35, c.flame);
+  glow.addColorStop(1, c.clear);
+  ctx.save();
+  ctx.globalAlpha = 0.38 + 0.22 * flicker;
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 1.42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }

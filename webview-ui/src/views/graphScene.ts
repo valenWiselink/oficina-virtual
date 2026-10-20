@@ -1,10 +1,13 @@
-import { CLAWD_BODY_COLORS, FILE_LINK_COLOR } from '../constants.js';
+import { isSupervisor } from '../agents/supervisionRules.js';
+import { CLAWD_BOSS_COLORS, FILE_LINK_COLOR } from '../constants.js';
 import { outfitOf } from '../identity/clawdOutfit.js';
 import { clip } from '../identity/identityStore.js';
 import { liveFileLinks } from '../office/behaviors/fileLinksStore.js';
 import type { AgentView } from './agentViews.js';
+import { clawdColor } from './clawdColor.js';
 import { impatience } from './clawdImpatience.js';
 import { type ClawdLife, isAsleep } from './clawdLife.js';
+import { effortLevel, effortMarks, modelScale } from './clawdLook.js';
 import { activityProp, arrivalMotion, trickMotion } from './clawdTricks.js';
 import {
   type Bounds,
@@ -20,6 +23,7 @@ import {
   drawCheckBadge,
   drawChip,
   drawClawd,
+  drawEffortFlame,
   drawFilePass,
   drawLabelAt,
   drawLibrary,
@@ -45,6 +49,7 @@ import {
   drawZ,
   sparkColors,
 } from './graphExtras.js';
+import { floatOffset } from './graphFloat.js';
 import { placeLabel, type Side } from './graphLabels.js';
 import { pinOf } from './graphPins.js';
 import type { SimEdge, SimNode } from './graphSim.js';
@@ -109,7 +114,7 @@ export function layout(nodes: Map<string, SimNode>, list: AgentView[]) {
     }
     const id = `a${v.id}`;
     live.add(id);
-    upsert(nodes, id, ax, ay, radiusFor(v.kind));
+    upsert(nodes, id, ax, ay, radiusFor(v.kind) * modelScale(v.model));
     const parent = nodes.get(id)!;
     const radius = meetingRadius(v.subagents.length);
     parent.group = id;
@@ -149,6 +154,10 @@ export function edgesOf(list: AgentView[]): SimEdge[] {
     const length = meetingRadius(v.subagents.length);
     for (const s of v.subagents) edges.push({ a: `a${v.id}`, b: `s${s.id}`, length, strength: 2 });
   }
+  for (const v of list) {
+    for (const bossId of v.supervisedBy)
+      edges.push({ a: `a${bossId}`, b: `a${v.id}`, length: 260, strength: 0.3 });
+  }
   for (const link of liveFileLinks()) {
     edges.push({ a: `s${link.fromId}`, b: `s${link.toId}`, length: 80, strength: 2.5 });
   }
@@ -175,7 +184,7 @@ function upsert(nodes: Map<string, SimNode>, id: string, ax: number, ay: number,
   }
 }
 
-const colorOf = (v: AgentView) => CLAWD_BODY_COLORS[v.palette % CLAWD_BODY_COLORS.length];
+const colorOf = (v: AgentView) => clawdColor(v.palette, v.hueShift);
 
 /** Draw a Clawd standing on a world point (he is drawn in screen pixels). */
 function clawdAt(
@@ -232,6 +241,22 @@ function drawLinks(
       ctx.globalAlpha = 1;
     }
   }
+  // A supervisor's dashed line to each agent it looks after.
+  for (const v of list) {
+    const b = nodes.get(`a${v.id}`);
+    for (const bossId of v.supervisedBy) {
+      const a = nodes.get(`a${bossId}`);
+      if (!a || !b) continue;
+      ctx.strokeStyle = CLAWD_BOSS_COLORS.link;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([5, 6]);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
   for (const link of liveFileLinks()) {
     const a = nodes.get(`s${link.fromId}`);
     const b = nodes.get(`s${link.toId}`);
@@ -241,16 +266,26 @@ function drawLinks(
   }
 }
 
+/** The nodes where they are drawn: floating gently (not in calm mode). The
+ *  simulation keeps its own positions; only the picture moves. */
+function floating(nodes: Map<string, SimNode>, f: SceneFrame): Map<string, SimNode> {
+  if (f.calm) return nodes;
+  const shown = new Map<string, SimNode>();
+  for (const [id, n] of nodes) shown.set(id, { ...n, y: n.y + floatOffset(id, f.t) });
+  return shown;
+}
+
 /** One frame of the graph. Returns what is clickable and what was drawn. */
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   th: GraphTheme,
   f: SceneFrame,
   list: AgentView[],
-  nodes: Map<string, SimNode>,
+  simNodes: Map<string, SimNode>,
   selectedId: number | null,
   life: ClawdLife,
 ): SceneOut {
+  const nodes = floating(simNodes, f);
   background(ctx, th, f);
   worldTransform(ctx, f);
   if (list.some((v) => v.kind === 'research' || v.subagents.some((s) => s.kind === 'research'))) {
@@ -362,6 +397,9 @@ function livePose(
     area: v.area,
     prop: activityProp(v, life.workingFor(v.id, f.now)),
     outfit: outfitOf(v.key),
+    // What the session reports, else what the office launched it with.
+    effort: effortLevel(v.effort ?? v.runEffort),
+    boss: isSupervisor(v),
   };
   if (isAsleep(v, f.now)) Object.assign(pose, { sleep: true, blink: false });
   if (life.blinking(v.id, f.now)) pose.blink = true;
@@ -405,6 +443,10 @@ function drawAgentBody(
 ): void {
   const color = colorOf(v);
   ctx.globalAlpha = v.kind === 'idle' ? 0.75 : 1;
+  // Maximum effort: a flame around the bubble (the headband is on Clawd).
+  if (!f.calm && effortMarks(effortLevel(v.effort ?? v.runEffort)) === 3) {
+    drawEffortFlame(ctx, n.x, n.y, n.r, f.t + v.id);
+  }
   drawNodeDisc(ctx, th, n.x, n.y, n.r, color, v.kind, f.t, at.selected, at.pulsing);
   // Clawd fills his disc, as in the preview (the disc grows with activity).
   const scale = n.r / 15;

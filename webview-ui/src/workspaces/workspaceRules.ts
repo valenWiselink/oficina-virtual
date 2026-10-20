@@ -90,6 +90,22 @@ export function withoutWorkspace(state: WorkspaceState, id: string): WorkspaceSt
   };
 }
 
+/** The workspaces with `id` moved to sit just before `beforeId` (null: at the
+ *  end). The order is the tabs' order, and also which workspace claims an
+ *  agent first when two share a folder. Unknown ids leave it as it was. */
+export function moveWorkspace(
+  workspaces: readonly Workspace[],
+  id: string,
+  beforeId: string | null,
+): Workspace[] {
+  const moving = workspaces.find((w) => w.id === id);
+  if (!moving || id === beforeId) return [...workspaces];
+  const rest = workspaces.filter((w) => w.id !== id);
+  const at = beforeId === null ? rest.length : rest.findIndex((w) => w.id === beforeId);
+  if (at < 0) return [...workspaces];
+  return [...rest.slice(0, at), moving, ...rest.slice(at)];
+}
+
 /** Agents whose key changed (a session id arriving after the name): their
  *  manual assignment follows them. Returns the new assignments. */
 export function followKeys(

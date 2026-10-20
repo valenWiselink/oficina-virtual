@@ -5,6 +5,10 @@ import { ClawdLife, isAsleep, SLEEP_AFTER_MS } from '../src/views/clawdLife.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
   id,
+  canSetRun: false,
+  supervisorNames: [],
+  teamSize: 0,
+  supervisedBy: [],
   name: `A${id}`,
   key: `k${id}`,
   palette: 0,

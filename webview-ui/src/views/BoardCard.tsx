@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { CharacterMugShot } from '../components/CharacterMugShot.js';
 import { Sparks } from '../components/Sparks.js';
 import { Button } from '../components/ui/Button.js';
-import { CLAWD_BODY_COLORS, TERMINAL_FONT_FAMILY } from '../constants.js';
+import { TERMINAL_FONT_FAMILY } from '../constants.js';
 import { useCalmMode } from '../effects/calmMode.js';
 import { useNow } from '../hooks/useNow.js';
 import { useOutfit } from '../identity/clawdOutfit.js';
@@ -17,6 +17,8 @@ import { AgentNote, CompactButton, OutfitMenu, OutfitOverlay, QuickReplies } fro
 import type { CardMotion } from './cardMotion.js';
 import { isImpatient, offersCompact, offersQuickReplies } from './cardRules.js';
 import { useCheer } from './celebrate.js';
+import { clawdColor } from './clawdColor.js';
+import { effortLabel, modelShortName, usageDetail } from './usageText.js';
 
 /** From this wait on, "hace N min" is set in bold (never in red: red means
  *  a broken terminal here). */
@@ -29,6 +31,8 @@ export interface BoardActions {
   onAdopt?: (id: number) => void;
   onHandOff?: (id: number) => void;
   onClose?: (id: number) => void;
+  /** Name, colour, model and effort (agents/useEditAgent.tsx). */
+  onEdit?: (id: number) => void;
   /** You handled what its finished turn left you ("te toca"). */
   onYourTurnDone?: (turnId: string) => void;
 }
@@ -70,11 +74,11 @@ export function BoardCard({
     .filter(Boolean)
     .join(' · ');
   const ask = permissionSummary(view);
-  const color = CLAWD_BODY_COLORS[view.palette % CLAWD_BODY_COLORS.length];
+  const color = clawdColor(view.palette, view.hueShift);
   const hasActions =
     (!!view.yourTurnId && !!actions.onYourTurnDone) ||
     !!view.prUrl ||
-    (!view.hasTerminal && !!actions.onAdopt) ||
+    (!view.hasTerminal && !view.inClaudeApp && !!actions.onAdopt) ||
     compact;
   return (
     <article
@@ -111,10 +115,14 @@ export function BoardCard({
                 would see every agent marked. */}
             {!view.hasTerminal && actions.onAdopt && (
               <span
-                className="shrink-0 text-2xs text-text-muted border border-border rounded-full px-6"
-                title="Corre fuera de la oficina (VS Code, otra consola): no tiene terminal acá"
+                className="shrink-0 text-2xs text-text-muted border border-border rounded-full px-6 whitespace-nowrap"
+                title={
+                  view.inClaudeApp
+                    ? 'Está en la app de escritorio de Claude: esa conversación se maneja desde la app, la oficina sólo la muestra'
+                    : 'Corre fuera de la oficina (VS Code, otra consola): no tiene terminal acá'
+                }
               >
-                afuera
+                {view.inClaudeApp ? 'en la app de Claude' : 'afuera'}
               </span>
             )}
           </span>
@@ -146,22 +154,8 @@ export function BoardCard({
 
       <AgentNote view={view} editing={editingNote} onDone={() => setEditingNote(false)} />
 
-      {view.contextPct !== undefined && (
-        <div
-          className="h-4 rounded-full overflow-hidden bg-bg-thumb"
-          title={`Contexto usado: ${view.contextPct}%`}
-          aria-label={`Contexto usado: ${view.contextPct}%`}
-        >
-          <div
-            className="h-full rounded-full"
-            style={{
-              width: `${Math.min(100, view.contextPct)}%`,
-              // Grey, red only near the limit: amber would claim it needs you.
-              background: view.contextPct >= 90 ? 'var(--color-danger)' : 'var(--color-text-muted)',
-            }}
-          />
-        </div>
-      )}
+      {(view.contextPct !== undefined || view.model) && <UsageRow view={view} />}
+      <SupervisionLine view={view} />
 
       {ask && view.permission && (
         <div className="flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
@@ -230,7 +224,7 @@ export function BoardCard({
             </Button>
           )}
           {compact && <CompactButton view={view} />}
-          {!view.hasTerminal && actions.onAdopt && (
+          {!view.hasTerminal && !view.inClaudeApp && actions.onAdopt && (
             <Button
               size="sm"
               title="Traer a la oficina (para escribirle desde acá)"
@@ -253,6 +247,13 @@ export function BoardCard({
               setOutfitOpen(false);
               setMoveOpen((open) => !open);
             }}
+          />
+        )}
+        {actions.onEdit && (
+          <CardIcon
+            icon="edit"
+            title="Editar (nombre, color, modelo)"
+            onClick={() => actions.onEdit!(view.id)}
           />
         )}
         <CardIcon icon="sticky_note_2" title="Nota" onClick={() => setEditingNote(true)} />
@@ -299,5 +300,71 @@ function CardIcon({ icon, title, onClick }: { icon: string; title: string; onCli
         {icon}
       </span>
     </Button>
+  );
+}
+
+/** Model, context gauge and its percentage on one line; the tooltip adds the
+ *  window and what the session spent. */
+function UsageRow({ view }: { view: AgentView }) {
+  const pct = view.contextPct;
+  const detail = usageDetail(view);
+  return (
+    <div
+      className="flex items-center gap-6 text-2xs text-text-muted"
+      title={detail}
+      aria-label={detail}
+    >
+      {view.model && (
+        <span className="shrink-0 font-semibold">
+          {modelShortName(view.model)}
+          {effortLabel(view.effort) && (
+            <span className="font-normal"> · {effortLabel(view.effort)}</span>
+          )}
+        </span>
+      )}
+      {pct !== undefined && (
+        <>
+          <span className="flex-1 h-4 rounded-full overflow-hidden bg-bg-thumb">
+            <span
+              className="block h-full rounded-full"
+              style={{
+                width: `${Math.min(100, pct)}%`,
+                // Grey, red only near the limit: amber would claim it needs you.
+                background: pct >= 90 ? 'var(--color-danger)' : 'var(--color-text-muted)',
+              }}
+            />
+          </span>
+          <span className={`shrink-0 tabular-nums ${pct >= 90 ? 'text-danger font-semibold' : ''}`}>
+            {pct}%
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** "Supervisa «Wiselink» · 4" on a supervisor, "Lo supervisa «Jefa»" on its team. */
+function SupervisionLine({ view }: { view: AgentView }) {
+  const scope = view.supervision;
+  let text: string | undefined;
+  if (scope) {
+    const who =
+      scope.kind === 'workspace'
+        ? `«${scope.name ?? 'su espacio'}»`
+        : scope.kind === 'all'
+          ? 'a todos'
+          : 'a sus elegidos';
+    text = `Supervisa ${who} · ${view.teamSize} ${view.teamSize === 1 ? 'agente' : 'agentes'}`;
+  } else if (view.supervisorNames.length > 0) {
+    text = `Lo supervisa ${view.supervisorNames.map((n) => `«${n}»`).join(' y ')}`;
+  }
+  if (!text) return null;
+  return (
+    <div className="flex items-center gap-4 text-2xs text-text-muted">
+      <span className="material-symbols-sharp text-xs" aria-hidden="true">
+        supervisor_account
+      </span>
+      {text}
+    </div>
   );
 }

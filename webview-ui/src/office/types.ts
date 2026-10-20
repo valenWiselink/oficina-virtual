@@ -258,6 +258,10 @@ export interface Character {
   contextTokens: number;
   /** Window `contextTokens` is measured against. */
   maxContextTokens: number;
+  /** Model of its newest turn (claude-opus-5-5), when reported. */
+  model?: string;
+  /** What its session spent so far, by kind of token. */
+  spend?: { input: number; cacheRead: number; cacheWrite: number; output: number };
 }
 
 export const PetState = { IDLE: 'idle', WALK: 'walk', FOLLOW: 'follow' } as const;

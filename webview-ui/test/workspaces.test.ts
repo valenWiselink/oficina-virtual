@@ -5,6 +5,7 @@ import {
   changedKeys,
   followKeys,
   inWorkspace,
+  moveWorkspace,
   needsByWorkspace,
   newcomersToAssign,
   withoutWorkspace,
@@ -92,5 +93,43 @@ describe('bookkeeping', () => {
     ]);
     expect(newcomersToAssign(null, agents, s)).toEqual([]);
     expect(newcomersToAssign(new Set([1]), agents, state())).toEqual([]);
+  });
+});
+
+describe('moveWorkspace', () => {
+  const list = [
+    { id: 'a', name: 'A', folders: [] },
+    { id: 'b', name: 'B', folders: [] },
+    { id: 'c', name: 'C', folders: [] },
+  ];
+  const ids = (ws: ReadonlyArray<{ id: string }>) => ws.map((w) => w.id).join('');
+
+  it('puts the workspace just before another one', () => {
+    expect(ids(moveWorkspace(list, 'c', 'a'))).toBe('cab');
+    expect(ids(moveWorkspace(list, 'a', 'c'))).toBe('bac');
+  });
+
+  it('puts it last with no workspace after it', () => {
+    expect(ids(moveWorkspace(list, 'a', null))).toBe('bca');
+  });
+
+  it('leaves the order alone for itself or unknown ids', () => {
+    expect(ids(moveWorkspace(list, 'b', 'b'))).toBe('abc');
+    expect(ids(moveWorkspace(list, 'x', 'a'))).toBe('abc');
+    expect(ids(moveWorkspace(list, 'a', 'x'))).toBe('abc');
+  });
+
+  it('decides which workspace claims a shared folder first', () => {
+    const shared = state({
+      workspaces: [
+        { id: 'wl', name: 'Wiselink', folders: ['development'] },
+        { id: 'per', name: 'Personal', folders: ['development'] },
+      ],
+    });
+    const agent = { key: 'k', dir: 'development' };
+    expect(workspaceOf(agent, shared)).toBe('wl');
+    expect(
+      workspaceOf(agent, { ...shared, workspaces: moveWorkspace(shared.workspaces, 'per', 'wl') }),
+    ).toBe('per');
   });
 });

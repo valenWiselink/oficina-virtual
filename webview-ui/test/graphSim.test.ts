@@ -46,3 +46,14 @@ describe('stepGraph', () => {
     expect(a.y).toBeLessThanOrEqual(770);
   });
 });
+
+describe('floating bubbles', () => {
+  it('floats each node a little, each at its own pace', async () => {
+    const { floatOffset } = await import('../src/views/graphFloat.js');
+    const samples = Array.from({ length: 200 }, (_, i) => floatOffset('a1', i * 0.05));
+    expect(Math.max(...samples.map(Math.abs))).toBeLessThanOrEqual(3);
+    expect(Math.max(...samples) - Math.min(...samples)).toBeGreaterThan(4);
+    expect(floatOffset('a1', 1.3)).toBe(floatOffset('a1', 1.3));
+    expect(floatOffset('a1', 1.3)).not.toBe(floatOffset('a2', 1.3));
+  });
+});

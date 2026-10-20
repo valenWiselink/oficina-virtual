@@ -2,10 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { ChatItem } from '../../../core/src/messages.js';
 import { Button } from '../components/ui/Button.js';
-import { CLAWD_BODY_COLORS } from '../constants.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
+import { clawdColor } from '../views/clawdColor.js';
 import { useAgentChat } from './chatStore.js';
 import { Markdown } from './Markdown.js';
 
@@ -56,7 +56,7 @@ export function ChatPane({
     if (el && pinnedToEnd.current) el.scrollTop = el.scrollHeight;
   }, [items, view.statusText]);
 
-  const color = CLAWD_BODY_COLORS[view.palette % CLAWD_BODY_COLORS.length];
+  const color = clawdColor(view.palette, view.hueShift);
   return (
     // -inset-4: cover the dark gap the terminal keeps around itself.
     <div className="absolute -inset-4 flex flex-col bg-bg-dark pointer-events-auto">
