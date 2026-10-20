@@ -106,7 +106,7 @@ Ayuda).
 - **Editar** (el lápiz de la tarjeta): nombre y color de cualquier agente; modelo,
   esfuerzo y supervisión de los que corren en la oficina (los reinicia en la misma
   conversación, así que tienen que estar quietos). Un modelo más grande es un
-  Clawd más grande, y el esfuerzo se ve en su vincha.
+  Clawd distinto (cría, pinzas, leyenda), y el esfuerzo muy alto suda una gota.
 - **Supervisores**: cualquier agente puede supervisar un espacio, agentes elegidos
   o a todos. Le llegan los permisos, las preguntas y los turnos terminados de su
   equipo; aprueba lo seguro, te pide lo demás con un «Te toca» y te cuenta qué hizo

@@ -128,8 +128,8 @@ export interface Pose {
   footUp?: boolean;
   /** …or left arm up to his eyes, checking his watch. */
   watch?: boolean;
-  /** How hard his session thinks (clawdLook.ts): calm eyes when low, then a
-   *  headband and sweat. */
+  /** How hard his session thinks (clawdLook.ts): calm eyes when low, a drop of
+   *  sweat from muy alto. */
   effort?: EffortLevel;
   /** A supervisor: wears a tie. */
   boss?: boolean;
@@ -245,15 +245,12 @@ function drawTie(R: Paint, by: number) {
   R(7, by + 9, 2, 1, c.tie);
 }
 
-/** Effort on his forehead: a headband with its knot (alto), then a drop of
- *  sweat beside it (muy alto, máximo). The flame is the bubble's (graphScene). */
+/** Effort on his forehead: a drop of sweat (muy alto, máximo). The flame is
+ *  the bubble's (graphScene). No headband: with "muy alto" as the usual
+ *  effort every Clawd wore one, so it told nobody apart (removed 2026-10-20). */
 function drawEffortMarks(R: Paint, marks: number, by: number) {
-  if (marks < 1) return;
-  const c = CLAWD_EFFORT_COLORS;
-  R(1, by + 1, 14, 1, c.band);
-  R(15, by + 1, 1, 1, c.bandDark);
-  R(16, by + 2, 1, 1, c.band);
   if (marks < 2) return;
+  const c = CLAWD_EFFORT_COLORS;
   R(13, by - 2, 1, 1, c.sweat);
   R(12, by - 1, 3, 1, c.sweat);
 }

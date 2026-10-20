@@ -2,7 +2,7 @@
  * How an agent's model and effort show on its Clawd. Each model family has
  * its own look: a bigger Clawd and bubble, a body that evolves (hatchling,
  * classic, claws, legend), a material (paper, plush, metal, hologram) and a
- * bubble outline. More effort shows as a headband, a drop of sweat and, at
+ * bubble outline. More effort shows as a drop of sweat and, at
  * the top, a flame around his bubble. Pure, so it is tested without a canvas.
  */
 
@@ -16,7 +16,7 @@ export function effortLevel(effort: string | undefined): EffortLevel | undefined
   return EFFORTS.find((x) => x === e);
 }
 
-/** How many marks the effort earns: 0 none, 1 headband, 2 + sweat, 3 + flame. */
+/** How many marks the effort earns: 0-1 none (high used to be a headband), 2 sweat, 3 + flame. */
 export function effortMarks(effort: EffortLevel | undefined): 0 | 1 | 2 | 3 {
   if (effort === 'max') return 3;
   if (effort === 'xhigh') return 2;

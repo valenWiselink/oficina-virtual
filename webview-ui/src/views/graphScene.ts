@@ -470,7 +470,7 @@ function drawAgentBody(
 ): void {
   const color = colorOf(v);
   ctx.globalAlpha = v.kind === 'idle' ? 0.75 : 1;
-  // Maximum effort: a flame around the bubble (the headband is on Clawd).
+  // Maximum effort: a flame around the bubble (the sweat is on Clawd).
   if (!f.calm && effortMarks(effortLevel(v.effort ?? v.runEffort)) === 3) {
     drawEffortFlame(ctx, n.x, n.y, n.r, f.t + v.id);
   }

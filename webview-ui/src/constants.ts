@@ -885,11 +885,9 @@ export const CLAWD_BOSS_COLORS = {
   collar: '#f6f1ea',
   link: 'rgba(47, 74, 122, 0.55)',
 } as const;
-/** How hard a Clawd works (clawdLook.ts): the headband from "alto" up, a drop
- *  of sweat from "muy alto", and the flame around his bubble at "máximo". */
+/** How hard a Clawd works (clawdLook.ts): a drop of sweat from "muy alto",
+ *  and the flame around his bubble at "máximo". */
 export const CLAWD_EFFORT_COLORS = {
-  band: '#d8433f',
-  bandDark: '#9e2b28',
   sweat: '#7cc6f2',
   flame: '#ff8a2a',
   flameCore: '#ffd166',
