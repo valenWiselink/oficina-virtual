@@ -39,6 +39,7 @@ export type ServerMessage =
   | OfficeAccess
   | SettingsLoaded
   | BypassPermissionsUpdated
+  | BackgroundAgentsUpdated
   | HooksStatus
   | HooksConsentRequest
   | ClaudeStatus
@@ -98,6 +99,7 @@ export type ClientMessage =
   | SaveAreaMappings
   | SetShowAreas
   | SetBypassPermissions
+  | SetBackgroundAgents
   | SetShowHostDirectories
   | SaveDirectory
   | RemoveDirectory
@@ -412,10 +414,16 @@ export interface SettingsLoaded {
   showAreas: boolean;
   bypassPermissions: boolean;
   showHostDirectories: boolean;
+  backgroundAgents?: boolean;
 }
 
 export interface BypassPermissionsUpdated {
   type: 'bypassPermissionsUpdated';
+  enabled: boolean;
+}
+
+export interface BackgroundAgentsUpdated {
+  type: 'backgroundAgentsUpdated';
   enabled: boolean;
 }
 
@@ -639,10 +647,10 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_335;
+  effort?: AnonymousSchema_338;
 }
 
-export type AnonymousSchema_335 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_338 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -691,16 +699,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_358;
+  scope: AnonymousSchema_361;
 }
 
-export interface AnonymousSchema_358 {
-  kind: AnonymousSchema_359;
+export interface AnonymousSchema_361 {
+  kind: AnonymousSchema_362;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_359 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_362 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';
@@ -801,6 +809,11 @@ export interface SetShowAreas {
 
 export interface SetBypassPermissions {
   type: 'setBypassPermissions';
+  enabled: boolean;
+}
+
+export interface SetBackgroundAgents {
+  type: 'setBackgroundAgents';
   enabled: boolean;
 }
 

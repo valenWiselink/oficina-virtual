@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
+import { setBackgroundAgents, useBackgroundAgents } from '../agents/backgroundAgentsSetting.js';
 import { APP_THEME_CHOICES, setAppThemeChoice, useAppThemeChoice } from '../effects/appTheme.js';
 import { setCalm, useCalmMode } from '../effects/calmMode.js';
 import { TERMINAL_DOCKS, type TerminalDock } from '../hooks/useTerminalDock.js';
@@ -66,6 +67,7 @@ export function SettingsModal({
   onShowIntro,
 }: SettingsModalProps) {
   const [soundLocal, setSoundLocal] = useState(isSoundEnabled);
+  const backgroundAgents = useBackgroundAgents();
   const calm = useCalmMode();
   const appTheme = useAppThemeChoice();
   const operatorName = useOperatorName();
@@ -137,6 +139,12 @@ export function SettingsModal({
           description="Suma al menú de «+ Agente» la carpeta desde donde arrancó la oficina"
           checked={showHostDirectories}
           onChange={onToggleShowHostDirectories}
+        />
+        <Switch
+          label="Agentes que sobreviven a reinicios"
+          description="Corren como sesiones en segundo plano de Claude Code: actualizar o cerrar la oficina no los corta"
+          checked={backgroundAgents}
+          onChange={() => setBackgroundAgents(!backgroundAgents)}
         />
         {/* Permission posture, set once instead of per launch: while on, the
             host adds the CLI's skip-permissions flag to every agent it launches. */}

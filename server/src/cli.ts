@@ -41,6 +41,7 @@ import { watchAgentPrs } from './prWatchWiring.js';
 import { PixelAgentsServer } from './server.js';
 import { supervisors } from './supervisors/supervision.js';
 import { SupervisorRelay } from './supervisors/supervisorRelay.js';
+import { setBackgroundAgents } from './terminal/backgroundSessions.js';
 import { PtySessionManager } from './terminal/ptySessionManager.js';
 import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
@@ -453,13 +454,17 @@ async function main(): Promise<void> {
 
     // After the hook install, so resumed sessions report through hooks from
     // their first event.
-    const resumed = resumeOfficeSessions(
+    // Background sessions (on by default): agents outlive the office, which
+    // only attaches to them (terminal/backgroundSessions.ts).
+    setBackgroundAgents(adapter.getSetting('pixel-agents.backgroundAgents', true));
+    void resumeOfficeSessions(
       { store, runtime, ptyManager, provider: claudeProvider },
       adapter.getSetting('pixel-agents.bypassPermissions', false),
-    );
-    if (resumed > 0) {
-      console.log(`[Pixel Agents] Resumed ${resumed} session(s) from the previous run`);
-    }
+    ).then((resumed) => {
+      if (resumed > 0) {
+        console.log(`[Pixel Agents] Resumed ${resumed} session(s) from the previous run`);
+      }
+    });
 
     // Start scanning for external sessions (Claude running in user's terminal)
     const cwd = process.cwd();

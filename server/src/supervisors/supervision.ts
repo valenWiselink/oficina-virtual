@@ -178,8 +178,39 @@ function isAgent(agent: AgentState): boolean {
 export class SupervisorRegistry {
   private store: AgentStateStore | undefined;
   private officeUrl: string | undefined;
-  /** Token → the supervisor's session id (fresh on every launch). */
-  private readonly tokens = new Map<string, string>();
+  /** Token → the supervisor's session id (fresh on every launch), kept on
+   *  disk: a supervisor running as a background session outlives the office
+   *  and keeps calling it with the token it was launched with. */
+  private tokenMap: Map<string, string> | undefined;
+
+  private get tokens(): Map<string, string> {
+    if (!this.tokenMap) {
+      this.tokenMap = new Map();
+      try {
+        const saved = JSON.parse(
+          fs.readFileSync(path.join(this.filesDir, 'tokens.json'), 'utf-8'),
+        ) as Record<string, unknown>;
+        for (const [token, owner] of Object.entries(saved)) {
+          if (typeof owner === 'string') this.tokenMap.set(token, owner);
+        }
+      } catch {
+        /* none yet */
+      }
+    }
+    return this.tokenMap;
+  }
+
+  private saveTokens(): void {
+    try {
+      fs.mkdirSync(this.filesDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(this.filesDir, 'tokens.json'),
+        JSON.stringify(Object.fromEntries(this.tokens), null, 2),
+      );
+    } catch (err) {
+      console.error(`[Pixel Agents] Could not save supervisor tokens: ${String(err)}`);
+    }
+  }
 
   constructor(
     readonly teams = new SupervisionTeams(),
@@ -246,6 +277,7 @@ export class SupervisorRegistry {
     for (const [token, owner] of this.tokens) if (owner === sessionId) this.tokens.delete(token);
     const token = randomBytes(24).toString('hex');
     this.tokens.set(token, sessionId);
+    this.saveTokens();
     const url = `${this.officeUrl ?? 'http://127.0.0.1:3100'}/mcp`;
     fs.mkdirSync(this.filesDir, { recursive: true });
     const mcpPath = path.join(this.filesDir, `${sessionId}.mcp.json`);
@@ -265,6 +297,7 @@ export class SupervisorRegistry {
   /** No longer a supervisor: its token and files go. */
   forget(sessionId: string): void {
     for (const [token, owner] of this.tokens) if (owner === sessionId) this.tokens.delete(token);
+    this.saveTokens();
     for (const ext of ['mcp.json', 'rol.md']) {
       fs.rmSync(path.join(this.filesDir, `${sessionId}.${ext}`), { force: true });
     }

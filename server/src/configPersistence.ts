@@ -18,6 +18,8 @@ export interface AdapterSettings {
   /** Whether the host's own Directories (VS Code's workspace folders, standalone's
    *  start directory) are listed in the launch drawer. Off by default. */
   showHostDirectories: boolean;
+  /** Agents as Claude Code background sessions (they outlive the office). */
+  backgroundAgents: boolean;
 }
 
 /** All keys in AdapterSettings. Used by adapters to map `pixel-agents.foo` → `foo`.
@@ -35,6 +37,7 @@ export const ADAPTER_SETTING_KEYS = [
   'areaMappings',
   'bypassPermissions',
   'showHostDirectories',
+  'backgroundAgents',
 ] as const;
 
 export type AdapterSettingKey = (typeof ADAPTER_SETTING_KEYS)[number];
@@ -85,6 +88,7 @@ const DEFAULT_ADAPTER_SETTINGS: AdapterSettings = {
   areaMappings: {},
   bypassPermissions: false,
   showHostDirectories: false,
+  backgroundAgents: true,
 };
 
 function getConfigFilePath(): string {
@@ -198,6 +202,10 @@ function parseAdapterSettings(raw: unknown): AdapterSettings {
       typeof obj.showHostDirectories === 'boolean'
         ? obj.showHostDirectories
         : DEFAULT_ADAPTER_SETTINGS.showHostDirectories,
+    backgroundAgents:
+      typeof obj.backgroundAgents === 'boolean'
+        ? obj.backgroundAgents
+        : DEFAULT_ADAPTER_SETTINGS.backgroundAgents,
   };
 }
 

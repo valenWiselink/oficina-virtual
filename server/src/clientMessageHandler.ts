@@ -35,9 +35,10 @@ import { claudeProvider, hookProviderById, hookProviders } from './providers/ind
 import { parseScope } from './supervisors/supervision.js';
 import { applySupervisionTeam, broadcastSupervision } from './supervisors/supervisionMessages.js';
 import { adoptIntoOffice } from './terminal/adoptSession.js';
+import { setBackgroundAgents, stopBackground } from './terminal/backgroundSessions.js';
 import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
-import { launchStandaloneAgent } from './terminal/standaloneAgentLauncher.js';
+import { launchAgent } from './terminal/standaloneAgentLauncher.js';
 
 type WsSend = (message: Record<string, unknown>) => void;
 
@@ -98,6 +99,7 @@ const KEY_WATCH_ALL_SESSIONS = 'pixel-agents.watchAllSessions';
 const KEY_HOOKS_INFO_SHOWN = 'pixel-agents.hooksInfoShown';
 const KEY_SHOW_AREAS = 'pixel-agents.showAreas';
 const KEY_BYPASS_PERMISSIONS = 'pixel-agents.bypassPermissions';
+const KEY_BACKGROUND_AGENTS = 'pixel-agents.backgroundAgents';
 const KEY_SHOW_HOST_DIRECTORIES = 'pixel-agents.showHostDirectories';
 
 /**
@@ -159,8 +161,9 @@ export function handleClientMessage(
       // Permission posture is a persisted per-host setting, never a per-launch
       // field: the client sends where to launch, plus the name and colour
       // chosen in the launch dialog. No directoryPath falls back to the server
-      // cwd (launchStandaloneAgent's own default).
-      launchStandaloneAgent(
+      // cwd (launchStandaloneAgent's own default). As a background session when
+      // that mode is on (launchAgent), so it outlives the office.
+      void launchAgent(
         { store, runtime, ptyManager: ctx.ptyManager, provider: claudeProvider },
         {
           directoryPath: msg.directoryPath as string | undefined,
@@ -248,6 +251,13 @@ export function handleClientMessage(
       // an agentClosed broadcast.
       const id = msg.id as number;
       const agent = store.get(id);
+      if (agent?.bgId && runtime) {
+        // A background session would outlive its terminal: closing the agent
+        // stops it and takes it off Claude Code's list (the transcript stays).
+        agent.bgLeaving = true;
+        runtime.resumableSessions?.remove(agent.sessionId);
+        void stopBackground(agent.bgId, agent.cwd);
+      }
       if (agent && runtime) {
         // dispose() is a no-op for agents with no terminal, so this is safe for
         // both shapes. The PTY's onExit handler does the store cleanup for
@@ -478,6 +488,15 @@ export function handleClientMessage(
         type: 'bypassPermissionsUpdated',
         enabled: adapter.getSetting(KEY_BYPASS_PERMISSIONS, false),
       });
+      break;
+    }
+
+    case 'setBackgroundAgents': {
+      if (typeof msg.enabled !== 'boolean' || !adapter) break;
+      adapter.setSetting(KEY_BACKGROUND_AGENTS, msg.enabled);
+      const enabled = adapter.getSetting(KEY_BACKGROUND_AGENTS, true);
+      setBackgroundAgents(enabled);
+      store.broadcast({ type: 'backgroundAgentsUpdated', enabled });
       break;
     }
 
@@ -898,6 +917,7 @@ function settingsSnapshot(adapter: StateAdapter | undefined) {
     showAreas: adapter?.getSetting(KEY_SHOW_AREAS, false) ?? false,
     bypassPermissions: adapter?.getSetting(KEY_BYPASS_PERMISSIONS, false) ?? false,
     showHostDirectories: adapter?.getSetting(KEY_SHOW_HOST_DIRECTORIES, false) ?? false,
+    backgroundAgents: adapter?.getSetting(KEY_BACKGROUND_AGENTS, true) ?? true,
   } as const;
 }
 

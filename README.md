@@ -113,6 +113,13 @@ Ayuda).
   cada uno. Lo peligroso (push, borrar, publicar, migraciones, deploys) siempre te
   lo pide a vos: la oficina no lo deja aprobarlo.
 - Las rutas de archivos en la terminal se abren con un clic en el Explorador.
+- **Agentes que sobreviven a reinicios** (Ajustes → Agentes, prendido por
+  defecto): cada agente corre como sesión en segundo plano de Claude Code y la
+  terminal de la oficina se engancha a él. Cerrar, actualizar o reiniciar la
+  oficina no los corta: al volver se reenganchan (si la PC se apagó, se retoman
+  con su conversación). Enganchada, la terminal muestra Claude Code en pantalla
+  completa. Si una carpeta todavía no es «de confianza» para Claude Code, ese
+  agente arranca en el modo de antes.
 - Cerrar la ventana **no** apaga la oficina: tus agentes siguen trabajando.
   Para apagarla: Ajustes → Apagar la oficina.
 - **Espacios**: el «+» de arriba a la izquierda crea uno; elegís qué carpetas

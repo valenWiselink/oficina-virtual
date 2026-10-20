@@ -7,17 +7,17 @@
  * resumable-session list).
  */
 
+import * as fs from 'fs';
+
 import { identityMessage } from './agentIdentity.js';
 import { type AgentLooks, agentLooks } from './agentLooks.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import { PALETTE_COUNT } from './constants.js';
 import { type SupervisionScope, supervisors } from './supervisors/supervision.js';
 import { findLiveSession } from './terminal/adoptSession.js';
+import { findBackground, stopBackground } from './terminal/backgroundSessions.js';
 import type { ResumableSession, ResumableSessions } from './terminal/resumableSessions.js';
-import {
-  launchStandaloneAgent,
-  type LaunchStandaloneAgentDeps,
-} from './terminal/standaloneAgentLauncher.js';
+import { launchAgent, type LaunchStandaloneAgentDeps } from './terminal/standaloneAgentLauncher.js';
 import { killOrphanedSession } from './terminal/windowsCommand.js';
 import type { AgentState } from './types.js';
 
@@ -113,10 +113,14 @@ export function editAgent(
 
 export type RunResult = { ok: true; newId: number } | { ok: false; reason: string };
 
-/** Busy right now: in a turn (Claude's own registry says so, or a tool runs). */
-function isWorking(agent: AgentState): boolean {
+/** Busy right now: in a turn (Claude's own registry says so, or a tool runs,
+ *  or its background session says it is working). */
+async function isWorking(agent: AgentState): Promise<boolean> {
   if (agent.activeToolIds.size > 0) return true;
-  return findLiveSession(agent.sessionId)?.status === 'busy';
+  if (findLiveSession(agent.sessionId)?.status === 'busy') return true;
+  if (!agent.bgId) return false;
+  const row = await findBackground(agent.bgId, agent.cwd);
+  return row?.state === 'working' || row?.status === 'busy';
 }
 
 /** Another model or effort for an agent in an office terminal (relaunch). */
@@ -160,7 +164,7 @@ export async function relaunch(
   if (!agent || !session) {
     return { ok: false, reason: 'Sólo se cambia en los agentes con terminal de la oficina' };
   }
-  if (isWorking(agent)) {
+  if (await isWorking(agent)) {
     return { ok: false, reason: 'Está trabajando: esperá a que termine su turno y probá de nuevo' };
   }
   if (!agent.cwd) return { ok: false, reason: 'No sé en qué carpeta trabaja' };
@@ -181,8 +185,20 @@ export async function relaunch(
     ...change,
   };
 
+  // A background session that never got a message has no conversation on
+  // disk to resume: it can be started again with new flags, but not made a
+  // supervisor of anything yet.
+  const hasConversation = fs.existsSync(agent.jsonlFile);
+  if (agent.bgId && !hasConversation && change.supervision) {
+    return { ok: false, reason: 'Mandale un primer mensaje antes de hacerlo supervisor' };
+  }
+
   // Close its terminal and wait for it (its exit handler drops the old copy
   // from the store and the resumable list), then resume the same session.
+  // A background session is stopped and taken off Claude Code's list first:
+  // resumed again with other flags it keeps its id (a running one would be
+  // copied instead).
+  agent.bgLeaving = true;
   const exited = new Promise<void>((resolve) => {
     if (session.hasExited) resolve();
     else session.onExit(() => resolve());
@@ -190,10 +206,23 @@ export async function relaunch(
   });
   ptyManager.dispose(id);
   await exited;
-  killOrphanedSession(agent.sessionId);
+  if (agent.bgId) await stopBackground(agent.bgId, agent.cwd);
+  else killOrphanedSession(agent.sessionId);
   if (store.has(id)) runtime.closeAgent(id);
 
-  const newId = launchStandaloneAgent(deps, { resume: look, bypassPermissions });
+  const plain: ResumableSession = { ...look, bgId: undefined };
+  const newId =
+    agent.bgId && !hasConversation
+      ? await launchAgent(deps, {
+          directoryPath: look.cwd,
+          nickname: look.nickname,
+          palette: look.palette,
+          hueShift: look.hueShift,
+          model: look.model,
+          effort: look.effort,
+          bypassPermissions,
+        })
+      : await launchAgent(deps, { resume: plain, bypassPermissions });
   return newId === null
     ? { ok: false, reason: 'No se pudo retomar la sesión' }
     : { ok: true, newId };

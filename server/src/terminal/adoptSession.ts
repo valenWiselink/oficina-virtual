@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { findBackgroundBySession } from './backgroundSessions.js';
 import type { LaunchStandaloneAgentDeps } from './standaloneAgentLauncher.js';
 import { launchStandaloneAgent } from './standaloneAgentLauncher.js';
 
@@ -68,6 +69,31 @@ export async function adoptIntoOffice(
   const agent = store.get(agentId);
   if (!agent || agent.leadAgentId !== undefined) return { ok: false, reason: 'Agente inválido' };
   if (ptyManager.has(agentId)) return { ok: false, reason: 'Ya está en la oficina' };
+
+  // A Claude Code background session (agent view, `claude --bg`): nothing to
+  // close anywhere — the office just attaches to it, even mid-turn.
+  const bg = await findBackgroundBySession(agent.sessionId, agent.cwd);
+  if (bg) {
+    const look = {
+      sessionId: agent.sessionId,
+      cwd: bg.cwd ?? agent.cwd ?? process.cwd(),
+      nickname: agent.nickname,
+      directoryName: agent.directoryName,
+      palette: agent.palette,
+      hueShift: agent.hueShift,
+      bgId: bg.id,
+      bgName: bg.name,
+    };
+    runtime.closeAgent(agentId);
+    const newId = launchStandaloneAgent(deps, {
+      resume: look,
+      attach: { bgId: bg.id, sessionId: agent.sessionId, name: bg.name },
+      bypassPermissions,
+    });
+    return newId === null
+      ? { ok: false, reason: 'No se pudo abrir la sesión en la oficina' }
+      : { ok: true, newId };
+  }
 
   const live = findLiveSession(agent.sessionId);
   if (live?.entrypoint && live.entrypoint !== 'cli') {

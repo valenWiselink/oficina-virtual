@@ -118,6 +118,12 @@ export interface AgentState {
   officeTerminal?: boolean;
   /** Set when it is a supervisor (supervisors/supervision.ts): what it watches over. */
   supervision?: SupervisionScope;
+  /** Its terminal attaches to this Claude Code background session (it
+   *  survives the office restarting); see terminal/backgroundSessions.ts. */
+  bgId?: string;
+  bgName?: string;
+  /** Being closed or relaunched on purpose: its attach exiting is expected. */
+  bgLeaving?: boolean;
   /** The agent's own task list (TaskCreate/TaskUpdate or TodoWrite). */
   tasks?: AgentTask[];
   /** Latest text answer of the main conversation (for handing it to another agent). */

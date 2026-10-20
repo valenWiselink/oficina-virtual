@@ -18,6 +18,10 @@ export interface ResumableSession {
   effort?: string;
   /** A supervisor: what it watches over (relaunched with its MCP and role). */
   supervision?: SupervisionScope;
+  /** A Claude Code background session (backgroundSessions.ts): the office
+   *  attaches to it again instead of relaunching it. */
+  bgId?: string;
+  bgName?: string;
 }
 
 const FILE_NAME = 'oficina-sesiones.json';
@@ -64,6 +68,10 @@ export class ResumableSessions {
   /** Server going down: the terminals about to die must stay resumable. */
   freeze(): void {
     this.frozen = true;
+  }
+
+  isFrozen(): boolean {
+    return this.frozen;
   }
 
   private write(sessions: ResumableSession[]): void {

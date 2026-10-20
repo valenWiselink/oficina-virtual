@@ -119,6 +119,7 @@ components:
         - $ref: '#/components/schemas/OfficeAccess'
         - $ref: '#/components/schemas/SettingsLoaded'
         - $ref: '#/components/schemas/BypassPermissionsUpdated'
+        - $ref: '#/components/schemas/BackgroundAgentsUpdated'
         - $ref: '#/components/schemas/HooksStatus'
         - $ref: '#/components/schemas/HooksConsentRequest'
         - $ref: '#/components/schemas/ClaudeStatus'
@@ -182,6 +183,7 @@ components:
         - $ref: '#/components/schemas/SaveAreaMappings'
         - $ref: '#/components/schemas/SetShowAreas'
         - $ref: '#/components/schemas/SetBypassPermissions'
+        - $ref: '#/components/schemas/SetBackgroundAgents'
         - $ref: '#/components/schemas/SetShowHostDirectories'
         - $ref: '#/components/schemas/SaveDirectory'
         - $ref: '#/components/schemas/RemoveDirectory'
@@ -949,6 +951,26 @@ components:
             Persistent per-host choice whether the host's own Directories (VS
             Code's workspace folders, standalone's start directory) are listed
             in `directoriesLoaded`. Off by default.
+        backgroundAgents:
+          type: boolean
+          description: >-
+            Agents run as Claude Code background sessions the office's terminal
+            attaches to, so closing or updating the office does not restart
+            them. On by default.
+
+    BackgroundAgentsUpdated:
+      description: |
+        The background-sessions setting changed (an accepted
+        `setBackgroundAgents`), broadcast to every office as read back after
+        the write. Applies to the next launches; running agents stay as they are.
+      type: object
+      additionalProperties: false
+      required: [type, enabled]
+      properties:
+        type:
+          const: backgroundAgentsUpdated
+        enabled:
+          type: boolean
 
     BypassPermissionsUpdated:
       description: |
@@ -1982,6 +2004,19 @@ components:
             type: array
             items:
               type: string
+
+    SetBackgroundAgents:
+      description: >-
+        Turn the background-sessions mode on or off (Ajustes): new launches and
+        resumes use it, running agents stay as they are.
+      type: object
+      additionalProperties: false
+      required: [type, enabled]
+      properties:
+        type:
+          const: setBackgroundAgents
+        enabled:
+          type: boolean
 
     SetBypassPermissions:
       description: >-
