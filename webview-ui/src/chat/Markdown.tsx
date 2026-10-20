@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { TERMINAL_FONT_FAMILY } from '../constants.js';
+import { transport } from '../transport/index.js';
 
 /**
  * Just enough Markdown for an agent's answers — headings, lists, code blocks,
@@ -109,26 +110,60 @@ function Table({ lines }: { lines: string[] }) {
   );
 }
 
-const INLINE = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/[^\s)>]+)/g;
+/** Code, bold, links and Windows drive paths (C:\…), which become clickable. */
+const INLINE =
+  /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\((?:https?:\/\/|[A-Za-z]:[\\/])[^)\s]+\)|https?:\/\/[^\s)>]+|(?<![\w:/\\])[A-Za-z]:[\\/][^\s"'`<>|*?]*[^\s"'`<>|*?.,;:!)\]}»])/g;
+
+/** A whole Windows drive path (what a click can show in the Explorer). */
+const WINDOWS_PATH = /^[A-Za-z]:[\\/][^"<>|*?]*$/;
+
+/** A path the agent mentioned: a click opens it (documents) or shows it in
+ *  the Explorer — the server decides, never running anything. */
+function PathLink({ path, children }: { path: string; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={() => transport.send({ type: 'openPath', path })}
+      title="Abrir en tu PC"
+      className="inline p-0 border-0 bg-transparent text-accent-bright underline break-all cursor-pointer text-left [font:inherit]"
+    >
+      {children}
+    </button>
+  );
+}
 
 /** Inline code, bold and links inside a line of text. */
 function inline(text: string): ReactNode[] {
   return text.split(INLINE).map((piece, i) => {
     if (i % 2 === 0) return piece;
     if (piece.startsWith('`')) {
-      return (
+      const body = piece.slice(1, -1);
+      const code = (
         <code
           key={i}
           className="px-3 rounded-sm bg-bg-thumb text-[0.92em]"
           style={{ fontFamily: TERMINAL_FONT_FAMILY }}
         >
-          {piece.slice(1, -1)}
+          {body}
         </code>
+      );
+      if (!WINDOWS_PATH.test(body.trim())) return code;
+      return (
+        <PathLink key={i} path={body.trim()}>
+          {code}
+        </PathLink>
       );
     }
     if (piece.startsWith('**')) return <strong key={i}>{piece.slice(2, -2)}</strong>;
     const link = piece.match(/^\[([^\]]+)\]\((.+)\)$/);
     const href = link ? link[2] : piece;
+    if (WINDOWS_PATH.test(href)) {
+      return (
+        <PathLink key={i} path={href}>
+          {link ? link[1] : piece}
+        </PathLink>
+      );
+    }
     return (
       <a
         key={i}

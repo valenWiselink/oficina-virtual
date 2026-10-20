@@ -17,11 +17,17 @@ import {
  * opener and no referrer (the page URL carries the server token). Anything
  * else is ignored.
  *
+ * A `file:` link goes to `openPath` instead (the office's server, which only
+ * opens documents and shows anything else in the Explorer): Claude Code's
+ * full-screen view prints every path as one, so without it a click on a file
+ * did nothing (measured 2026-10-20).
+ *
  * Takes `open` (window.open in the app) so this stays DOM-free for the Node
  * test runner.
  */
 export function terminalLinkOpener(
   open: (url: string, target: string, features: string) => unknown,
+  openPath?: (path: string) => void,
 ): (event: unknown, uri: string) => void {
   return (_event, uri) => {
     let url: URL;
@@ -30,9 +36,28 @@ export function terminalLinkOpener(
     } catch {
       return;
     }
+    if (url.protocol === 'file:') {
+      const local = windowsPathOf(url);
+      if (local && openPath) openPath(local);
+      return;
+    }
     if (!TERMINAL_LINK_PROTOCOLS.includes(url.protocol)) return;
     open(url.href, '_blank', TERMINAL_LINK_WINDOW_FEATURES);
   };
+}
+
+/** `file:///F:/a%20b/c.sql` → `F:\a b\c.sql`; null for anything but a local
+ *  drive path (a share, a host). */
+export function windowsPathOf(url: URL): string | null {
+  if (url.host !== '') return null;
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    return null;
+  }
+  const local = pathname.replace(/^\/(?=[A-Za-z]:)/, '').replace(/\//g, '\\');
+  return /^[A-Za-z]:\\/.test(local) ? local : null;
 }
 
 /** The slice of xterm's buffer API urlAtCell reads. Structural, so this module

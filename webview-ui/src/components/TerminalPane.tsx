@@ -123,7 +123,9 @@ export function TerminalPane({
     const host = hostRef.current;
     if (!host) return;
 
-    const openLink = terminalLinkOpener(window.open.bind(window));
+    const openLink = terminalLinkOpener(window.open.bind(window), (path) =>
+      transport.send({ type: 'openPath', path }),
+    );
     const term = new Terminal({
       fontFamily: TERMINAL_FONT_FAMILY,
       fontSize: fontSizeRef.current,

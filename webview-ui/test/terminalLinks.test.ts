@@ -128,3 +128,19 @@ describe('TERMINAL_URL_PATTERN', () => {
     expect('see https://example.com/a, then'.match(rebuilt)).toEqual(['https://example.com/a']);
   });
 });
+
+describe('terminalLinkOpener: file links', () => {
+  it('sends a local file link to the office, never to the browser', () => {
+    const opened: string[] = [];
+    const paths: string[] = [];
+    const openLink = terminalLinkOpener(
+      (url) => opened.push(url),
+      (path) => paths.push(path),
+    );
+    openLink(undefined, 'file:///F:/proyectos/x/migrations/2026%2010.sql');
+    openLink(undefined, 'file://servidor/share/x.sql');
+    openLink(undefined, 'file:///etc/passwd');
+    expect(paths).toEqual(['F:\\proyectos\\x\\migrations\\2026 10.sql']);
+    expect(opened).toEqual([]);
+  });
+});
