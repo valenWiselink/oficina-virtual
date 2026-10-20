@@ -4,7 +4,7 @@
  * tray icon so closing the window leaves the agents working, and the hooks
  * and updates a PC without Node needs. See desktop/README in the repo docs.
  */
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -161,6 +161,18 @@ function startApp(): void {
   // The page's goodbye after "Apagar la oficina" closes the app (it also asks
   // when the app only attached to an office it did not start).
   ipcMain.on('oficina:quit', () => void quit());
+  // The folder picker, as the Explorer draws it (the server's fallback is the
+  // old tree dialog).
+  ipcMain.handle('oficina:pickFolder', async () => {
+    const options: Electron.OpenDialogOptions = {
+      title: 'Elegí la carpeta de tu proyecto',
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+    return result.canceled ? undefined : result.filePaths[0];
+  });
 
   // Our server leaving on its own: "Apagar la oficina" from Ajustes (code 0)
   // quits the app once the page has shown its goodbye (or right away if the

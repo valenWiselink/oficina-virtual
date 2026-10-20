@@ -1,7 +1,7 @@
 # Oficina virtual as a Windows app: `npm run dist:win` -> release/Oficina-virtual-Setup-<version>.exe
 appId: com.oficina.virtual
 productName: Oficina virtual
-copyright: Copyright © 2026 Oficina virtual (fork of Pixel Agents, MIT)
+copyright: Copyright Â© 2026 Oficina virtual (fork of Pixel Agents, MIT)
 directories:
   output: release
   buildResources: build
@@ -10,7 +10,7 @@ directories:
 extraMetadata:
   name: oficina-virtual
   main: dist-desktop/main.js
-  version: 1.0.0
+  version: 1.0.3
 files:
   - dist-desktop/**
   - dist/**

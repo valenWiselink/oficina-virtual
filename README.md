@@ -101,7 +101,18 @@ la carpeta de tu proyecto y creás tu primer agente. Después hay un recorrido
 corto por la pantalla (la guía y la presentación se vuelven a ver en Ajustes →
 Ayuda).
 
-- **+ Agente**: arranca un Claude nuevo en una carpeta.
+- **+ Agente**: arranca un Claude nuevo en una carpeta, con el modelo y el
+  esfuerzo que elijas (o «como siempre»).
+- **Editar** (el lápiz de la tarjeta): nombre y color de cualquier agente; modelo,
+  esfuerzo y supervisión de los que corren en la oficina (los reinicia en la misma
+  conversación, así que tienen que estar quietos). Un modelo más grande es un
+  Clawd más grande, y el esfuerzo se ve en su vincha.
+- **Supervisores**: cualquier agente puede supervisar un espacio, agentes elegidos
+  o a todos. Le llegan los permisos, las preguntas y los turnos terminados de su
+  equipo; aprueba lo seguro, te pide lo demás con un «Te toca» y te cuenta qué hizo
+  cada uno. Lo peligroso (push, borrar, publicar, migraciones, deploys) siempre te
+  lo pide a vos: la oficina no lo deja aprobarlo.
+- Las rutas de archivos en la terminal se abren con un clic en el Explorador.
 - Cerrar la ventana **no** apaga la oficina: tus agentes siguen trabajando.
   Para apagarla: Ajustes → Apagar la oficina.
 - **Espacios**: el «+» de arriba a la izquierda crea uno; elegís qué carpetas
