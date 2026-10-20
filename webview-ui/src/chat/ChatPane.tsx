@@ -8,6 +8,7 @@ import type { BoardActions } from '../views/BoardCard.js';
 import { clawdColor } from '../views/clawdColor.js';
 import { useAgentChat } from './chatStore.js';
 import { Markdown } from './Markdown.js';
+import { PathAgentContext } from './pathAgent.js';
 
 /** A run of tool notes collapses into one line. */
 type Row = { kind: 'msg'; item: ChatItem } | { kind: 'tools'; key: string; items: ChatItem[] };
@@ -108,7 +109,7 @@ export function ChatPane({
             ) : row.item.role === 'user' ? (
               <UserBubble key={row.item.id} item={row.item} />
             ) : (
-              <AgentMessage key={row.item.id} item={row.item} color={color} />
+              <AgentMessage key={row.item.id} item={row.item} color={color} agentId={view.id} />
             ),
           )}
         <AgentNow view={view} actions={actions} onShowTerminal={onShowTerminal} />
@@ -129,7 +130,15 @@ function UserBubble({ item }: { item: ChatItem }) {
   );
 }
 
-function AgentMessage({ item, color }: { item: ChatItem; color: string }) {
+function AgentMessage({
+  item,
+  color,
+  agentId,
+}: {
+  item: ChatItem;
+  color: string;
+  agentId: number;
+}) {
   return (
     <div className="self-start max-w-[92%] flex flex-col gap-2">
       <span className="text-2xs text-text-muted flex items-center gap-4">
@@ -137,7 +146,9 @@ function AgentMessage({ item, color }: { item: ChatItem; color: string }) {
         Claude · {hm(item.at)}
       </span>
       <div className="bg-bg text-text border border-border rounded-2xl rounded-tl-sm px-10 py-8">
-        <Markdown text={item.text} />
+        <PathAgentContext.Provider value={agentId}>
+          <Markdown text={item.text} />
+        </PathAgentContext.Provider>
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ import { collectDirectorySuggestions } from './directorySuggestions.js';
 import { pickFolder } from './folderPicker.js';
 import { hostDirectory } from './hostDirectory.js';
 import { loadLayout, readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
-import { openInExplorer } from './openPath.js';
+import { openInExplorer, resolveLocalPath } from './openPath.js';
 import type { PermissionBroker } from './permissionBroker.js';
 import { pendingPermissionMessage } from './permissionMessages.js';
 import type { ConsentEffects } from './providers/hook/consentExecutor.js';
@@ -526,9 +526,12 @@ export function handleClientMessage(
       void pickFolder().then((path) => send({ type: 'folderPicked', path }));
       break;
 
-    case 'openPath':
-      openInExplorer(msg.path);
+    case 'openPath': {
+      // A relative path is the agent's: its folder, or one of its repos.
+      const cwd = typeof msg.id === 'number' ? store.get(msg.id)?.cwd : undefined;
+      openInExplorer(resolveLocalPath(msg.path, cwd));
       break;
+    }
 
     case 'writeDaySummary': {
       // "Escribirlo como resumen": Haiku words today's achievements (from your

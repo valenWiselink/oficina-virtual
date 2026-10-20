@@ -1,7 +1,9 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useContext } from 'react';
 
 import { TERMINAL_FONT_FAMILY } from '../constants.js';
+import { isRelativePath } from '../terminal/pathLinks.js';
 import { transport } from '../transport/index.js';
+import { PathAgentContext } from './pathAgent.js';
 
 /**
  * Just enough Markdown for an agent's answers — headings, lists, code blocks,
@@ -120,10 +122,11 @@ const WINDOWS_PATH = /^[A-Za-z]:[\\/][^"<>|*?]*$/;
 /** A path the agent mentioned: a click opens it (documents) or shows it in
  *  the Explorer — the server decides, never running anything. */
 function PathLink({ path, children }: { path: string; children: ReactNode }) {
+  const id = useContext(PathAgentContext);
   return (
     <button
       type="button"
-      onClick={() => transport.send({ type: 'openPath', path })}
+      onClick={() => transport.send({ type: 'openPath', path, id })}
       title="Abrir en tu PC"
       className="inline p-0 border-0 bg-transparent text-accent-bright underline break-all cursor-pointer text-left [font:inherit]"
     >
@@ -147,7 +150,7 @@ function inline(text: string): ReactNode[] {
           {body}
         </code>
       );
-      if (!WINDOWS_PATH.test(body.trim())) return code;
+      if (!WINDOWS_PATH.test(body.trim()) && !isRelativePath(body.trim())) return code;
       return (
         <PathLink key={i} path={body.trim()}>
           {code}

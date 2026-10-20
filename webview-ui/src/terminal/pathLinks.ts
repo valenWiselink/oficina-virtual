@@ -24,3 +24,24 @@ export function findWindowsPaths(line: string): PathMatch[] {
   }
   return found;
 }
+
+/** A path relative to the agent's folder ("migrations/x.sql", "src\a.ts"):
+ *  at least one folder and a file extension, so plain words never match. */
+const RELATIVE =
+  /(?<![\w:/\\.@-])(?:\.[\\/])?(?:[\w.-]+[\\/])+[\w-][\w.-]*\.[A-Za-z0-9]{1,8}(?![\w/\\-])/g;
+
+/** Relative file paths in a terminal line; the office looks them up in the
+ *  agent's folder and its repos (the server's openPath). */
+export function findRelativePaths(line: string): PathMatch[] {
+  const found: PathMatch[] = [];
+  for (const m of line.matchAll(RELATIVE)) {
+    found.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+  }
+  return found;
+}
+
+/** The whole text is one relative file path (a path in backticks). */
+export function isRelativePath(text: string): boolean {
+  const found = findRelativePaths(text);
+  return found.length === 1 && found[0].start === 0 && found[0].end === text.length;
+}

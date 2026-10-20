@@ -880,6 +880,7 @@ export interface PickFolder {
 export interface OpenPath {
   type: 'openPath';
   path: string;
+  id?: number;
 }
 
 export interface RequestDiagnostics {

@@ -56,6 +56,52 @@ export function explorerArgs(target: string, mode: 'folder' | 'open' | 'select')
   return mode === 'select' ? [`/select,"${target}"`] : [`"${target}"`];
 }
 
+/** Folders never worth looking into for an agent's file (big, generated). */
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'vendor', 'coverage']);
+/** How deep and how many folders a lookup walks before giving up. */
+const LOOKUP_DEPTH = 4;
+const LOOKUP_MAX_DIRS = 4000;
+
+/**
+ * A clicked path as an absolute one: as is when it already is, else the
+ * newest match under the agent's folder, walking a few levels down — its
+ * repos and worktrees too (an agent in "development" named
+ * "migrations/x.sql" of .worktrees\metrics-WISE-4628 — measured 2026-10-20).
+ * Unknown stays unknown (openInExplorer refuses it).
+ */
+export function resolveLocalPath(target: unknown, cwd: string | undefined): unknown {
+  if (typeof target !== 'string') return target;
+  const clean = target.trim().replace(/^\.[\\/]/, '');
+  if (/^[A-Za-z]:[\\/]/.test(clean) || !cwd || clean.split(/[\\/]/).includes('..')) return target;
+  let best: { file: string; mtime: number } | undefined;
+  let queue: string[] = [cwd];
+  let walked = 0;
+  for (let depth = 0; depth <= LOOKUP_DEPTH && queue.length > 0; depth++) {
+    const next: string[] = [];
+    for (const dir of queue) {
+      if (++walked > LOOKUP_MAX_DIRS) break;
+      const candidate = path.win32.join(dir, clean);
+      try {
+        const mtime = fs.statSync(candidate).mtimeMs;
+        if (!best || mtime > best.mtime) best = { file: candidate, mtime };
+      } catch {
+        /* not here */
+      }
+      try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
+            next.push(path.join(dir, entry.name));
+          }
+        }
+      } catch {
+        /* unreadable: skip it */
+      }
+    }
+    queue = next;
+  }
+  return best?.file ?? target;
+}
+
 /** Open it if it is an existing absolute path; false when it was refused. */
 export function openInExplorer(target: unknown): boolean {
   if (process.platform !== 'win32' || typeof target !== 'string') return false;

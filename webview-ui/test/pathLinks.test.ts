@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { findWindowsPaths } from '../src/terminal/pathLinks.js';
+import { findRelativePaths, findWindowsPaths, isRelativePath } from '../src/terminal/pathLinks.js';
 
 const texts = (line: string) => findWindowsPaths(line).map((m) => m.text);
 
@@ -21,5 +21,26 @@ describe('findWindowsPaths', () => {
     expect(texts('de C:\\a\\b a F:\\c\\d')).toEqual(['C:\\a\\b', 'F:\\c\\d']);
     expect(texts('https://x.com/C:/no y http:\\\\host')).toEqual([]);
     expect(texts('la hora 10:30 y el ratio 3:/')).toEqual([]);
+  });
+});
+
+describe('findRelativePaths', () => {
+  const rel = (line: string) => findRelativePaths(line).map((m) => m.text);
+
+  it('finds the paths an agent names inside its repos', () => {
+    expect(rel('correr migrations/20261020a_wise4628_metricas_expo_online.sql del repo')).toEqual([
+      'migrations/20261020a_wise4628_metricas_expo_online.sql',
+    ]);
+    expect(rel('mirá src\\views\\graphDraw.ts y ./README.md.')).toEqual([
+      'src\\views\\graphDraw.ts',
+      './README.md',
+    ]);
+  });
+
+  it('leaves words, URLs, absolute paths and versions alone', () => {
+    expect(rel('la 1.0.12 está en https://github.com/a/b.ts y F:\\x\\y.sql')).toEqual([]);
+    expect(rel('README.md y y/o sin extensión')).toEqual([]);
+    expect(isRelativePath('migrations/a.sql')).toBe(true);
+    expect(isRelativePath('npm run test')).toBe(false);
   });
 });

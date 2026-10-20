@@ -1,6 +1,28 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { explorerArgs, openInExplorer, openMode } from '../src/openPath.js';
+import { explorerArgs, openInExplorer, openMode, resolveLocalPath } from '../src/openPath.js';
+
+describe('resolveLocalPath', () => {
+  it("finds a relative path in the agent's folder or one of its repos", () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'abrir-'));
+    try {
+      fs.mkdirSync(path.join(cwd, 'wiselink_api_metrics', 'migrations'), { recursive: true });
+      const sql = path.join(cwd, 'wiselink_api_metrics', 'migrations', 'a.sql');
+      fs.writeFileSync(sql, '');
+      fs.writeFileSync(path.join(cwd, 'README.md'), '');
+      expect(resolveLocalPath('migrations/a.sql', cwd)).toBe(sql);
+      expect(resolveLocalPath('./README.md', cwd)).toBe(path.join(cwd, 'README.md'));
+      expect(resolveLocalPath('migrations/nada.sql', cwd)).toBe('migrations/nada.sql');
+      expect(resolveLocalPath('../afuera.sql', cwd)).toBe('../afuera.sql');
+      expect(resolveLocalPath('migrations/a.sql', undefined)).toBe('migrations/a.sql');
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('openPath', () => {
   it('quotes the path for explorer: a folder or document as is, a file selected', () => {

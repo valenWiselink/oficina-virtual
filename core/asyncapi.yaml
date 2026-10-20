@@ -2208,7 +2208,9 @@ components:
       description: >-
         A path clicked in an agent's terminal: an existing folder opens in the
         host's file explorer, a file is shown selected in its folder (never
-        run). Anything that is not an existing absolute path is ignored.
+        run). A relative path ("migrations/x.sql") is looked up in the agent
+        `id`'s folder and its first-level folders (its repos). Anything that
+        is not an existing path is ignored.
       type: object
       additionalProperties: false
       required: [type, path]
@@ -2217,6 +2219,9 @@ components:
           const: openPath
         path:
           type: string
+        id:
+          type: integer
+          description: The agent whose terminal or chat showed it (for relative paths).
 
     RequestDirectorySuggestions:
       description: >-

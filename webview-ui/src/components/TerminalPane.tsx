@@ -16,7 +16,7 @@ import {
 import { registerAgentInput } from '../terminal/agentInput.js';
 import { attachClipboardInput } from '../terminal/clipboardInput.js';
 import { zoomTerminalFont } from '../terminal/fontZoom.js';
-import { findWindowsPaths } from '../terminal/pathLinks.js';
+import { findRelativePaths, findWindowsPaths } from '../terminal/pathLinks.js';
 import { attachPromptMarks } from '../terminal/promptMarks.js';
 import {
   attachSearch,
@@ -124,7 +124,7 @@ export function TerminalPane({
     if (!host) return;
 
     const openLink = terminalLinkOpener(window.open.bind(window), (path) =>
-      transport.send({ type: 'openPath', path }),
+      transport.send({ type: 'openPath', path, id: agentId }),
     );
     const term = new Terminal({
       fontFamily: TERMINAL_FONT_FAMILY,
@@ -149,11 +149,13 @@ export function TerminalPane({
     term.registerLinkProvider({
       provideLinks: (y, callback) => {
         const line = term.buffer.active.getLine(y - 1)?.translateToString(true) ?? '';
-        const links = findWindowsPaths(line).map((m) => ({
+        // Relative ones ("migrations/x.sql") are the agent's: the office looks
+        // them up in its folder and repos.
+        const links = [...findWindowsPaths(line), ...findRelativePaths(line)].map((m) => ({
           range: { start: { x: m.start + 1, y }, end: { x: m.end, y } },
           text: m.text,
           decorations: { underline: true, pointerCursor: true },
-          activate: () => transport.send({ type: 'openPath', path: m.text }),
+          activate: () => transport.send({ type: 'openPath', path: m.text, id: agentId }),
         }));
         callback(links.length > 0 ? links : undefined);
       },
