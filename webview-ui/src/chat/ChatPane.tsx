@@ -3,10 +3,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatItem } from '../../../core/src/messages.js';
 import { Button } from '../components/ui/Button.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
+import { terminalShortcut } from '../terminal/terminalShortcuts.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
 import { clawdColor } from '../views/clawdColor.js';
-import { useAgentChat } from './chatStore.js';
+import { useChatFontSize, zoomChatFont } from './chatFont.js';
+import { addPending, type PendingMessage, useAgentChat, usePendingMessages } from './chatStore.js';
+import { isLongAnswer, withChatHint, withoutChatHint } from './chatText.js';
 import { Markdown } from './Markdown.js';
 import { PathAgentContext } from './pathAgent.js';
 
@@ -49,18 +52,58 @@ export function ChatPane({
   onShowTerminal: () => void;
 }) {
   const { items, failed, retry } = useAgentChat(view.id);
+  const sending = usePendingMessages(view.id);
+  const fontPx = useChatFontSize();
+  const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const pinnedToEnd = useRef(true);
 
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && pinnedToEnd.current) el.scrollTop = el.scrollHeight;
-  }, [items, view.statusText]);
+  }, [items, sending, view.statusText, fontPx]);
+
+  // Ctrl + wheel sizes the chat's text (not the page's): a non-passive
+  // listener, the only kind that may cancel the browser's own zoom.
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey || e.deltaY === 0) return;
+      e.preventDefault();
+      zoomChatFont(e.deltaY < 0 ? 1 : -1);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const busy =
+    view.kind === 'work' ||
+    view.kind === 'think' ||
+    view.kind === 'meet' ||
+    view.kind === 'research';
+  // Written in the chat: it asks for a chat-sized answer, and shows at once.
+  const send = (text: string) => {
+    onSend(withChatHint(text));
+    addPending(view.id, text, busy);
+    pinnedToEnd.current = true;
+  };
 
   const color = clawdColor(view.palette, view.hueShift);
   return (
     // -inset-4: cover the dark gap the terminal keeps around itself.
-    <div className="absolute -inset-4 flex flex-col bg-bg-dark pointer-events-auto">
+    <div
+      ref={root}
+      className="absolute -inset-4 flex flex-col bg-bg-dark pointer-events-auto"
+      style={{ fontSize: fontPx }}
+      onKeyDown={(e) => {
+        const shortcut = terminalShortcut(e);
+        if (!shortcut || shortcut === 'search') return;
+        e.preventDefault();
+        zoomChatFont(shortcut === 'zoomIn' ? 1 : shortcut === 'zoomOut' ? -1 : 0);
+      }}
+    >
+      <FontControl fontPx={fontPx} />
       <div
         ref={scroller}
         className="flex-1 min-h-0 overflow-y-auto px-12 py-12 flex flex-col gap-10"
@@ -112,9 +155,48 @@ export function ChatPane({
               <AgentMessage key={row.item.id} item={row.item} color={color} agentId={view.id} />
             ),
           )}
+        {sending.map((p) => (
+          <PendingBubble key={p.key} message={p} />
+        ))}
         <AgentNow view={view} actions={actions} onShowTerminal={onShowTerminal} />
       </div>
-      <Composer view={view} onSend={onSend} />
+      <Composer view={view} onSend={send} />
+    </div>
+  );
+}
+
+/** A− / A+ for the chat's text (also Ctrl + wheel and Ctrl + / − / 0). */
+function FontControl({ fontPx }: { fontPx: number }) {
+  const button =
+    'bg-transparent border-0 px-4 py-0 cursor-pointer text-text-muted hover:text-text font-semibold';
+  return (
+    <div className="flex justify-end items-center gap-2 px-10 pt-4 text-2xs">
+      <button
+        type="button"
+        className={button}
+        onClick={() => zoomChatFont(-1)}
+        title="Letra más chica (Ctrl −)"
+        aria-label="Letra del chat más chica"
+      >
+        A−
+      </button>
+      <button
+        type="button"
+        className="bg-transparent border-0 p-0 cursor-pointer text-text-muted hover:text-text tabular-nums"
+        onClick={() => zoomChatFont(0)}
+        title="Tamaño normal (Ctrl 0)"
+      >
+        {fontPx}px
+      </button>
+      <button
+        type="button"
+        className={button}
+        onClick={() => zoomChatFont(1)}
+        title="Letra más grande (Ctrl +)"
+        aria-label="Letra del chat más grande"
+      >
+        A+
+      </button>
     </div>
   );
 }
@@ -122,10 +204,35 @@ export function ChatPane({
 function UserBubble({ item }: { item: ChatItem }) {
   return (
     <div className="self-end max-w-[85%] flex flex-col items-end gap-2">
-      <div className="bg-active-bg text-text text-sm rounded-2xl rounded-br-sm px-10 py-6 whitespace-pre-wrap break-words">
-        {item.text}
+      <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
+        {withoutChatHint(item.text)}
       </div>
       <span className="text-2xs text-text-muted">Vos · {hm(item.at)}</span>
+    </div>
+  );
+}
+
+/** How long a sent message may take to show before the chat says so. */
+const LATE_MS = 20_000;
+
+/** A message you sent that the conversation does not show yet. */
+function PendingBubble({ message }: { message: PendingMessage }) {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLate(true), Math.max(0, message.at + LATE_MS - Date.now()));
+    return () => clearTimeout(timer);
+  }, [message.at]);
+  const note = message.queued
+    ? 'En cola: lo lee cuando termine lo que está haciendo'
+    : late
+      ? 'Todavía no aparece en la conversación: fijate en la terminal'
+      : 'Enviando…';
+  return (
+    <div className="self-end max-w-[85%] flex flex-col items-end gap-2 opacity-75">
+      <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
+        {message.text}
+      </div>
+      <span className="text-2xs text-text-muted">Vos · {note}</span>
     </div>
   );
 }
@@ -139,16 +246,34 @@ function AgentMessage({
   color: string;
   agentId: number;
 }) {
+  // A long answer folds to its start; "Ver todo" opens it.
+  const long = isLongAnswer(item.text);
+  const [open, setOpen] = useState(false);
+  const folded = long && !open;
   return (
-    <div className="self-start max-w-[92%] flex flex-col gap-2">
+    <div className="self-start max-w-[92%] min-w-0 flex flex-col gap-2">
       <span className="text-2xs text-text-muted flex items-center gap-4">
         <span className="w-6 h-6 rounded-full" style={{ background: color }} />
         Claude · {hm(item.at)}
       </span>
-      <div className="bg-bg text-text border border-border rounded-2xl rounded-tl-sm px-10 py-8">
-        <PathAgentContext.Provider value={agentId}>
-          <Markdown text={item.text} />
-        </PathAgentContext.Provider>
+      <div className="bg-bg text-text border border-border rounded-2xl rounded-tl-sm px-[0.8em] py-[0.6em] min-w-0">
+        <div className={folded ? 'relative max-h-[18em] overflow-hidden' : undefined}>
+          <PathAgentContext.Provider value={agentId}>
+            <Markdown text={item.text} />
+          </PathAgentContext.Provider>
+          {folded && (
+            <div className="absolute inset-x-0 bottom-0 h-[3em] bg-linear-to-t from-bg to-transparent pointer-events-none" />
+          )}
+        </div>
+        {long && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="mt-[0.4em] bg-transparent border-0 p-0 cursor-pointer text-[0.85em] text-accent-bright hover:underline"
+          >
+            {open ? 'Ver menos' : 'Ver todo'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -262,7 +387,7 @@ function Composer({ view, onSend }: { view: AgentView; onSend: (text: string) =>
         disabled={blocked}
         placeholder={blocked ? 'Primero contestá lo que te pidió' : `Escribile a ${view.name}…`}
         aria-label={`Mensaje para ${view.name}`}
-        className="flex-1 min-h-34 resize-none text-sm bg-bg text-text border border-border rounded-lg px-10 py-7 outline-none placeholder:text-text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20"
+        className="flex-1 min-h-34 resize-none text-[1em] bg-bg text-text border border-border rounded-lg px-10 py-7 outline-none placeholder:text-text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey) {

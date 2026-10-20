@@ -1,106 +1,159 @@
-import { type ReactNode, useContext } from 'react';
+import { type ReactNode, useContext, useState } from 'react';
 
 import { TERMINAL_FONT_FAMILY } from '../constants.js';
+import { writeClipboardText } from '../terminal/clipboard.js';
 import { isRelativePath } from '../terminal/pathLinks.js';
 import { transport } from '../transport/index.js';
+import { type ListItem, type MdBlock, parseMarkdown } from './markdownBlocks.js';
 import { PathAgentContext } from './pathAgent.js';
 
 /**
- * Just enough Markdown for an agent's answers — headings, lists, code blocks,
- * tables, inline code, bold, links — built as React elements (never as HTML),
- * so nothing in an answer can inject markup into the office.
+ * An agent's answer, formatted: paragraphs, headings, quotes, nested lists,
+ * code with a copy button, tables that scroll on their own and the "Te toca:"
+ * line as a notice — built as React elements (never as HTML), so nothing in
+ * an answer can inject markup into the office. Sizes are relative (em), so
+ * the chat's own font size scales all of it.
  */
 export function Markdown({ text }: { text: string }) {
-  const parts = text.split(/^```[^\n]*\n?/m);
   return (
-    <div className="flex flex-col gap-6 min-w-0">
-      {parts.map((part, i) =>
-        i % 2 === 1 ? (
-          <pre
-            key={i}
-            className="m-0 p-8 rounded-lg bg-bg-thumb text-text text-xs overflow-x-auto"
-            style={{ fontFamily: TERMINAL_FONT_FAMILY }}
-          >
-            {part.replace(/\n$/, '')}
-          </pre>
-        ) : (
-          <Blocks key={i} text={part} />
-        ),
-      )}
+    <div className="flex flex-col gap-[0.6em] min-w-0 leading-relaxed">
+      {parseMarkdown(text).map((block, i) => (
+        <Block key={i} block={block} />
+      ))}
     </div>
   );
 }
 
-function Blocks({ text }: { text: string }) {
-  // Edge newlines trimmed: the text right after a code fence starts with one.
-  const blocks = text
-    .split(/\n{2,}/)
-    .map((b) => b.replace(/^\n+|\n+$/g, ''))
-    .filter((b) => b.trim());
+function Block({ block }: { block: MdBlock }): ReactNode {
+  switch (block.kind) {
+    case 'para':
+      return (
+        <p className="m-0 break-words">
+          {block.lines.map((l, i) => (
+            <span key={i}>
+              {i > 0 && <br />}
+              {inline(l)}
+            </span>
+          ))}
+        </p>
+      );
+    case 'heading':
+      return (
+        <p
+          className={`m-0 mt-[0.3em] text-text font-semibold ${
+            block.level === 1 ? 'text-[1.2em]' : block.level === 2 ? 'text-[1.08em]' : ''
+          }`}
+        >
+          {inline(block.text)}
+        </p>
+      );
+    case 'quote':
+      return (
+        <blockquote className="m-0 pl-[0.8em] border-0 border-l-3 border-solid border-border-strong text-text-2">
+          {block.lines.map((l, i) => (
+            <span key={i}>
+              {i > 0 && <br />}
+              {inline(l)}
+            </span>
+          ))}
+        </blockquote>
+      );
+    case 'list':
+      return <List block={block} depth={0} />;
+    case 'code':
+      return <CodeBlock lang={block.lang} text={block.text} />;
+    case 'table':
+      return <Table header={block.header} rows={block.rows} />;
+    case 'yourTurn':
+      return (
+        <div className="rounded-lg border border-status-permission bg-status-permission-bg text-status-permission-text px-[0.7em] py-[0.45em]">
+          <strong>Te toca:</strong> {inline(block.text)}
+        </div>
+      );
+    case 'rule':
+      return <hr className="m-0 border-0 border-t border-solid border-border" />;
+  }
+}
+
+function List({ block, depth }: { block: Extract<MdBlock, { kind: 'list' }>; depth: number }) {
+  const Tag = block.ordered ? 'ol' : 'ul';
+  const marker = block.ordered ? 'list-decimal' : depth === 0 ? 'list-disc' : 'list-[circle]';
   return (
-    <>
-      {blocks.map((block, i) => (
-        <Block key={i} lines={block.split('\n')} />
+    <Tag
+      start={block.ordered ? block.start : undefined}
+      className={`m-0 pl-[1.4em] flex flex-col gap-[0.25em] ${marker}`}
+    >
+      {block.items.map((item, i) => (
+        <Item key={i} item={item} depth={depth} />
       ))}
-    </>
+    </Tag>
   );
 }
 
-const LIST_ITEM = /^\s*(?:[-*•]|\d+[.)])\s+/;
+function Item({ item, depth }: { item: ListItem; depth: number }) {
+  return (
+    <li className="pl-[0.15em]">
+      {inline(item.text)}
+      {item.children.map((child, i) =>
+        child.kind === 'list' ? (
+          <div key={i} className="mt-[0.25em]">
+            <List block={child} depth={depth + 1} />
+          </div>
+        ) : null,
+      )}
+    </li>
+  );
+}
 
-function Block({ lines }: { lines: string[] }) {
-  const first = lines[0];
-  const heading = first.match(/^(#{1,4})\s+(.*)$/);
-  if (heading && lines.length === 1) {
-    return <p className="m-0 text-sm font-semibold text-text">{inline(heading[2])}</p>;
-  }
-  if (lines.every((l) => l.trim().startsWith('|'))) {
-    return <Table lines={lines} />;
-  }
-  if (lines.every((l) => LIST_ITEM.test(l) || /^\s{2,}\S/.test(l))) {
-    const ordered = /^\s*\d/.test(first);
-    const items = lines.filter((l) => LIST_ITEM.test(l));
-    const Tag = ordered ? 'ol' : 'ul';
-    return (
-      <Tag
-        className={`m-0 pl-18 flex flex-col gap-2 text-sm ${ordered ? 'list-decimal' : 'list-disc'}`}
+function CodeBlock({ lang, text }: { lang: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void writeClipboardText(text).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <div className="rounded-lg bg-bg-thumb min-w-0">
+      <div className="flex items-center justify-between px-[0.7em] pt-[0.35em] text-[0.75em] text-text-muted">
+        <span>{lang}</span>
+        <button
+          type="button"
+          onClick={copy}
+          className="bg-transparent border-0 p-0 cursor-pointer text-text-muted hover:text-text [font:inherit]"
+        >
+          {copied ? 'Copiado' : 'Copiar'}
+        </button>
+      </div>
+      <pre
+        className="m-0 px-[0.7em] pb-[0.6em] pt-[0.2em] text-text text-[0.86em] overflow-x-auto"
+        style={{ fontFamily: TERMINAL_FONT_FAMILY }}
       >
-        {items.map((l, i) => (
-          <li key={i}>{inline(l.replace(LIST_ITEM, ''))}</li>
-        ))}
-      </Tag>
-    );
-  }
-  return (
-    <p className="m-0 text-sm whitespace-pre-wrap break-words">
-      {lines.map((l, i) => (
-        <span key={i}>
-          {i > 0 && '\n'}
-          {inline(l.replace(/^#{1,4}\s+/, ''))}
-        </span>
-      ))}
-    </p>
+        {text}
+      </pre>
+    </div>
   );
 }
 
-function Table({ lines }: { lines: string[] }) {
-  const rows = lines
-    .filter((l) => !/^\s*\|[\s:|-]+\|\s*$/.test(l))
-    .map((l) =>
-      l
-        .trim()
-        .replace(/^\||\|$/g, '')
-        .split('|')
-        .map((c) => c.trim()),
-    );
+function Table({ header, rows }: { header: string[]; rows: string[][] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="text-xs border-collapse">
+    <div className="overflow-x-auto rounded-lg border border-solid border-border">
+      <table className="w-full border-collapse text-[0.9em]">
+        <thead>
+          <tr className="bg-bg-thumb">
+            {header.map((c, i) => (
+              <th key={i} className="text-left font-semibold px-[0.6em] py-[0.35em] align-top">
+                {inline(c)}
+              </th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {rows.map((cells, r) => (
-            <tr key={r} className={r === 0 ? 'font-semibold' : ''}>
+            <tr key={r} className="border-0 border-t border-solid border-border">
               {cells.map((c, i) => (
-                <td key={i} className="border border-border px-6 py-2 align-top">
+                <td key={i} className="px-[0.6em] py-[0.35em] align-top">
                   {inline(c)}
                 </td>
               ))}
@@ -144,7 +197,7 @@ function inline(text: string): ReactNode[] {
       const code = (
         <code
           key={i}
-          className="px-3 rounded-sm bg-bg-thumb text-[0.92em]"
+          className="px-[0.25em] rounded-sm bg-bg-thumb text-[0.9em]"
           style={{ fontFamily: TERMINAL_FONT_FAMILY }}
         >
           {body}

@@ -265,6 +265,25 @@ describe('SupervisorRelay', () => {
     expect(written.get(11)).toContain('pide permiso p-1');
   });
 
+  it('tells a finished turn once: waking up with the same answer is not news', () => {
+    const { store, r, run, written } = relay();
+    const turn = () => {
+      r.observe({ type: 'agentStatus', id: 3, status: 'active' });
+      r.observe({ type: 'agentStatus', id: 3, status: 'waiting' });
+      run();
+      run();
+    };
+    store.get(3)!.lastReply = 'Publiqué la 1.0.13.';
+    turn();
+    turn();
+    turn();
+    const told = (written.get(10) ?? '').split('terminó su turno').length - 1;
+    expect(told).toBe(1);
+    store.get(3)!.lastReply = 'Listo el chat.';
+    turn();
+    expect(written.get(10)).toContain('Listo el chat.');
+  });
+
   it('does not report the first status it sees, nor agents outside the team', () => {
     const { r, run, written } = relay();
     r.observe({ type: 'agentStatus', id: 3, status: 'waiting' });

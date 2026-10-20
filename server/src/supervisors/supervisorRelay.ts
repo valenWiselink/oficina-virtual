@@ -74,6 +74,8 @@ export class SupervisorRelay {
   private readonly pending = new Map<number, string[]>();
   private readonly waiting = new Map<number, boolean>();
   private readonly questionToldAt = new Map<number, number>();
+  /** The answer each agent's last "terminó su turno" carried. */
+  private readonly replyTold = new Map<number, string>();
   private readonly schedule: (fn: () => void, ms: number) => void;
   private readonly now: () => number;
 
@@ -119,6 +121,7 @@ export class SupervisorRelay {
       case 'agentClosed':
         this.waiting.delete(id);
         this.questionToldAt.delete(id);
+        this.replyTold.delete(id);
         return;
       default:
         return;
@@ -157,6 +160,11 @@ export class SupervisorRelay {
     // Still waiting (not a blip between two tools), and it said something.
     if (!agent || this.waiting.get(id) !== true) return;
     const reply = agent.lastReply?.trim();
+    // Same answer as the last notice: a blip (a background task woke it and
+    // it went back to waiting), not a new turn — the supervisor got four in
+    // a row, 2026-10-20.
+    if (reply && this.replyTold.get(id) === reply) return;
+    if (reply) this.replyTold.set(id, reply);
     this.tell(id, (name) =>
       reply
         ? `«${name}» terminó su turno. Lo último que dijo:\n${clip(reply, REPLY_CLIP)}`

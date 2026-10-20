@@ -54,6 +54,9 @@ interface TerminalDrawerProps {
   onNewAgent?: () => void;
 }
 
+/** How long after the chat's paste its Enter goes (sendTo). */
+const CHAT_ENTER_AFTER_MS = 150;
+
 /** Per dock: layout of [cards, panel] (cards always face the office), the
  *  margins that float the panel off the window edges, the drag handle on its
  *  inner edge, and the close arrow. */
@@ -115,12 +118,14 @@ export function TerminalDrawer(props: TerminalDrawerProps) {
     else inputs.current.delete(agentId);
   };
   // The chat writes into the agent's terminal as if typed there: a bracketed
-  // paste (so newlines stay inside the message), then Enter.
+  // paste (so newlines stay inside the message), then Enter — late enough
+  // for a background session, whose input travels through `claude attach`,
+  // to have taken the paste first (the server's sendToTerminal waits 80 ms).
   const sendTo = (agentId: number, text: string) => {
     const input = inputs.current.get(agentId);
     if (!input) return;
     input.paste(text);
-    setTimeout(() => input.send('\r'), 40);
+    setTimeout(() => input.send('\r'), CHAT_ENTER_AFTER_MS);
   };
   const openSearch = (agentId: number) => {
     setMode(agentId, 'terminal');

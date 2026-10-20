@@ -390,6 +390,8 @@ export const MUGSHOT_DISPLAY_PX = MUGSHOT_CROP_SIDE_PX * MUGSHOT_RENDER_ZOOM;
 export const TERMINAL_FONT_FAMILY =
   'ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace';
 export const TERMINAL_FONT_SIZE_PX = 13;
+/** The chat view's default font size (chatFont.ts zooms it, 12–20). */
+export const CHAT_FONT_SIZE_PX = 14;
 /** Lines xterm retains client-side (independent of the server's replay ring). */
 export const TERMINAL_SCROLLBACK_LINES = 5_000;
 /** Debounce for propagating a resize to the PTY (fit on every frame thrashes it). */
