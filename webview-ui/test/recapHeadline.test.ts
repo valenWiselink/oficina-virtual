@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { recapHeadline } from '../src/history/recapHeadline.js';
+import { achievement, recapHeadline } from '../src/history/recapHeadline.js';
 
 describe('recapHeadline', () => {
   it('keeps what got done and cuts from what is missing or next', () => {
@@ -57,5 +57,29 @@ describe('recapHeadline', () => {
       ),
     ).toBeUndefined();
     expect(recapHeadline('Falta que revises el PR #12.')).toBeUndefined();
+  });
+});
+
+describe('achievement', () => {
+  it('leaves out work still going on with nothing done, keeps it when something is done', () => {
+    expect(achievement('Estamos analizando los mapas de calor, que siguen trabajando.')).toBe(
+      undefined,
+    );
+    expect(achievement('Estoy rediseñando la pantalla y ya está mergeada (#42).')).toBe(
+      'Estoy rediseñando la pantalla y ya está mergeada.',
+    );
+    expect(achievement('Estamos renombrando la app; quedó la 1.1 en revisión.')).toBe(
+      'Estamos renombrando la app; quedó la 1.1 en revisión.',
+    );
+  });
+
+  it('leaves out a report on another agent', () => {
+    expect(achievement('«Panel» encontró que la tarjeta ya tiene un QR.')).toBeUndefined();
+  });
+});
+
+describe('achievement: supervisors', () => {
+  it("leaves out a supervisor's report", () => {
+    expect(achievement('Superviso «Desarrollo»: el ticket ya está en dev.')).toBeUndefined();
   });
 });

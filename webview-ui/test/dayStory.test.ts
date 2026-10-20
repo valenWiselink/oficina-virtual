@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DayLogEntry, PrStatus } from '../../core/src/messages.js';
 import { MIX_BLACK, MIX_WHITE, TERMINAL_PRESETS } from '../src/constants.js';
-import { dayStory } from '../src/history/dayStory.js';
+import { dayStory, sameTopic } from '../src/history/dayStory.js';
 import {
   customScheme,
   forClaude,
@@ -110,6 +110,30 @@ describe('dayStory: a session told by its recap', () => {
       e({ at: 4, agentId: 2, agent: 'Eventos', summary: 'Mejoré la pantalla.', folder: 'api' }),
       e({ at: 5, agentId: 2, agent: 'Eventos', summary: 'Ajusté los textos.', folder: 'api' }),
       e({ at: 6, agentId: 3, agent: 'Saludo', kind: 'recap', text: 'Sólo nos saludamos.' }),
+      e({
+        at: 7,
+        agentId: 4,
+        agent: 'Mapas',
+        kind: 'recap',
+        folder: 'api',
+        text: 'Estamos analizando los mapas de calor con siete subagentes, que siguen trabajando.',
+      }),
+      e({
+        at: 8,
+        agentId: 5,
+        agent: 'Supervisor',
+        kind: 'recap',
+        folder: 'api',
+        text: '«Pagos» dejó listo el cobro.',
+      }),
+      e({
+        at: 9,
+        agentId: 6,
+        agent: 'Catálogo',
+        kind: 'recap',
+        folder: 'catalogo',
+        text: 'Estoy rediseñando la revisión del PDF y ya está mergeada a develop (#42).',
+      }),
     ],
     [],
     new Map(),
@@ -117,20 +141,22 @@ describe('dayStory: a session told by its recap', () => {
 
   it('leads with its newest recap, cut to what got done; else its last turn', () => {
     const [api] = story.projects;
-    expect(api.streams.map((s) => [s.agent, s.title])).toEqual([
+    const told = api.streams.filter((s) => s.agent === 'Pagos' || s.agent === 'Eventos');
+    expect(told.map((s) => [s.agent, s.title])).toEqual([
       ['Pagos', 'Arreglamos el sistema de cobros de Mercado Pago que tenía un bug.'],
       ['Eventos', 'Ajusté los textos.'],
     ]);
   });
 
-  it('sums the day in "Hoy", a line per project', () => {
-    expect(story.today).toEqual([
+  it('lists what you achieved per project: no agents, PRs, work still going on or reports', () => {
+    expect(story.achievements).toEqual([
       {
         project: 'api',
-        headlines: [
-          'Arreglamos el sistema de cobros de Mercado Pago que tenía un bug.',
-          'Ajusté los textos.',
-        ],
+        items: ['Arreglamos el sistema de cobros de Mercado Pago que tenía un bug.'],
+      },
+      {
+        project: 'catalogo',
+        items: ['Estoy rediseñando la revisión del PDF y ya está mergeada a develop.'],
       },
     ]);
     // A recap that says nothing happened tells nothing: the greeting is not there.
@@ -202,5 +228,75 @@ describe('terminal schemes', () => {
     const swapped = forClaude(scheme, 'light').theme;
     expect(swapped.black).toBe(dark.white);
     expect(swapped.white).toBe(dark.black);
+  });
+});
+
+describe('dayStory: sessions sharing a name', () => {
+  it('keeps them apart, and counts what a session finished before moving on', () => {
+    const story = dayStory(
+      [
+        e({
+          at: 1,
+          agent: 'Langostino',
+          sessionId: 'a',
+          kind: 'recap',
+          folder: 'app',
+          text: 'La pantalla de tus datos ya está en main.',
+        }),
+        e({
+          at: 2,
+          agent: 'Langostino',
+          sessionId: 'b',
+          kind: 'recap',
+          folder: 'oficina',
+          text: 'Rehice el catálogo de Clawds.',
+        }),
+        e({
+          at: 3,
+          agent: 'Panel',
+          sessionId: 'c',
+          kind: 'recap',
+          folder: 'web',
+          text: '"Mis datos" ya está en dev.',
+        }),
+        e({
+          at: 4,
+          agent: 'Panel',
+          sessionId: 'c',
+          kind: 'recap',
+          folder: 'web',
+          text: 'Estamos con los botones de QR y firma.',
+        }),
+      ],
+      [],
+      new Map(),
+    );
+    expect(
+      story.projects.flatMap((p) => p.streams).filter((s) => s.agent === 'Langostino'),
+    ).toHaveLength(2);
+    expect(story.achievements).toEqual(
+      expect.arrayContaining([
+        { project: 'app', items: ['La pantalla de tus datos ya está en main.'] },
+        { project: 'oficina', items: ['Rehice el catálogo de Clawds.'] },
+        { project: 'web', items: ['"Mis datos" ya está en dev.'] },
+      ]),
+    );
+  });
+});
+
+describe('sameTopic', () => {
+  it('tells a restated thread from a new achievement', () => {
+    expect(
+      sameTopic(
+        'Arreglé el cobro.',
+        'Arreglamos el sistema de cobros de Mercado Pago que tenía un bug.',
+      ),
+    ).toBe(true);
+    expect(
+      sameTopic(
+        '"Mis datos" del panel del expositor ya está en dev, sin datos laborales.',
+        'WISE-6365 ya está en dev: el menú de cada empleado tiene "Descargar QR" y "Generar firma".',
+      ),
+    ).toBe(false);
   });
 });

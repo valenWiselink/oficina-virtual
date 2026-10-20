@@ -86,6 +86,12 @@ export class DayLog {
     return [...this.entries].sort((a, b) => a.at - b.at);
   }
 
+  /** Where today's files live (the history and its written summary). */
+  storage(): { dir: string; day: string } {
+    this.rollOver();
+    return { dir: this.dir, day: this.day };
+  }
+
   /** Read the recaps Claude Code wrote today in the transcripts under
    *  `projectsDir` (also the ones from before the office started). */
   readRecapsFrom(projectsDir: string): void {

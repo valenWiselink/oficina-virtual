@@ -16,6 +16,7 @@ import {
   writeConfig,
 } from './configPersistence.js';
 import { HUE_SHIFT_MAX_DEG, PALETTE_COUNT, TERMINAL_REQUIRES_TOKEN_REASON } from './constants.js';
+import { cleanFacts, savedDaySummary, writeDaySummary } from './daySummary.js';
 import {
   handleDirectoryClientMessage,
   type HostDirectoryEntry,
@@ -529,6 +530,22 @@ export function handleClientMessage(
       openInExplorer(msg.path);
       break;
 
+    case 'writeDaySummary': {
+      // "Escribirlo como resumen": Haiku words today's achievements (from your
+      // plan, only on request). Every office sees the result; a failure
+      // answers the one that asked.
+      const where = runtime?.dayLog?.storage();
+      if (!where) {
+        send({ type: 'daySummaryFailed', reason: 'Esta oficina no lleva historial' });
+        break;
+      }
+      void writeDaySummary(cleanFacts(msg), where.day, where.dir).then((result) => {
+        if (result.ok) store.broadcast({ ...result.summary });
+        else send({ type: 'daySummaryFailed', reason: result.reason });
+      });
+      break;
+    }
+
     case 'saveDirectory':
     case 'removeDirectory':
     case 'requestDirectorySuggestions':
@@ -870,6 +887,9 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   ctx.runtime?.workflowWatch.resend(send);
   const history = ctx.runtime?.dayLog?.today();
   if (history) send({ type: 'dayLog', entries: history });
+  const where = ctx.runtime?.dayLog?.storage();
+  const summary = where && savedDaySummary(where.dir, where.day);
+  if (summary) send({ ...summary });
   // Which of the agents' PRs are merged: what is already known, not news.
   const prs = ctx.runtime?.prWatch?.all();
   if (ctx.privileged && prs) send({ type: 'prStatuses', items: prs });

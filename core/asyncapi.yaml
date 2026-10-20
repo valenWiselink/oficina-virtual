@@ -142,6 +142,8 @@ components:
         - $ref: '#/components/schemas/AgentAppearance'
         - $ref: '#/components/schemas/DayLog'
         - $ref: '#/components/schemas/DayLogAppended'
+        - $ref: '#/components/schemas/DaySummary'
+        - $ref: '#/components/schemas/DaySummaryFailed'
         - $ref: '#/components/schemas/PrStatusChanged'
         - $ref: '#/components/schemas/PrStatuses'
         - $ref: '#/components/schemas/AgentChat'
@@ -191,6 +193,7 @@ components:
         - $ref: '#/components/schemas/PickFolder'
         - $ref: '#/components/schemas/OpenPath'
         - $ref: '#/components/schemas/RequestDiagnostics'
+        - $ref: '#/components/schemas/WriteDaySummary'
       discriminator: type
 
     # ── Server message variants ────────────────────────────────────
@@ -1481,6 +1484,84 @@ components:
           const: dayLogAppended
         entry:
           $ref: '#/components/schemas/DayLogEntry'
+
+    DaySummary:
+      description: |
+        Today written as a summary by Claude (Haiku), when you asked for it:
+        sent to a client that just connected and after each new one.
+      type: object
+      additionalProperties: false
+      required: [type, day, text, at]
+      properties:
+        type:
+          const: daySummary
+        day:
+          type: string
+          description: AAAA-MM-DD (local).
+        text:
+          type: string
+        at:
+          type: number
+          description: When it was written (ms since epoch).
+
+    DaySummaryFailed:
+      description: Writing today's summary failed; the list of achievements stays.
+      type: object
+      additionalProperties: false
+      required: [type, reason]
+      properties:
+        type:
+          const: daySummaryFailed
+        reason:
+          type: string
+
+    WriteDaySummary:
+      description: |
+        Ask Claude (Haiku, from your plan) to write today as a summary, from
+        what the history says was achieved.
+      type: object
+      additionalProperties: false
+      required: [type, achievements, prs, tasks]
+      properties:
+        type:
+          const: writeDaySummary
+        achievements:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayAchievements'
+        prs:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayPr'
+        tasks:
+          type: array
+          items:
+            type: string
+          description: Tasks the agents completed today.
+
+    DayAchievements:
+      description: What got done today in one project.
+      type: object
+      additionalProperties: false
+      required: [project, items]
+      properties:
+        project:
+          type: string
+        items:
+          type: array
+          items:
+            type: string
+
+    DayPr:
+      description: A PR of today, as GitHub tells it.
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+        state:
+          $ref: '#/components/schemas/PrState'
 
     DayLogEntry:
       description: |

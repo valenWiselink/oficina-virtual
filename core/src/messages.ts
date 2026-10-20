@@ -61,6 +61,8 @@ export type ServerMessage =
   | AgentAppearance
   | DayLog
   | DayLogAppended
+  | DaySummary
+  | DaySummaryFailed
   | PrStatusChanged
   | PrStatuses
   | AgentChat
@@ -106,7 +108,8 @@ export type ClientMessage =
   | RequestDirectorySuggestions
   | PickFolder
   | OpenPath
-  | RequestDiagnostics;
+  | RequestDiagnostics
+  | WriteDaySummary;
 
 export interface ProviderCapabilities {
   type: 'providerCapabilities';
@@ -589,6 +592,18 @@ export interface DayLogAppended {
   entry: DayLogEntry;
 }
 
+export interface DaySummary {
+  type: 'daySummary';
+  day: string;
+  text: string;
+  at: number;
+}
+
+export interface DaySummaryFailed {
+  type: 'daySummaryFailed';
+  reason: string;
+}
+
 export interface PrStatusChanged {
   type: 'prStatus';
   url: string;
@@ -658,19 +673,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_341;
-  supervision?: AnonymousSchema_342;
+  effort?: AnonymousSchema_347;
+  supervision?: AnonymousSchema_348;
 }
 
-export type AnonymousSchema_341 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_347 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_342 {
-  kind: AnonymousSchema_343;
+export interface AnonymousSchema_348 {
+  kind: AnonymousSchema_349;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_343 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_349 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -719,16 +734,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_368;
+  scope: AnonymousSchema_374;
 }
 
-export interface AnonymousSchema_368 {
-  kind: AnonymousSchema_369;
+export interface AnonymousSchema_374 {
+  kind: AnonymousSchema_375;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_369 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_375 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';
@@ -869,4 +884,21 @@ export interface OpenPath {
 
 export interface RequestDiagnostics {
   type: 'requestDiagnostics';
+}
+
+export interface WriteDaySummary {
+  type: 'writeDaySummary';
+  achievements: DayAchievements[];
+  prs: DayPr[];
+  tasks: string[];
+}
+
+export interface DayAchievements {
+  project: string;
+  items: string[];
+}
+
+export interface DayPr {
+  title: string;
+  state?: PrState;
 }

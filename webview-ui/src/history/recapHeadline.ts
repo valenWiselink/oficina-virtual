@@ -45,3 +45,22 @@ export function recapHeadline(text: string): string | undefined {
     ? `${headline.slice(0, HEADLINE_MAX - 1).trimEnd()}…`
     : headline;
 }
+
+/** Work still going on ("Estamos analizando…"), told as such. */
+const ONGOING = /^(?:estamos|estoy|seguimos|sigo|vamos|voy)\s/i;
+/** Words that say something got done (whole words: \b does not see accents). */
+const DONE =
+  /(?<!\p{L})(?:ya\s+(?:est[aá]n?|qued[oó]|quedaron|anda|andan|funciona|tengo|tenemos)|qued[oó]|quedaron|list[oa]s?|mergead[oa]s?|publiqu[eé]|publicad[oa]s?|arregl\p{L}*|termin\p{L}*|subid[oa]s?|abr[ií]|hice|arm[eé]|dej[eé]|aplicamos|aplicad[oa]s?)(?!\p{L})/iu;
+
+/**
+ * A headline as one thing you achieved today: none for work still going on
+ * with nothing done yet, nor for a report on other agents («Nombre» …,
+ * "Superviso…"); the PR or ticket number in parentheses goes (the list is
+ * about what, not which).
+ */
+export function achievement(headline: string): string | undefined {
+  // A report on other agents (a supervisor's): their own recaps tell it.
+  if (headline.startsWith('«') || /^superviso\s/i.test(headline)) return undefined;
+  if (ONGOING.test(headline) && !DONE.test(headline)) return undefined;
+  return headline.replace(/\s*\((?:PR\s*)?#\d+\)/g, '').trim();
+}
