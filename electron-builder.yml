@@ -1,0 +1,56 @@
+# Oficina virtual as a Windows app: `npm run dist:win` -> release/Oficina-virtual-Setup-<version>.exe
+appId: com.oficina.virtual
+productName: Oficina virtual
+copyright: Copyright © 2026 Oficina virtual (fork of Pixel Agents, MIT)
+directories:
+  output: release
+  buildResources: build
+# The packaged package.json: the desktop entry point and the app's own version
+# (what updates compare against).
+extraMetadata:
+  name: oficina-virtual
+  main: dist-desktop/main.js
+  version: 1.0.0
+files:
+  - dist-desktop/**
+  - dist/**
+  - '!dist/**/*.map'
+  - LICENSE
+  - package.json
+  # The PTY (terminals). electron-builder's dependency walk leaves it out
+  # (measured 2026-10-19), so it is copied explicitly: the JS package and its
+  # prebuilt win32 binary (N-API: loads under Electron's Node as is).
+  - from: node_modules/@lydell
+    to: node_modules/@lydell
+    filter:
+      - node-pty/**
+      - node-pty-win32-x64/**
+# Real files, not an asar archive: node-pty's native binary and the hook
+# script must be on disk (the hook is copied to ~/.pixel-agents/hooks).
+asar: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: webview-ui/public/icons/oficina.ico
+  executableName: Oficina virtual
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Oficina virtual
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  installerIcon: webview-ui/public/icons/oficina.ico
+  uninstallerIcon: webview-ui/public/icons/oficina.ico
+  uninstallDisplayName: Oficina virtual
+  include: build/installer.nsh
+  artifactName: Oficina-virtual-Setup-${version}.${ext}
+# Updates are off until a feed exists. To turn them on, set one (see README):
+# publish:
+#   provider: github
+#   owner: <usuario-u-org>
+#   repo: <repo>
+publish: null

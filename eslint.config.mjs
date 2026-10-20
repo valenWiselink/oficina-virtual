@@ -1,6 +1,7 @@
-import typescriptEslint from 'typescript-eslint';
 import eslintConfigPrettier from 'eslint-config-prettier';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
+import typescriptEslint from 'typescript-eslint';
+
 import pixelAgentsPlugin from './eslint-rules/pixel-agents-rules.mjs';
 
 export default [
@@ -38,10 +39,9 @@ export default [
     },
   },
   {
-    files: ['adapters/vscode/constants.ts'],
-    rules: {
-      'pixel-agents/no-inline-colors': 'off',
-    },
+    // The desktop shell's colour constants (the webview has its own exemption).
+    files: ['desktop/colors.ts'],
+    rules: { 'pixel-agents/no-inline-colors': 'off' },
   },
   eslintConfigPrettier,
 ];

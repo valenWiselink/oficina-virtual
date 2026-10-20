@@ -83,54 +83,21 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function main() {
-  const ctx = await esbuild.context({
-    entryPoints: ['adapters/vscode/extension.ts'],
-    bundle: true,
-    format: 'cjs',
-    minify: production,
-    sourcemap: !production,
-    sourcesContent: false,
-    platform: 'node',
-    outfile: 'dist/extension.js',
-    external: ['vscode'],
-    define: versionDefine,
-    logLevel: 'silent',
-    plugins: [
-      /* add to the end of plugins array */
-      esbuildProblemMatcherPlugin,
-    ],
-  });
+  // The office is the standalone server (dist/cli.js) plus the hook script it
+  // installs and the character sprites the webview draws.
+  copyAssets();
+  buildHooks();
   if (watch) {
+    const ctx = await esbuild.context({ ...cliOptions(), plugins: [esbuildProblemMatcherPlugin] });
     await ctx.watch();
   } else {
-    await ctx.rebuild();
-    await ctx.dispose();
-    // Copy assets and hooks after build
-    copyAssets();
-    buildHooks();
-    await buildCli();
-    await buildUninstall();
+    await esbuild.build(cliOptions());
   }
 }
 
-/** Bundle the vscode:uninstall hook — plain Node, runs after extension removal. */
-async function buildUninstall() {
-  await esbuild.build({
-    entryPoints: ['adapters/vscode/uninstall.ts'],
-    bundle: true,
-    format: 'cjs',
-    minify: production,
-    sourcemap: false,
-    platform: 'node',
-    outfile: 'dist/uninstall.js',
-    define: versionDefine,
-    logLevel: 'silent',
-  });
-}
-
-/** Bundle the standalone CLI entry point. */
-async function buildCli() {
-  await esbuild.build({
+/** Bundle options for the standalone CLI entry point (the office server). */
+function cliOptions() {
+  return {
     entryPoints: ['server/src/cli.ts'],
     bundle: true,
     format: 'cjs',
@@ -153,10 +120,7 @@ async function buildCli() {
     ],
     define: versionDefine,
     logLevel: 'silent',
-  });
-  if (!production) {
-    console.log('[build] CLI bundled: dist/cli.mjs');
-  }
+  };
 }
 
 main().catch((e) => {
