@@ -638,6 +638,19 @@ components:
         yourTurnUrl:
           type: string
           description: First pull-request link in that answer (for an "Abrir PR" button).
+        yourTurnMerged:
+          $ref: '#/components/schemas/MergedAsk'
+          description: |
+            The yourTurn only asked to merge or review one PR, and that PR got
+            merged: the ask counts as done.
+        replyLink:
+          type: string
+          description: |
+            First link of the latest answer that is not a pull request (a dev
+            URL, an artifact, a release), for an "Abrir" button.
+        replyChoices:
+          $ref: '#/components/schemas/ReplyChoices'
+          description: The choices the latest answer leaves for one tap.
         lastReplyHead:
           type: string
           description: Start of the latest answer, one line, at most 140 characters.
@@ -653,6 +666,51 @@ components:
         backgroundLabel:
           type: string
           description: What the latest such work is (its description or command).
+
+    MergedAsk:
+      description: |
+        A "te toca" settled by its PR's merge: which PR, and whether the
+        office already told the agent ("Ya mergeé el PR #N.").
+      type: object
+      additionalProperties: false
+      required: [number, url, told]
+      properties:
+        number:
+          type: integer
+        url:
+          type: string
+        told:
+          type: boolean
+
+    ReplyChoices:
+      description: |
+        What an answer offers to pick with one tap: the options of its numbered
+        list (only when a choice is asked around it), and whether the agent
+        recommended something you can just accept. Several questions at once
+        come with no options, only the recommendation.
+      type: object
+      additionalProperties: false
+      required: [options, recommends]
+      properties:
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReplyChoice'
+        recommends:
+          type: boolean
+
+    ReplyChoice:
+      description: One option of an answer's numbered list.
+      type: object
+      additionalProperties: false
+      required: [n, label]
+      properties:
+        n:
+          type: integer
+          description: Its number in the list.
+        label:
+          type: string
+          description: Its short title.
 
     AgentTask:
       description: One entry of an agent's task list.

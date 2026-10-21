@@ -3,9 +3,10 @@ import { useState } from 'react';
 import { Button } from '../components/ui/Button.js';
 import { NOTE_MAX_CHARS, setNote, useNote } from '../identity/agentNotes.js';
 import { type Outfit, OUTFITS, setOutfit, useOutfit } from '../identity/clawdOutfit.js';
+import { markMergeTold, useMergeTold } from '../identity/mergeToldStore.js';
 import { sendToAgent } from '../terminal/agentInput.js';
 import type { AgentView } from './agentViews.js';
-import { QUICK_REPLIES } from './cardRules.js';
+import { choiceButtons, QUICK_REPLIES } from './cardRules.js';
 
 /** "Dale, seguí" and friends: one tap writes it to the agent. */
 export function QuickReplies({ view, onSent }: { view: AgentView; onSent: () => void }) {
@@ -25,6 +26,109 @@ export function QuickReplies({ view, onSent }: { view: AgentView; onSent: () => 
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * Write to an agent and learn whether it really went out: the answer can
+ * take a while (its terminal may be reconnecting), so the buttons wait,
+ * then run `onSent` — or say it did not arrive.
+ */
+function useAgentSend(agentId: number) {
+  const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
+  const send = (text: string, onSent: () => void) => {
+    if (state === 'sending') return;
+    setState('sending');
+    void Promise.resolve(sendToAgent(agentId, text)).then((ok) => {
+      setState(ok ? 'idle' : 'failed');
+      if (ok) onSent();
+    });
+  };
+  return { state, send };
+}
+
+function NotArrived() {
+  return <span className="text-2xs text-danger">No le llegó: fijate en su terminal.</span>;
+}
+
+/** The options its answer offers ("1 · Solo el dropdown") and "Como
+ *  recomendás": one tap writes "Andá con la 1." to the agent. `onSent`
+ *  only runs when the message really went out. */
+export function ChoiceReplies({
+  view,
+  onSent,
+}: {
+  view: AgentView;
+  onSent: (text: string) => void;
+}) {
+  const { state, send } = useAgentSend(view.id);
+  const buttons = choiceButtons(view.choices);
+  if (buttons.length === 0) return null;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-4"
+      onClick={(e) => e.stopPropagation()}
+      role="group"
+      aria-label="Elegí una opción"
+    >
+      {buttons.map((b) => (
+        <button
+          key={b.key}
+          type="button"
+          title={b.title}
+          disabled={state === 'sending'}
+          className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap border border-accent/40 bg-active-bg hover:bg-btn-hover text-text text-2xs font-semibold rounded-full px-8 py-2 cursor-pointer disabled:cursor-default disabled:opacity-60"
+          onClick={() => send(b.text, () => onSent(b.text))}
+        >
+          {b.label}
+        </button>
+      ))}
+      {state === 'failed' && <NotArrived />}
+    </div>
+  );
+}
+
+/** "Avisarle": its PR got merged and nobody told it yet — one tap writes
+ *  "Ya mergeé el PR #N." (only shown where it can be written to). */
+export function TellMergedButton({ view }: { view: AgentView }) {
+  const merged = view.mergedPr;
+  const told = useMergeTold(merged?.turnId);
+  const { state, send } = useAgentSend(view.id);
+  if (!merged || merged.told || told) return null;
+  const text = `Ya mergeé el PR #${merged.number}.`;
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="accent"
+        title={`Le escribe: «${text}»`}
+        disabled={state === 'sending'}
+        onClick={(e) => {
+          e.stopPropagation();
+          send(text, () => markMergeTold(merged.turnId));
+        }}
+      >
+        Avisarle
+      </Button>
+      {state === 'failed' && <NotArrived />}
+    </>
+  );
+}
+
+/** "Abrir": the first link of its answer that is not the PR (dev, an
+ *  artifact, a release). */
+export function OpenLinkButton({ url }: { url: string }) {
+  return (
+    <Button
+      size="sm"
+      title={url}
+      onClick={(e) => {
+        e.stopPropagation();
+        window.open(url, '_blank', 'noopener');
+      }}
+    >
+      Abrir
+    </Button>
   );
 }
 

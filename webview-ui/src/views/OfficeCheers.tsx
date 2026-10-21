@@ -7,10 +7,13 @@ import { useDayLog } from '../history/dayLogStore.js';
 import { daySummary, summaryLine } from '../history/dayLogView.js';
 import { shortPr } from '../history/prRows.js';
 import { useNow } from '../hooks/useNow.js';
+import { useTellMerged } from '../identity/mergeToldStore.js';
 import { playCheerSound } from '../notificationSound.js';
 import { onPrMerged, prStatusOf } from '../prs/prStatusStore.js';
+import { useWritableAgents } from '../terminal/agentInput.js';
 import type { AgentView } from './agentViews.js';
 import { localDay } from './boardMood.js';
+import { TellMergedButton } from './CardExtras.js';
 import { requestCelebration } from './celebrate.js';
 import { allFinished, isBusy } from './officeMoments.js';
 
@@ -27,6 +30,8 @@ interface Cheer {
   text: string;
   palette: number;
   hueShift: number;
+  /** The agent it is about (a merged PR's), for "Avisarle". */
+  agentId?: number;
 }
 
 /**
@@ -56,7 +61,7 @@ export function OfficeCheers({
   useEffect(
     () =>
       onPrMerged((url) => {
-        const agent = viewsRef.current.find((v) => v.prUrl === url);
+        const agent = viewsRef.current.find((v) => v.prUrl === url || v.mergedPr?.url === url);
         if (agent) requestCelebration(agent.id);
         void playCheerSound();
         if (calmRef.current) return;
@@ -66,6 +71,7 @@ export function OfficeCheers({
           text: `${prStatusOf(url)?.title ?? shortPr(url)}${agent ? ` · de ${agent.name}` : ''}`,
           palette: agent?.palette ?? 0,
           hueShift: agent?.hueShift ?? 0,
+          agentId: agent?.id,
         });
       }),
     [],
@@ -112,6 +118,9 @@ export function OfficeCheers({
   }, [now, calm, entries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!cheer) return null;
+  // Its "te toca" may have been settled by this merge (mergedAsk.ts).
+  const about = views.find((v) => v.id === cheer.agentId);
+  const told = cheer.id === 'pr' && about?.mergedPr?.told;
   return (
     <div
       role="status"
@@ -122,8 +131,12 @@ export function OfficeCheers({
       </span>
       <span className="flex flex-col gap-1 min-w-0">
         <span className="text-sm font-semibold text-text">{cheer.title}</span>
-        <span className="text-xs text-text-muted">{cheer.text}</span>
+        <span className="text-xs text-text-muted">
+          {cheer.text}
+          {told && ' · ya se enteró'}
+        </span>
       </span>
+      {cheer.id === 'pr' && about && <TellFromCheer view={about} />}
       {cheer.id === 'resumen' && (
         <Button
           size="sm"
@@ -146,6 +159,12 @@ export function OfficeCheers({
       </Button>
     </div>
   );
+}
+
+/** "Avisarle" in the merge celebration, when the card would offer it. */
+function TellFromCheer({ view }: { view: AgentView }) {
+  const writable = useWritableAgents().has(view.id);
+  return useTellMerged(view.mergedPr, writable) ? <TellMergedButton view={view} /> : null;
 }
 
 function readSeen(): string | null {

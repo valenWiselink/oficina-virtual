@@ -281,7 +281,9 @@ async function main(): Promise<void> {
     const dayLog = runtime.dayLog;
     setRecapCallback((id, text, at) => dayLog.recap(id, text, at));
     for (const root of claudeProvider.getAllSessionRoots?.() ?? []) dayLog.readRecapsFrom(root);
-    runtime.prWatch = watchAgentPrs(store, runtime.dayLog);
+    runtime.prWatch = watchAgentPrs(store, runtime.dayLog, {
+      terminalOf: (id) => ptyManager.get(id),
+    });
     // The plan's usage limits, read from the office's status line (opt-in).
     runtime.usageLimits = new UsageLimitsWatch({
       broadcast: (message) => store.broadcast({ ...message }),

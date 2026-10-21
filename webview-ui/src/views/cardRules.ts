@@ -1,3 +1,4 @@
+import type { ReplyChoices } from '../../../core/src/messages.js';
 import type { AgentView } from './agentViews.js';
 
 /** From this context use on, the card offers "Compactar". */
@@ -20,6 +21,30 @@ export const QUICK_REPLIES: ReadonlyArray<{ label: string; text: string }> = [
 export function offersQuickReplies(v: AgentView, writable: boolean): boolean {
   if (!writable || v.blocking || v.permission) return false;
   return v.kind === 'done' || (v.kind === 'needs' && !!v.yourTurnId);
+}
+
+/** One button per option of its answer, plus "Como recomendás" when it
+ *  recommended something: what each writes, and the hint on hover. */
+export interface ChoiceButton {
+  key: string;
+  label: string;
+  text: string;
+  title: string;
+}
+
+export function choiceButtons(choices: ReplyChoices | undefined): ChoiceButton[] {
+  if (!choices) return [];
+  const buttons = choices.options.map((o) => ({
+    key: `n${o.n}`,
+    label: `${o.n} · ${o.label}`,
+    text: `Andá con la ${o.n}.`,
+    title: `Le escribe: «Andá con la ${o.n}.» (${o.label})`,
+  }));
+  if (choices.recommends) {
+    const text = 'Dale, andá como recomendás.';
+    buttons.push({ key: 'rec', label: 'Como recomendás', text, title: `Le escribe: «${text}»` });
+  }
+  return buttons;
 }
 
 export function offersCompact(v: AgentView, writable: boolean): boolean {

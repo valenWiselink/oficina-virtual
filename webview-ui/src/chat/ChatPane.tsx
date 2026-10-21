@@ -3,9 +3,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatItem } from '../../../core/src/messages.js';
 import { Button } from '../components/ui/Button.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
+import { useWritableAgents } from '../terminal/agentInput.js';
 import { terminalShortcut } from '../terminal/terminalShortcuts.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
+import { ChoiceReplies } from '../views/CardExtras.js';
+import { offersQuickReplies } from '../views/cardRules.js';
 import { clawdColor } from '../views/clawdColor.js';
 import { useChatFontSize, zoomChatFont } from './chatFont.js';
 import { addPending, type PendingMessage, useAgentChat, usePendingMessages } from './chatStore.js';
@@ -160,6 +163,14 @@ export function ChatPane({
         ))}
         <AgentNow view={view} actions={actions} onShowTerminal={onShowTerminal} />
       </div>
+      <ChatChoices
+        view={view}
+        actions={actions}
+        onSent={(text) => {
+          addPending(view.id, text, false);
+          pinnedToEnd.current = true;
+        }}
+      />
       <Composer view={view} onSend={send} />
     </div>
   );
@@ -355,6 +366,32 @@ function AgentNow({
     <div className="self-start text-2xs text-text-muted flex items-center gap-6 pl-10">
       <span className="soft-pulse">●</span>
       {view.statusText}
+    </div>
+  );
+}
+
+/** The options its last answer offers, right above the box: one tap answers
+ *  ("Andá con la 2."), and a "te toca" counts as done only if it went out. */
+function ChatChoices({
+  view,
+  actions,
+  onSent,
+}: {
+  view: AgentView;
+  actions: BoardActions;
+  onSent: (text: string) => void;
+}) {
+  const writable = useWritableAgents().has(view.id);
+  if (!view.choices || !offersQuickReplies(view, writable)) return null;
+  return (
+    <div className="border-t border-border bg-bg px-10 pt-8 pb-2">
+      <ChoiceReplies
+        view={view}
+        onSent={(text) => {
+          onSent(text);
+          if (view.yourTurnId) actions.onYourTurnDone?.(view.yourTurnId);
+        }}
+      />
     </div>
   );
 }

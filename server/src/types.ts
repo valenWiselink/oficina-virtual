@@ -129,8 +129,23 @@ export interface AgentState {
   /** Latest text answer of the main conversation (for handing it to another agent). */
   lastReply?: string;
   /** What that answer leaves for the operator to do ("mergear PR #812"), and
-   *  the record it came from (so "done" can be marked per answer). */
-  yourTurn?: { text: string; id: string; at?: number; prUrl?: string };
+   *  the record it came from (so "done" can be marked per answer). `prAsk`
+   *  is the one PR it is only about; `merged` says that PR got merged (the
+   *  ask is done) and whether the office told the agent (mergedAsk.ts). */
+  yourTurn?: {
+    text: string;
+    id: string;
+    at?: number;
+    prUrl?: string;
+    prAsk?: { url: string; number: number; notify: boolean };
+    merged?: { number: number; url: string; told: boolean };
+  };
+  /** Pull-request links its answers wrote, by number (mergedAsk.ts). */
+  prLinks?: Map<number, string>;
+  /** The latest answer's first link that is not a PR, and the choices it
+   *  offers for one tap (replyChoices.ts). */
+  replyLink?: string;
+  replyChoices?: { options: Array<{ n: number; label: string }>; recommends: boolean };
   /** When the session last wrote a record (ms, from the record's timestamp). */
   lastRecordAt?: number;
   /** Background work it launched and that has not reported back yet, by the

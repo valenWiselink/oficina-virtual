@@ -551,10 +551,11 @@ function drawAgentLabel(
   };
 }
 
-/** What a permission asks to run, for the pill on its line to "Vos". */
+/** What it asks, for the pill on its line to "Vos": the command a
+ *  permission would run, or its "te toca", clipped. */
 function askOf(v: AgentView): string | undefined {
   const p = v.permission;
-  if (!p) return undefined;
+  if (!p) return v.yourTurn ? clip(v.yourTurn, 40) : undefined;
   const command = (p.toolInput as Record<string, unknown>).command;
   return typeof command === 'string' ? clip(command.split('\n')[0], 34) : p.toolName;
 }
