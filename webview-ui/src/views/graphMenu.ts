@@ -18,6 +18,7 @@ export type MenuItemId =
   | 'pr'
   | 'handoff'
   | 'follow'
+  | 'meeting'
   | 'note'
   | 'move'
   | 'edit'
@@ -99,6 +100,7 @@ export function agentMenu(v: AgentView, can: MenuAbilities, following: boolean):
   const mine: MenuItem[] = [
     ...(can.handOff ? [{ id: 'handoff' as const, label: 'Pasar su resultado a…' }] : []),
     { id: 'follow', label: following ? 'Dejar de seguir' : 'Seguir' },
+    ...(v.subagents.length >= 2 ? [{ id: 'meeting' as const, label: 'Enfocar junta' }] : []),
     { id: 'note', label: 'Nota' },
     ...(can.workspaces ? [{ id: 'move' as const, label: 'Mover de espacio' }] : []),
     ...(can.edit ? [{ id: 'edit' as const, label: 'Editar' }] : []),

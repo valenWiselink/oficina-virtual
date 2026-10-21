@@ -1,7 +1,8 @@
 import { Button } from '../components/ui/Button.js';
 import type { AgentView } from './agentViews.js';
 
-/** A meeting in focus (double click in its hole): whose, and how to go back. */
+/** A meeting in focus (double click in its hole, or its lead's menu): whose,
+ *  and how to see everyone again. */
 export function GraphMeetingBanner({ lead, onBack }: { lead: AgentView; onBack: () => void }) {
   return (
     <div
@@ -13,7 +14,7 @@ export function GraphMeetingBanner({ lead, onBack }: { lead: AgentView; onBack: 
         integrantes
       </span>
       <Button size="sm" variant="ghost" title="Esc" className="shrink-0" onClick={onBack}>
-        Volver
+        Ver todos
       </Button>
     </div>
   );
