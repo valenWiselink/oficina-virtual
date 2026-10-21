@@ -14,6 +14,7 @@ import {
   type Camera,
   edgeArrow,
   isVisible,
+  type Pt,
   toScreen,
   type ViewSize,
 } from './graphCamera.js';
@@ -50,6 +51,8 @@ import {
   sparkColors,
 } from './graphExtras.js';
 import { floatOffset } from './graphFloat.js';
+import type { Box, Hit, HitScene, Passive } from './graphHit.js';
+import { DIM_ALPHA } from './graphHover.js';
 import { placeLabel, type Side } from './graphLabels.js';
 import {
   keepsMeetingEdge,
@@ -69,9 +72,6 @@ const SUB_R = 22;
 const NAME_CHARS = 20;
 const STATUS_CHARS = 26;
 
-type Box = { x: number; y: number; w: number; h: number };
-export type Hit = { id: number; disc: { x: number; y: number; r: number }; label?: Box };
-
 export interface SceneFrame {
   dpr: number;
   t: number;
@@ -85,13 +85,20 @@ export interface SceneFrame {
   stage: string;
 }
 
-export interface SceneOut {
-  hits: Hit[];
-  vos: Box;
+/** What the frame marks: the selected agent, or one member of its meeting. */
+export interface SceneMarks {
+  selectedId: number | null;
+  /** A member picked in the selected lead's meeting: the ring goes on it. */
+  selectedMember?: number | null;
+  /** While you hover an agent, what stays crisp (graphHover.ts focusOf);
+   *  everything else fades. null: everything crisp. */
+  focus?: ReadonlySet<string> | null;
+}
+
+/** What is clickable (graphHit.ts reads it) and what was drawn. */
+export interface SceneOut extends HitScene {
   /** Everything drawn, in world coords (for "Encuadrar todo" and the minimap). */
   content: Bounds;
-  /** Off-screen waits: arrow boxes in screen coords. */
-  arrows: Array<{ id: number; box: Box }>;
 }
 
 /** Where each node wants to be: a stable ring, pulled by what it is doing. */
@@ -246,89 +253,132 @@ function worldTransform(ctx: CanvasRenderingContext2D, f: SceneFrame) {
   ctx.setTransform(z, 0, 0, z, -f.cam.x * z, -f.cam.y * z);
 }
 
-/** A soft dotted line (to the library, or to a member that went there):
- *  dots, not the supervisor's dashes. */
-function dottedLine(
-  ctx: CanvasRenderingContext2D,
-  color: string,
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-) {
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.5;
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.setLineDash([0.1, 6]);
+/** What every part of one frame draws with, and where it reports what a
+ *  click must not take for the background. */
+interface Pen {
+  ctx: CanvasRenderingContext2D;
+  th: GraphTheme;
+  f: SceneFrame;
+  nodes: Map<string, SimNode>;
+  passive: Passive;
+  fade: Fade;
+}
+
+type Fade = <T>(keys: readonly string[], draw: () => T) => T;
+
+/** Draws a part at full strength when all its nodes (`a3`, `s-7`, 'vos',
+ *  'library') are in focus or nothing is hovered; faded otherwise. */
+function fader(ctx: CanvasRenderingContext2D, focus: ReadonlySet<string> | null | undefined): Fade {
+  return (keys, draw) => {
+    if (!focus || keys.every((k) => focus.has(k))) return draw();
+    ctx.save();
+    ctx.globalAlpha *= DIM_ALPHA;
+    try {
+      return draw();
+    } finally {
+      ctx.restore();
+    }
+  };
+}
+
+interface LineStyle {
+  color: string;
+  width?: number;
+  alpha?: number;
+  dash?: number[];
+  /** Soft dots (to the library, or to a member that went there), not the
+   *  supervisor's dashes. */
+  dotted?: boolean;
+}
+
+/** One straight link between two nodes (or a node and the library), named
+ *  by `keys` (it stays crisp when both are in focus). */
+function strokeLink(pen: Pen, a: Pt, b: Pt, style: LineStyle, keys: [string, string]) {
+  pen.fade(keys, () => strokePath(pen.ctx, a, b, style));
+  pen.passive.segments.push([
+    { x: a.x, y: a.y },
+    { x: b.x, y: b.y },
+  ]);
+}
+
+function strokePath(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, style: LineStyle) {
+  ctx.save();
+  ctx.strokeStyle = style.color;
+  ctx.globalAlpha *= style.alpha ?? (style.dotted ? 0.5 : 1);
+  ctx.lineWidth = style.width ?? (style.dotted ? 2 : 1.4);
+  if (style.dotted) {
+    ctx.lineCap = 'round';
+    ctx.setLineDash([0.1, 6]);
+  } else if (style.dash) {
+    ctx.setLineDash(style.dash);
+  }
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.lineCap = 'butt';
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
-function drawLinks(
-  ctx: CanvasRenderingContext2D,
-  th: GraphTheme,
-  f: SceneFrame,
-  list: AgentView[],
-  nodes: Map<string, SimNode>,
-) {
+function drawLinks(pen: Pen, list: AgentView[]) {
+  drawMeetingLinks(pen, list);
+  // A supervisor's dashed line to each agent it looks after.
+  for (const v of list) {
+    const b = pen.nodes.get(`a${v.id}`);
+    for (const bossId of v.supervisedBy) {
+      const a = pen.nodes.get(`a${bossId}`);
+      if (!a || !b) continue;
+      const style = { color: CLAWD_BOSS_COLORS.link, dash: [5, 6] };
+      strokeLink(pen, a, b, style, [`a${bossId}`, `a${v.id}`]);
+    }
+  }
+  for (const link of liveFileLinks()) {
+    const a = pen.nodes.get(`s${link.fromId}`);
+    const b = pen.nodes.get(`s${link.toId}`);
+    if (!a || !b) continue;
+    const file = `${clip(link.lastFile, 22)}${link.count > 1 ? ` ×${link.count}` : ''}`;
+    // Calm mode: the dashes stay still.
+    const t = pen.f.calm ? 0 : pen.f.t;
+    const keys = [`s${link.fromId}`, `s${link.toId}`];
+    const chip = pen.fade(keys, () =>
+      drawFilePass(pen.ctx, pen.th, a, b, file, FILE_LINK_COLOR, t),
+    );
+    pen.passive.boxes.push(chip);
+    pen.passive.segments.push([
+      { x: a.x, y: a.y },
+      { x: b.x, y: b.y },
+    ]);
+  }
+}
+
+/** A lead's lines to its members, and to the library while it reads there. */
+function drawMeetingLinks(pen: Pen, list: AgentView[]) {
   const visitors = libraryVisitors(list).length;
   const library = libraryCenter(visitors, WORLD.h);
   const libraryR = libraryRadius(visitors);
   for (const v of list) {
-    const a = nodes.get(`a${v.id}`);
+    const a = pen.nodes.get(`a${v.id}`);
+    if (!a) continue;
     // A researching agent too big to walk in: a dotted line to the library.
-    if (a && v.kind === 'research') {
+    if (v.kind === 'research') {
       const d = Math.hypot(library.x - a.x, library.y - a.y) || 1;
       const k = Math.max(0, d - libraryR) / d;
-      dottedLine(ctx, th.research, a, {
-        x: a.x + (library.x - a.x) * k,
-        y: a.y + (library.y - a.y) * k,
-      });
+      const edge = { x: a.x + (library.x - a.x) * k, y: a.y + (library.y - a.y) * k };
+      strokeLink(pen, a, edge, { color: pen.th.research, dotted: true }, [`a${v.id}`, 'library']);
     }
     for (const s of v.subagents) {
-      const b = nodes.get(`s${s.id}`);
-      if (!a || !b) continue;
+      const b = pen.nodes.get(`s${s.id}`);
+      if (!b) continue;
       // Gone to the library: still tied to its lead, by a dotted line.
-      if (s.kind === 'research') {
-        dottedLine(ctx, colorOf(v), a, b);
-        continue;
-      }
-      ctx.strokeStyle = colorOf(v);
-      ctx.globalAlpha = 0.45;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+      strokeLink(
+        pen,
+        a,
+        b,
+        s.kind === 'research'
+          ? { color: colorOf(v), dotted: true }
+          : { color: colorOf(v), alpha: 0.45, width: 1.6 },
+        [`a${v.id}`, `s${s.id}`],
+      );
     }
-  }
-  // A supervisor's dashed line to each agent it looks after.
-  for (const v of list) {
-    const b = nodes.get(`a${v.id}`);
-    for (const bossId of v.supervisedBy) {
-      const a = nodes.get(`a${bossId}`);
-      if (!a || !b) continue;
-      ctx.strokeStyle = CLAWD_BOSS_COLORS.link;
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([5, 6]);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-  }
-  for (const link of liveFileLinks()) {
-    const a = nodes.get(`s${link.fromId}`);
-    const b = nodes.get(`s${link.toId}`);
-    if (!a || !b) continue;
-    const file = `${clip(link.lastFile, 22)}${link.count > 1 ? ` ×${link.count}` : ''}`;
-    drawFilePass(ctx, th, a, b, file, FILE_LINK_COLOR, f.t);
   }
 }
 
@@ -348,20 +398,22 @@ export function drawScene(
   f: SceneFrame,
   list: AgentView[],
   simNodes: Map<string, SimNode>,
-  selectedId: number | null,
+  marks: SceneMarks,
   life: ClawdLife,
 ): SceneOut {
   const nodes = floating(simNodes, f);
+  const pen: Pen = {
+    ctx,
+    th,
+    f,
+    nodes,
+    passive: { boxes: [], circles: [], segments: [] },
+    fade: fader(ctx, marks.focus),
+  };
   background(ctx, th, f);
   worldTransform(ctx, f);
-  const visitors = libraryVisitors(list).length;
-  const library = libraryCenter(visitors, WORLD.h);
-  const libraryR = libraryRadius(visitors);
-  // Who is there: the members inside and the agents reading from outside.
-  const reading = visitors + list.filter((v) => v.kind === 'research').length;
-  if (libraryOpen(list)) drawLibrary(ctx, th, library.x, library.y, libraryR, reading);
-  drawLinks(ctx, th, f, list, nodes);
-
+  const content = drawLibraryArea(pen, list);
+  drawLinks(pen, list);
   const needing = list.filter((v) => v.kind === 'needs');
   const pulsing = new Set(needing.filter((v) => isPulsing(f.now - waitStart(v))).map((v) => v.id));
   // Everything a label must not cover: nodes, request pills, labels already placed.
@@ -369,110 +421,158 @@ export function drawScene(
   for (const n of nodes.values())
     obstacles.push({ x: n.x - n.r, y: n.y - n.r, w: n.r * 2, h: n.r * 2 });
   obstacles.push({ x: VOS.x - 34, y: VOS.y - 18, w: 68, h: 36 });
-  for (const v of needing) {
-    const n = nodes.get(`a${v.id}`);
-    const pill = n ? drawRequestLine(ctx, th, n, VOS, f.t, askOf(v)) : null;
-    if (pill) obstacles.push(pill);
-  }
-  // A supervised agent asks its supervisor: the same arrow, to the supervisor.
-  for (const v of list) {
-    const n = v.askingSupervisor ? nodes.get(`a${v.id}`) : undefined;
-    const boss = v.askingSupervisor ? nodes.get(`a${v.askingSupervisor.id}`) : undefined;
-    if (!n || !boss) continue;
-    const pill = drawRequestLine(
-      ctx,
-      th,
-      n,
-      { x: boss.x, y: boss.y + boss.r * 0.6 },
-      f.t,
-      askOf(v),
-    );
-    if (pill) obstacles.push(pill);
-  }
+  const pills = drawRequests(pen, list, obstacles);
+  const hits = drawBodies(pen, list, marks, life, { obstacles, content, pulsing });
+  pen.fade(['vos'], () =>
+    drawVos(ctx, th, VOS.x, VOS.y, needing.length > 0, f.t, pulsing.size > 0),
+  );
+  ctx.textAlign = 'left';
+  ctx.setTransform(f.dpr, 0, 0, f.dpr, 0, 0);
+  const arrows = drawOffscreenWaits(ctx, th, f, needing, nodes);
+  return {
+    hits,
+    vos: { x: VOS.x - 30, y: VOS.y - 16, w: 60, h: 32 },
+    content,
+    arrows,
+    pills,
+    passive: pen.passive,
+  };
+}
 
+function grow(content: Bounds, b: Box) {
+  content.minX = Math.min(content.minX, b.x);
+  content.minY = Math.min(content.minY, b.y);
+  content.maxX = Math.max(content.maxX, b.x + b.w);
+  content.maxY = Math.max(content.maxY, b.y + b.h);
+}
+
+/** The library while it is open ("Encuadrar" keeps it in view). Returns the
+ *  bounds of what is drawn so far, starting with "Vos". */
+function drawLibraryArea(pen: Pen, list: AgentView[]): Bounds {
   const content: Bounds = {
     minX: VOS.x - 40,
     minY: VOS.y - 24,
     maxX: VOS.x + 40,
     maxY: VOS.y + 24,
   };
-  const grow = (b: Box) => {
-    content.minX = Math.min(content.minX, b.x);
-    content.minY = Math.min(content.minY, b.y);
-    content.maxX = Math.max(content.maxX, b.x + b.w);
-    content.maxY = Math.max(content.maxY, b.y + b.h);
-  };
-  // "Encuadrar" keeps the library in view while it is open.
-  if (libraryOpen(list)) {
-    grow({
-      x: library.x - libraryR,
-      y: library.y - libraryR - 18,
-      w: libraryR * 2,
-      h: libraryR * 2 + 18,
-    });
+  if (!libraryOpen(list)) return content;
+  const visitors = libraryVisitors(list).length;
+  const { x, y } = libraryCenter(visitors, WORLD.h);
+  const r = libraryRadius(visitors);
+  // Who is there: the members inside and the agents reading from outside.
+  const reading = visitors + list.filter((v) => v.kind === 'research').length;
+  pen.fade(['library'], () => drawLibrary(pen.ctx, pen.th, x, y, r, reading));
+  pen.passive.circles.push({ x, y, r });
+  grow(content, { x: x - r, y: y - r - 18, w: r * 2, h: r * 2 + 18 });
+  return content;
+}
+
+/** Each request's arrow: to "Vos", or, for a supervised agent, the same arrow
+ *  to its supervisor. Returns the pills on the lines to "Vos" (you can act
+ *  on those); the supervisor's are only kept from closing the panel. */
+function drawRequests(
+  pen: Pen,
+  list: AgentView[],
+  obstacles: Box[],
+): Array<{ id: number; box: Box }> {
+  // Calm mode: the dashes stay still.
+  const t = pen.f.calm ? 0 : pen.f.t;
+  const pills: Array<{ id: number; box: Box }> = [];
+  for (const v of list) {
+    const n = pen.nodes.get(`a${v.id}`);
+    const boss = v.askingSupervisor ? pen.nodes.get(`a${v.askingSupervisor.id}`) : undefined;
+    const to = v.kind === 'needs' ? VOS : boss ? { x: boss.x, y: boss.y + boss.r * 0.6 } : null;
+    if (!n || !to) continue;
+    const keys = [`a${v.id}`, v.kind === 'needs' ? 'vos' : `a${v.askingSupervisor?.id}`];
+    const pill = pen.fade(keys, () => drawRequestLine(pen.ctx, pen.th, n, to, t, askOf(v)));
+    pen.passive.segments.push([
+      { x: n.x, y: n.y },
+      { x: to.x, y: to.y },
+    ]);
+    if (!pill) continue;
+    obstacles.push(pill);
+    if (v.kind === 'needs') pills.push({ id: v.id, box: pill });
+    else pen.passive.boxes.push(pill);
   }
+  return pills;
+}
+
+interface Placing {
+  /** What a label must not cover; grows as labels are placed. */
+  obstacles: Box[];
+  content: Bounds;
+  pulsing: Set<number>;
+}
+
+/** Members and agents: bodies first, then the labels where they cover
+ *  nothing (whoever needs you first). Returns the hits, topmost first. */
+function drawBodies(
+  pen: Pen,
+  list: AgentView[],
+  marks: SceneMarks,
+  life: ClawdLife,
+  at: Placing,
+): Hit[] {
   const hits: Hit[] = [];
   list.forEach((v, index) => {
-    const lead = nodes.get(`a${v.id}`);
-    const subColor = lighten(colorOf(v), 0.3);
-    for (const s of v.subagents) {
-      const n = nodes.get(`s${s.id}`);
-      if (!n) continue;
-      drawNodeDisc(ctx, th, n.x, n.y, n.r, subColor, s.kind, f.t, false);
-      clawdAt(
-        ctx,
-        f,
-        n.x,
-        n.y + clawdHeight(n.r / 16, f.dpr) / 2,
-        n.r / 16,
-        subColor,
-        poseFor(s.kind, s.id, f.t),
-      );
-      worldTransform(ctx, f);
-      // One line, on the side away from the lead, so chips never cover it.
-      const above = !!lead && n.y < lead.y - 4;
-      const top = above ? n.y - n.r - 26 : n.y + n.r + 6;
-      const chip = drawChip(ctx, th, n.x, top, clip(s.label, NAME_CHARS), subColor, s.kind);
-      obstacles.push(chip);
-      grow(chip);
-      hits.push({ id: v.id, disc: n, label: chip });
-    }
-    const n = nodes.get(`a${v.id}`);
+    drawMembers(pen, v, marks, at, hits);
+    const n = pen.nodes.get(`a${v.id}`);
     if (!n) return;
-    drawAgentBody(
-      ctx,
-      th,
-      f,
-      v,
-      n,
-      { selected: v.id === selectedId, pulsing: pulsing.has(v.id), index },
-      life,
-    );
-    grow({ x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
+    // A member picked in its meeting takes the ring.
+    const selected = v.id === marks.selectedId && marks.selectedMember == null;
+    const state = { selected, pulsing: at.pulsing.has(v.id), index };
+    pen.fade([`a${v.id}`], () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life));
+    grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
   });
-
-  // Labels last, placed where they cover nothing; whoever needs you first.
   const order = [...list].sort(
     (a, b) => (a.kind === 'needs' ? 0 : 1) - (b.kind === 'needs' ? 0 : 1),
   );
   for (const v of order) {
-    const n = nodes.get(`a${v.id}`);
+    const n = pen.nodes.get(`a${v.id}`);
     if (!n) continue;
-    const label = drawAgentLabel(ctx, th, f, v, n, obstacles);
-    grow(label);
+    const label = pen.fade([`a${v.id}`], () =>
+      drawAgentLabel(pen.ctx, pen.th, pen.f, v, n, at.obstacles),
+    );
+    grow(at.content, label);
     hits.push({ id: v.id, disc: n, label });
   }
+  return hits.reverse();
+}
 
-  drawVos(ctx, th, VOS.x, VOS.y, needing.length > 0, f.t, pulsing.size > 0);
-  ctx.textAlign = 'left';
-  ctx.setTransform(f.dpr, 0, 0, f.dpr, 0, 0);
-  const arrows = drawOffscreenWaits(ctx, th, f, needing, nodes);
-  return {
-    hits: hits.reverse(),
-    vos: { x: VOS.x - 30, y: VOS.y - 16, w: 60, h: 32 },
-    content,
-    arrows,
-  };
+/** A meeting's members around their lead: disc, Clawd and name chip. Each
+ *  hit names the member and its lead (whose panel it opens). */
+function drawMembers(pen: Pen, v: AgentView, marks: SceneMarks, at: Placing, hits: Hit[]) {
+  const lead = pen.nodes.get(`a${v.id}`);
+  for (const s of v.subagents) {
+    const n = pen.nodes.get(`s${s.id}`);
+    if (!n) continue;
+    const selected = v.id === marks.selectedId && marks.selectedMember === s.id;
+    // One line, on the side away from the lead, so chips never cover it.
+    const above = !!lead && n.y < lead.y - 4;
+    const chip = pen.fade([`s${s.id}`], () => drawMember(pen, v, s, n, { selected, above }));
+    at.obstacles.push(chip);
+    grow(at.content, chip);
+    hits.push({ id: v.id, member: s.id, disc: n, label: chip });
+  }
+}
+
+function drawMember(
+  pen: Pen,
+  v: AgentView,
+  s: AgentView['subagents'][number],
+  n: SimNode,
+  at: { selected: boolean; above: boolean },
+): Box {
+  const { ctx, th, f } = pen;
+  const subColor = lighten(colorOf(v), 0.3);
+  const rim = { shape: 'single' as const, spin: 0, still: f.calm };
+  drawNodeDisc(ctx, th, n.x, n.y, n.r, subColor, s.kind, f.t, at.selected, false, rim);
+  const scale = n.r / 16;
+  const pose = poseFor(s.kind, s.id, f.t, f.calm);
+  clawdAt(ctx, f, n.x, n.y + clawdHeight(scale, f.dpr) / 2, scale, subColor, pose);
+  worldTransform(ctx, f);
+  const top = at.above ? n.y - n.r - 26 : n.y + n.r + 6;
+  return drawChip(ctx, th, n.x, top, clip(s.label, NAME_CHARS), subColor, s.kind);
 }
 
 /** How Clawd stands right now: his state's pose plus the little life on top
@@ -486,7 +586,7 @@ function livePose(
   index: number,
 ): { pose: Pose; lift: number } {
   const pose: Pose = {
-    ...poseFor(v.kind, v.id, f.t),
+    ...poseFor(v.kind, v.id, f.t, f.calm),
     area: v.area,
     prop: activityProp(v, life.workingFor(v.id, f.now)),
     outfit: outfitOf(v.key),
@@ -539,7 +639,8 @@ function drawAgentBody(
   life: ClawdLife,
 ): void {
   const color = colorOf(v);
-  ctx.globalAlpha = v.kind === 'idle' ? 0.75 : 1;
+  ctx.save();
+  ctx.globalAlpha *= v.kind === 'idle' ? 0.75 : 1;
   // Maximum effort: a flame around the bubble (the sweat is on Clawd).
   if (!f.calm && effortMarks(effortLevel(v.effort ?? v.runEffort)) === 3) {
     drawEffortFlame(ctx, n.x, n.y, n.r, f.t + v.id);
@@ -547,6 +648,7 @@ function drawAgentBody(
   drawNodeDisc(ctx, th, n.x, n.y, n.r, color, v.kind, f.t, at.selected, at.pulsing, {
     shape: lookOf(v).rim,
     spin: f.calm ? 0 : f.t + v.id,
+    still: f.calm,
   });
   // Clawd fills his disc, as in the preview (the disc grows with activity).
   const scale = n.r / 15;
@@ -555,12 +657,13 @@ function drawAgentBody(
   clawdAt(ctx, f, n.x, foot, scale, color, pose);
   worldTransform(ctx, f);
   const head = foot - clawdHeight(scale * f.cam.zoom, f.dpr) / f.cam.zoom;
-  if (v.kind === 'think') drawThinkDots(ctx, th, n.x, head, f.t);
+  // Calm mode: the dots stay still (still saying it thinks).
+  if (v.kind === 'think') drawThinkDots(ctx, th, n.x, head, f.calm ? 0 : f.t);
   if (pose.sleep && !f.calm) drawZ(ctx, th, n.x + 10, head, f.t + v.id);
   const badge = Math.max(7, n.r * 0.18);
   if (v.kind === 'needs') drawAlertBadge(ctx, th, n.x + n.r * 0.72, n.y - n.r * 0.72, badge);
   if (v.kind === 'done') drawCheckBadge(ctx, th, n.x + n.r * 0.72, n.y - n.r * 0.72, badge);
-  ctx.globalAlpha = 1;
+  ctx.restore();
   if (!f.calm) drawLifeEffects(ctx, th, f, v, n, head, life, color);
 }
 

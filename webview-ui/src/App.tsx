@@ -51,6 +51,7 @@ import type { BoardActions } from './views/BoardCard.js';
 import { BoardView } from './views/BoardView.js';
 import { requestCelebration } from './views/celebrate.js';
 import { DayKeeper } from './views/DayKeeper.js';
+import { revealOnGraph } from './views/graphReveal.js';
 import { GraphView } from './views/GraphView.js';
 import { OfficeCheers } from './views/OfficeCheers.js';
 import { useReadMarks } from './views/unread.js';
@@ -295,16 +296,27 @@ function App() {
     directories,
   });
   // Opening an agent from anywhere global (Alt+N, Ctrl+K, the history)
-  // first switches to a workspace where it shows.
+  // first switches to a workspace where it shows; the graph, if on screen,
+  // selects it and brings it into view.
   const { revealIn } = workspaces;
   const openAgent = useCallback(
     (agentId: number) => {
       revealIn(agentId);
       handleClick(agentId);
+      revealOnGraph(agentId);
     },
     [revealIn, handleClick],
   );
   useOfficeKeys(workspaces.shown, openAgent, agentViews);
+  // A terminal tab opens its agent too: the graph follows.
+  const { select: selectTerminalTab } = terminalDrawer;
+  const selectTab = useCallback(
+    (agentId: number) => {
+      selectTerminalTab(agentId);
+      revealOnGraph(agentId);
+    },
+    [selectTerminalTab],
+  );
 
   // First run: the welcome (checks, a folder, the first agent), then the tour.
   const onboarding = useOnboarding({
@@ -509,7 +521,7 @@ function App() {
               onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
               tabIds={workspaces.tabIds}
               shownAgentId={terminalDrawer.shownAgentId}
-              onSelectAgent={terminalDrawer.select}
+              onSelectAgent={selectTab}
               onCloseAgent={handleCloseAgent}
               // A space with no agents of its own shows no one else's terminal
               // (the panes stay mounted, only hidden).

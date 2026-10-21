@@ -111,12 +111,13 @@ export function drawZ(
   const p = (t % 7) / 7;
   if (p > 0.6) return;
   const k = p / 0.6;
-  ctx.globalAlpha = 1 - k;
+  ctx.save();
+  ctx.globalAlpha *= 1 - k;
   setFont(ctx, 600, 11 + k * 3);
   ctx.fillStyle = th.muted;
   ctx.textAlign = 'center';
   ctx.fillText('z', x + 6 + k * 8, y - k * 16);
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 /** The celebrating agent's own colours: its body, lighter and darker. */
@@ -134,12 +135,13 @@ export function drawConfetti(
   colors: readonly string[],
 ) {
   const n = 22;
+  const base = ctx.globalAlpha;
   for (let i = 0; i < n; i++) {
     const a = ((i * 137.5 + seed * 31) % 360) * (Math.PI / 180);
     const speed = 50 + ((i * 53 + seed) % 40);
     const px = x + Math.cos(a) * speed * p;
     const py = y - Math.abs(Math.sin(a)) * speed * p * 1.2 + 90 * p * p;
-    ctx.globalAlpha = 1 - p;
+    ctx.globalAlpha = base * (1 - p);
     ctx.fillStyle = colors[i % colors.length];
     ctx.save();
     ctx.translate(px, py);
@@ -147,7 +149,7 @@ export function drawConfetti(
     ctx.fillRect(-2.5, -1.5, 5, 3);
     ctx.restore();
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = base;
 }
 
 const TAU = Math.PI * 2;
@@ -169,14 +171,15 @@ export function drawHearts(
   head: number,
   p: number,
 ) {
+  const base = ctx.globalAlpha;
   for (let i = 0; i < 4; i++) {
     const q = p * 1.3 - i * 0.15;
     if (q <= 0 || q >= 1) continue;
-    ctx.globalAlpha = 1 - q;
+    ctx.globalAlpha = base * (1 - q);
     ctx.fillStyle = i % 2 ? lighten(th.accent, 0.3) : th.accent;
     heart(ctx, x + Math.sin(q * 5 + i * 2) * 10 + (i - 1.5) * 6, head - 6 - q * 34, 4 + (i % 2));
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = base;
 }
 
 /** The "dizzy" trick: little stars circling over his head. */
@@ -187,7 +190,8 @@ export function drawDizzy(
   head: number,
   p: number,
 ) {
-  ctx.globalAlpha = p < 0.8 ? 1 : (1 - p) / 0.2;
+  ctx.save();
+  ctx.globalAlpha *= p < 0.8 ? 1 : (1 - p) / 0.2;
   ctx.fillStyle = th.amber;
   for (let i = 0; i < 3; i++) {
     const a = p * TAU * 2 + (i * TAU) / 3;
@@ -203,7 +207,7 @@ export function drawDizzy(
     ctx.closePath();
     ctx.fill();
   }
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 /** A small ✓ rising from a finished task. */
@@ -214,9 +218,10 @@ export function drawCheckPop(
   y: number,
   p: number,
 ) {
-  ctx.globalAlpha = p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
+  ctx.save();
+  ctx.globalAlpha *= p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
   drawCheckBadge(ctx, th, x, y - p * 14, 6);
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 /** An arrow on the view's border toward someone waiting off-screen. */

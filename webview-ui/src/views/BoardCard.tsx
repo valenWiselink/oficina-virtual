@@ -68,10 +68,13 @@ export function BoardCard({
   view,
   actions,
   motion,
+  highlightMember,
 }: {
   view: AgentView;
   actions: BoardActions;
   motion?: CardMotion;
+  /** The member you clicked on the graph: its row stands out. */
+  highlightMember?: number;
 }) {
   const calm = useCalmMode();
   const cheering = useCheer(view.id) && !calm;
@@ -226,7 +229,13 @@ export function BoardCard({
       {view.subagents.length > 0 && (
         <ul className="m-0 p-0 list-none flex flex-col gap-1 border-l-2 border-border pl-6">
           {view.subagents.map((s) => (
-            <li key={s.id} className="text-2xs text-text-muted flex items-center gap-4 min-w-0">
+            <li
+              key={s.id}
+              className={`text-2xs text-text-muted flex items-center gap-4 min-w-0 rounded-sm ${
+                s.id === highlightMember ? 'bg-active-bg -ml-4 pl-4 font-semibold' : ''
+              }`}
+              aria-current={s.id === highlightMember ? 'true' : undefined}
+            >
               <span
                 className="w-5 h-5 rounded-full shrink-0"
                 style={{ background: KIND_COLOR[s.kind] }}
