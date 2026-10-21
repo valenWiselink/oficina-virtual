@@ -117,7 +117,7 @@ export function GraphContextMenu({
       ref={ref}
       role="menu"
       aria-label={menu.view ? `Opciones de ${menu.view.name}` : 'Opciones del grafo'}
-      className="absolute z-40 soft-panel p-4 flex flex-col"
+      className="absolute z-[75] soft-panel p-4 flex flex-col"
       style={{ left, top, width: MENU_W }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {

@@ -154,7 +154,7 @@ export function GraphKeysHelp({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-label="Atajos del grafo"
-      className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-30 w-[min(420px,calc(100%-28px))] soft-panel p-12 flex flex-col gap-8"
+      className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-[75] w-[min(420px,calc(100%-28px))] soft-panel p-12 flex flex-col gap-8"
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-text">Atajos del grafo</span>
