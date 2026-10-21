@@ -81,6 +81,13 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   announced as sub-agents, so juntas show in the graph.
 - `agentIdentity.ts` — name, branch, ticket, tasks, "te toca" (an explicit
   `Te toca:` line, else PR links), background work.
+- `teTocaRule.ts` — the rule that makes agents write that line: office agents
+  get it by `--append-system-prompt-file` unless the global CLAUDE.md has it
+  (one such flag per launch: a supervisor's role file wins); the welcome and
+  Ajustes can append/take back the exact block in the global CLAUDE.md.
+- `serverBoot.ts` — this run's id. Agent ids restart at 1 on every start, so
+  `/ws` greets with `serverHello` (the page reloads on a new run) and the
+  terminal socket refuses a `?boot=` from another run.
 - `agentChat.ts` — a transcript as chat items (`requestAgentChat`).
 - `dayLog.ts` — today's history, persisted to `~/.pixel-agents/historial-AAAA-MM-DD.jsonl`.
   What already exists at first sight (a restart) is never logged as news.
@@ -110,6 +117,14 @@ webview's `OfficeState` (office/engine) is kept as the character registry
 - `components/TerminalDrawer.tsx` and friends — the docked panel: agent tabs,
   per-pane header, Chat | Terminal, split with a pinned agent, search.
 - `chat/` — chat view of a transcript; sending pastes into the agent's PTY.
+- Writing to an agent: `terminal/agentInput.ts` `sendToAgent` resolves whether
+  it reached the PTY. Input typed while a terminal reconnects is held 30 s
+  (`terminal/heldInput.ts`) and sent or dropped whole; only `true` may count as
+  done. The control socket holds messages only briefly and never one that
+  changes an agent by id (`transport/sendQueue.ts`).
+- Sounds: `notificationSound.ts` (Ajustes: Todo / Sólo cuando te necesitan /
+  Nada) and `effects/turnSounds.ts` (toc-toc for a need, a spaced soft plin
+  for a turn with nothing for you, chosen 1.5 s after the turn ends).
 - `onboarding/` — first-run welcome (checks, hooks consent, folder, first
   agent) and the guided tour (`data-tour` marks on its targets).
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.

@@ -26,6 +26,16 @@ cambiar de ventana.
    (con sonido) de unos 40 segundos y después te guía: revisa que Claude Code esté instalado, te
    ofrece los avisos al instante, elegís tu carpeta y creás tu primer agente.
 
+**El «Te toca» viene incluido.** Los agentes que lanza la oficina cierran con una
+línea `Te toca: ...` cuando te dejan algo para hacer (mergear un PR, probar algo,
+decidir), y así aparecen en «Te necesita». La oficina se lo pide a cada agente al
+lanzarlo (`--append-system-prompt-file`), sin tocar tus archivos; si tu
+`~/.claude/CLAUDE.md` ya tiene esa regla, no se la repite. Para que también la usen
+las sesiones que abrís por tu cuenta, prendé «“Te toca” también fuera de la
+oficina» en la bienvenida o en Ajustes → Avisos: la suma al final de tu
+`CLAUDE.md` global, y al apagarlo saca sólo ese bloque (si la regla la escribiste
+vos, no la toca).
+
 No hace falta instalar Node: el programa trae lo suyo. Sí hace falta **Claude
 Code** con tu sesión iniciada. Si no lo tenés, en PowerShell:
 `irm https://claude.ai/install.ps1 | iex` (el instalador oficial), y después
@@ -107,6 +117,10 @@ Ayuda).
   esfuerzo y supervisión de los que corren en la oficina (los reinicia en la misma
   conversación, así que tienen que estar quietos). Un modelo más grande es un
   Clawd distinto (cría, pinzas, leyenda), y el esfuerzo muy alto suda una gota.
+- **Sonidos** (Ajustes → Avisos): toc-toc cuando un agente te necesita (un
+  permiso, una pregunta, un «Te toca»); un plin suave cuando termina sin nada
+  para vos, como mucho uno cada 45 segundos. Elegís «Todo», «Sólo cuando te
+  necesitan» o «Nada».
 - **Supervisores**: cualquier agente puede supervisar un espacio, agentes elegidos
   o a todos. Le llegan los permisos, las preguntas y los turnos terminados de su
   equipo; aprueba lo seguro, te pide lo demás con un «Te toca» y te cuenta qué hizo
