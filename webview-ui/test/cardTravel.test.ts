@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { addMotions, MOTION_MS, pruneMotions } from '../src/views/cardMotion.js';
 import { MAX_MOVES, type Placed, planTravel } from '../src/views/cardTravel.js';
 
 /** Cards as columns of ids, top to bottom, 260 px apart and 100 px tall. */
@@ -73,5 +74,25 @@ describe('which cards travel', () => {
     const before = new Map<number, Placed>([[1, { column: 'work', x: 0, y: 100 }]]);
     const after = new Map<number, Placed>([[1, { column: 'work', x: 0.4, y: 100.6 }]]);
     expect(planTravel(before, after)).toEqual([]);
+  });
+});
+
+describe('how long a card hops or pops', () => {
+  const live = (m: ReturnType<typeof pruneMotions>) => [...m].map(([id, t]) => `${id}:${t.motion}`);
+
+  it('a later change on the board neither cuts a hop short nor keeps it', () => {
+    let motions = addMotions(new Map(), new Map([[1, 'hop' as const]]), 0);
+    // Another agent pops in 100 ms later.
+    motions = addMotions(motions, new Map([[2, 'pop' as const]]), 100);
+    expect(live(pruneMotions(motions, 500))).toEqual(['1:hop', '2:pop']);
+    expect(live(pruneMotions(motions, MOTION_MS))).toEqual(['2:pop']);
+    // Gone for good: it will not replay when the card changes column later.
+    expect(live(pruneMotions(motions, MOTION_MS + 200))).toEqual([]);
+  });
+
+  it('a card that hops again starts its time over', () => {
+    let motions = addMotions(new Map(), new Map([[1, 'hop' as const]]), 0);
+    motions = addMotions(motions, new Map([[1, 'hop' as const]]), 600);
+    expect(live(pruneMotions(motions, MOTION_MS))).toEqual(['1:hop']);
   });
 });
