@@ -5,6 +5,7 @@ import { clip } from '../identity/identityStore.js';
 import { liveFileLinks } from '../office/behaviors/fileLinksStore.js';
 import type { AgentView } from './agentViews.js';
 import { clawdColor } from './clawdColor.js';
+import { GAZE_NEAR_PX, type GazeContext, gazeTarget, lookToward } from './clawdGaze.js';
 import { impatience } from './clawdImpatience.js';
 import { type ClawdLife, isAsleep } from './clawdLife.js';
 import { effortLevel, effortMarks, modelLook } from './clawdLook.js';
@@ -83,6 +84,8 @@ export interface SceneFrame {
   /** Close-up cards under each agent (zoomed in). */
   detail: boolean;
   stage: string;
+  /** The pointer in world coords while it moved lately (the Clawds look). */
+  pointer?: Pt | null;
 }
 
 /** What the frame marks: the selected agent, or one member of its meeting. */
@@ -514,13 +517,14 @@ function drawBodies(
   at: Placing,
 ): Hit[] {
   const hits: Hit[] = [];
+  const gaze = gazeOf(pen, list, life);
   list.forEach((v, index) => {
     drawMembers(pen, v, marks, at, hits);
     const n = pen.nodes.get(`a${v.id}`);
     if (!n) return;
     // A member picked in its meeting takes the ring.
     const selected = v.id === marks.selectedId && marks.selectedMember == null;
-    const state = { selected, pulsing: at.pulsing.has(v.id), index };
+    const state = { selected, pulsing: at.pulsing.has(v.id), index, gaze };
     pen.fade([`a${v.id}`], () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life));
     grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
   });
@@ -573,6 +577,18 @@ function drawMember(
   worldTransform(ctx, f);
   const top = at.above ? n.y - n.r - 26 : n.y + n.r + 6;
   return drawChip(ctx, th, n.x, top, clip(s.label, NAME_CHARS), subColor, s.kind);
+}
+
+/** What the eyes can turn to this frame: the pointer and who celebrates. */
+function gazeOf(pen: Pen, list: AgentView[], life: ClawdLife): GazeContext {
+  const party = list.find((v) => life.burst(v.id, pen.f.now) !== null);
+  const at = party ? pen.nodes.get(`a${party.id}`) : undefined;
+  return {
+    pointer: pen.f.pointer ?? null,
+    near: GAZE_NEAR_PX / pen.f.cam.zoom,
+    celebrant: party && at ? { id: party.id, at } : null,
+    vos: VOS,
+  };
 }
 
 /** How Clawd stands right now: his state's pose plus the little life on top
@@ -636,7 +652,7 @@ function drawAgentBody(
   f: SceneFrame,
   v: AgentView,
   n: SimNode,
-  at: { selected: boolean; pulsing: boolean; index: number },
+  at: { selected: boolean; pulsing: boolean; index: number; gaze: GazeContext },
   life: ClawdLife,
 ): void {
   const color = colorOf(v);
@@ -654,6 +670,12 @@ function drawAgentBody(
   // Clawd fills his disc, as in the preview (the disc grows with activity).
   const scale = n.r / 15;
   const { pose, lift } = livePose(v, f, life, at.index);
+  // Eyes: to whoever celebrates, the pointer nearby, or "Vos" (not in calm).
+  const target =
+    f.calm || pose.sleep
+      ? null
+      : gazeTarget(at.gaze, { id: v.id, at: n, waits: v.kind === 'needs' });
+  if (target) pose.look = lookToward(n, target);
   const foot = n.y + clawdHeight(scale, f.dpr) / 2 - lift;
   clawdAt(ctx, f, n.x, foot, scale, color, pose);
   worldTransform(ctx, f);

@@ -1,5 +1,6 @@
 import { liveFileLinks } from '../office/behaviors/fileLinksStore.js';
 import type { AgentView } from './agentViews.js';
+import { GAZE_HOLD_MS } from './clawdGaze.js';
 import type { ClawdLife } from './clawdLife.js';
 import {
   type Bounds,
@@ -130,6 +131,7 @@ export class GraphStage implements PointerHost {
   private readonly frameTimes: number[] = [];
   /** The mouse over the canvas (no button), for the hover card. */
   private mouse: Pt | null = null;
+  private mouseMovedAt = -Infinity;
   private readonly dwell = new HoverDwell();
   private hover: HoverTarget | null = null;
   private pillHover: number | null = null;
@@ -238,6 +240,9 @@ export class GraphStage implements PointerHost {
       calm: inp.calm || this.slow,
       detail: this.detail,
       stage: this.stageColor,
+      // The Clawds look at the pointer a moment after it moves.
+      pointer:
+        this.mouse && now - this.mouseMovedAt < GAZE_HOLD_MS ? toWorld(cam, this.mouse) : null,
     };
     const marks = {
       selectedId: inp.selected?.id ?? null,
@@ -269,6 +274,7 @@ export class GraphStage implements PointerHost {
   /** The mouse moved over the canvas without a button (null: it left). */
   pointAt(p: Pt | null): void {
     this.mouse = p;
+    if (p) this.mouseMovedAt = performance.now();
   }
 
   /** Who the mouse rests on (after the dwell) and what stays crisp then. */
