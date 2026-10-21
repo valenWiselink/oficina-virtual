@@ -48,13 +48,19 @@ export function isLongAnswer(text: string): boolean {
 export type PendingDelivery = 'sending' | 'sent' | 'failed';
 
 /**
- * What the chat says under a message the conversation does not show yet. A
- * busy agent reads it when its turn ends, so "En cola" lasts while it works;
- * once it stops, `late` (no sign of it for a while) sends you to the terminal.
+ * What the chat says under a message the conversation does not show yet,
+ * beside "Vos". Once it reached the terminal the ✓ says so and there is
+ * nothing to add (undefined) — unless a busy agent will read it when its
+ * turn ends ("En cola", while it works) or, once it stops, `late` (no sign
+ * of it for a while) sends you to the terminal.
  */
-export function pendingNote(delivery: PendingDelivery, busy: boolean, late: boolean): string {
+export function pendingNote(
+  delivery: PendingDelivery,
+  busy: boolean,
+  late: boolean,
+): string | undefined {
   if (delivery === 'failed') return 'No le llegó: su terminal no estaba conectada';
   if (delivery === 'sending') return 'Enviando…';
   if (busy) return 'En cola: lo lee cuando termine lo que está haciendo';
-  return late ? 'Todavía no aparece en la conversación: fijate en la terminal' : 'Enviando…';
+  return late ? 'Todavía no aparece en la conversación: fijate en la terminal' : undefined;
 }

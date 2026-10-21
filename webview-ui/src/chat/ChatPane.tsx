@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { ChatItem } from '../../../core/src/messages.js';
 import { Button } from '../components/ui/Button.js';
+import { useCalmMode } from '../effects/calmMode.js';
+import { playBonkSound } from '../notificationSound.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
 import { useWritableAgents } from '../terminal/agentInput.js';
 import { terminalShortcut } from '../terminal/terminalShortcuts.js';
@@ -96,7 +98,10 @@ export function ChatPane({
   // Written in the chat: it asks for a chat-sized answer, and shows at once.
   const send = (text: string) => {
     const key = addPending(view.id, text);
-    void onSend(withChatHint(text)).then((sent) => settleDelivery(view.id, key, sent));
+    void onSend(withChatHint(text)).then((sent) => {
+      settleDelivery(view.id, key, sent);
+      if (!sent) void playBonkSound();
+    });
     pinnedToEnd.current = true;
   };
 
@@ -244,7 +249,9 @@ function UserBubble({ item }: { item: ChatItem }) {
 /** How long a sent message may take to show before the chat says so. */
 const LATE_MS = 20_000;
 
-/** A message you sent that the conversation does not show yet. */
+/** A message you sent that the conversation does not show yet: see-through
+ *  while it goes out, whole (a fade, outside calm mode) with a ✓ beside
+ *  "Vos" once it is in the agent's terminal. */
 function PendingBubble({
   message,
   busy,
@@ -265,16 +272,27 @@ function PendingBubble({
     const timer = setTimeout(() => setLate(true), LATE_MS);
     return () => clearTimeout(timer);
   }, [waiting]);
+  const calm = useCalmMode();
   const failed = message.delivery === 'failed';
+  const note = pendingNote(message.delivery, busy, late);
   return (
     <div
-      className={`self-end max-w-[85%] flex flex-col items-end gap-2 ${failed ? '' : 'opacity-75'}`}
+      className={`self-end max-w-[85%] flex flex-col items-end gap-2 ${
+        message.delivery === 'sending' ? 'opacity-75' : ''
+      } ${calm ? '' : 'transition-opacity duration-300'}`}
     >
       <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
         {message.text}
       </div>
       <span className={`text-2xs ${failed ? 'text-danger' : 'text-text-muted'}`} role="status">
-        Vos · {pendingNote(message.delivery, busy, late)}
+        Vos
+        {message.delivery === 'sent' && (
+          <span className="text-status-success" title="Le llegó a su terminal">
+            {' '}
+            ✓<span className="sr-only"> le llegó</span>
+          </span>
+        )}
+        {note && ` · ${note}`}
       </span>
       {failed && (
         <div className="flex gap-4">

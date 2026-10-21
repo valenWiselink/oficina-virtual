@@ -5,6 +5,7 @@ import { pendingNote } from '../src/chat/chatText.js';
 import { HELD_MAX_AGE_MS, mayHold, stillWorthSending } from '../src/transport/sendQueue.js';
 import { knownServerRun, resetServerRunForTests } from '../src/transport/serverBoot.js';
 import { WebSocketTransport } from '../src/transport/webSocketTransport.js';
+import { stillSent } from '../src/views/sentReplies.js';
 
 /** A stand-in for the browser's WebSocket: the test opens, speaks and closes it. */
 class FakeSocket {
@@ -137,7 +138,23 @@ describe('what the chat says under a message you sent', () => {
     expect(pendingNote('failed', true, true)).toMatch(/^No le llegó/);
     // A busy agent reads it when its turn ends, however long that takes.
     expect(pendingNote('sent', true, true)).toMatch(/^En cola/);
-    expect(pendingNote('sent', false, false)).toBe('Enviando…');
+    // In its terminal: the ✓ beside "Vos" says it, no "Enviando…" that lies.
+    expect(pendingNote('sent', false, false)).toBeUndefined();
     expect(pendingNote('sent', false, true)).toMatch(/fijate en la terminal/);
+  });
+});
+
+describe('the ✓ on a one-tap reply', () => {
+  it('stays while the agent has not written since it went out', () => {
+    const reply = { key: 'q:Dale, seguí', recordAt: 1_000 };
+    expect(stillSent(reply, 1_000)).toBe('q:Dale, seguí');
+    // It read the message and got going: the mark is done.
+    expect(stillSent(reply, 1_500)).toBeUndefined();
+    expect(stillSent(undefined, 1_000)).toBeUndefined();
+  });
+
+  it('works for an agent the office has not heard write yet', () => {
+    expect(stillSent({ key: 'c:n1', recordAt: undefined }, undefined)).toBe('c:n1');
+    expect(stillSent({ key: 'c:n1', recordAt: undefined }, 2_000)).toBeUndefined();
   });
 });

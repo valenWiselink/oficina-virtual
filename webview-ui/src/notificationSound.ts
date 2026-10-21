@@ -156,3 +156,14 @@ export function unlockAudio(): void {
     // ignore
   }
 }
+
+/** A low wooden "bonk" (G3, a plain tap). */
+const BONK_NOTES: readonly SoundNote[] = [{ hz: 196, at: 0, ring: 0.22 }];
+const BONK_VOLUME = 0.16;
+
+/** Something you sent did not reach the agent's terminal: the "bonk" beside
+ *  the text that says so. It answers your own action, so it is information:
+ *  it plays in focus and calm mode, and with "Sólo cuando te necesitan". */
+export function playBonkSound(): Promise<void> {
+  return play(BONK_NOTES, BONK_VOLUME, false, true);
+}
