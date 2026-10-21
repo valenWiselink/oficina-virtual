@@ -16,26 +16,29 @@ import type { AgentView } from './agentViews.js';
 import { localDay } from './boardMood.js';
 import { TellMergedButton } from './CardExtras.js';
 import { requestCelebration } from './celebrate.js';
-import { allDoneText, mergeMoment, mergeTitle, moreThanBefore } from './cheerText.js';
+import { allDoneText, mergeMoment, mergeTitle, moreThanBefore, SUMMARY_HOUR } from './cheerText.js';
 import { dayRecord } from './officeMemory.js';
 import { allFinished, isBusy, noteAllDone } from './officeMoments.js';
+import { useWeekCheer } from './useWeekCheer.js';
+import { DAY_INITIALS } from './weekText.js';
 import { dayLabel, lastWorkedDay } from './workdays.js';
 
-/** The evening summary shows once a day, from this hour. */
-const SUMMARY_HOUR = 18;
+/** The evening summary shows once a day, from SUMMARY_HOUR. */
 const SUMMARY_KEY = 'oficina.resumen';
 /** "Terminaron todos" at most this often. */
 const ALL_DONE_EVERY_MS = 10 * 60_000;
 const ALL_DONE_SHOWN_MS = 8000;
 
 interface Cheer {
-  id: 'todos' | 'resumen' | 'pr';
+  id: 'todos' | 'resumen' | 'semana' | 'pr';
   title: string;
   text: string;
   palette: number;
   hueShift: number;
   /** The agent it is about (a merged PR's), for "Avisarle". */
   agentId?: number;
+  /** The week's days, Monday to Friday, as shares of the busiest. */
+  bars?: number[];
 }
 
 /**
@@ -115,10 +118,30 @@ export function OfficeCheers({
     return () => clearTimeout(timer);
   }, [cheer]);
 
+  const date = new Date(now);
+  const day = localDay(date);
+  const weekPending = useWeekCheer({
+    calm,
+    busy: cheer !== null,
+    now,
+    onShow: (week, friday) => {
+      // On Friday the week takes the place of the day's summary.
+      if (friday) writeSeen(String(day));
+      setCheer({
+        id: 'semana',
+        title: week.title,
+        text: `${week.text}. ${week.closing}`,
+        palette: 0,
+        hueShift: 0,
+        bars: week.bars,
+      });
+    },
+  });
+
   useEffect(() => {
-    const date = new Date(now);
     if (calm || cheer || date.getHours() < SUMMARY_HOUR) return;
-    const day = localDay(date);
+    // The week first (it may still be on its way).
+    if (weekPending) return;
     const today = String(day);
     if (readSeen() === today) return;
     const summary = daySummary(entries);
@@ -160,6 +183,7 @@ export function OfficeCheers({
           {told && ' · ya se enteró'}
         </span>
       </span>
+      {cheer.bars && <WeekBars bars={cheer.bars} />}
       {cheer.id === 'pr' && about && <TellFromCheer view={about} />}
       {cheer.id === 'resumen' && (
         <Button
@@ -182,6 +206,23 @@ export function OfficeCheers({
         ×
       </Button>
     </div>
+  );
+}
+
+/** Five small bars, Monday to Friday (the text says the numbers). */
+function WeekBars({ bars }: { bars: number[] }) {
+  return (
+    <span className="flex items-end gap-3 shrink-0" aria-hidden="true">
+      {bars.map((share, i) => (
+        <span key={i} className="flex flex-col items-center gap-1">
+          <span
+            className="w-6 rounded-sm bg-accent"
+            style={{ height: Math.max(2, Math.round(share * 18)) }}
+          />
+          <span className="text-2xs text-text-muted leading-none">{DAY_INITIALS[i]}</span>
+        </span>
+      ))}
+    </span>
   );
 }
 

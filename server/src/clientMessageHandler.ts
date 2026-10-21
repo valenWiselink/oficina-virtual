@@ -42,6 +42,7 @@ import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { launchAgent } from './terminal/standaloneAgentLauncher.js';
 import { ruleStatus, setRuleInClaudeMd } from './teTocaRule.js';
+import { weekRecap } from './weekRecap.js';
 
 type WsSend = (message: Record<string, unknown>) => void;
 
@@ -578,6 +579,15 @@ export function handleClientMessage(
         if (result.ok) store.broadcast({ ...result.summary });
         else send({ type: 'daySummaryFailed', reason: result.reason });
       });
+      break;
+    }
+
+    case 'requestWeekRecap': {
+      // The Friday summary (or the Monday that missed it): the week from the
+      // saved histories, to the office that asked.
+      const where = runtime?.dayLog?.storage();
+      const recap = where ? weekRecap(where.dir, msg.monday) : null;
+      if (recap) send({ ...recap });
       break;
     }
 

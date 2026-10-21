@@ -86,3 +86,6 @@ export function mergeMoment(
 
 /** The server's name for a line nobody owns (dayLog.nameOf) is no name. */
 const named = (agent: string | undefined) => (agent === 'Un agente' ? undefined : agent);
+
+/** The evening summary (the day's, Friday's week) shows from this hour. */
+export const SUMMARY_HOUR = 18;
