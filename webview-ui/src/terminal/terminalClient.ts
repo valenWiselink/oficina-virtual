@@ -12,7 +12,9 @@
 import { TERMINAL_WS_PREFIX } from '../../../core/src/constants.js';
 import { parseServerFrame } from '../../../core/src/terminalFrames.js';
 import { reconnectDelayMs } from '../transport/reconnectBackoff.js';
+import { knownServerRun } from '../transport/serverBoot.js';
 import { serverToken } from '../transport/serverToken.js';
+import { HeldInput, type WriteDone } from './heldInput.js';
 
 export interface TerminalConnectionHandlers {
   onOutput(data: string): void;
@@ -21,6 +23,9 @@ export interface TerminalConnectionHandlers {
   onReplay(data: string, cols: number, rows: number): void;
   onExit(exitCode: number): void;
   onStatusChange(status: TerminalConnectionStatus): void;
+  /** What was written while it reconnected never went (it did not come back
+   *  in time, or the server refused it): say so where it was typed. */
+  onInputDropped(): void;
 }
 
 export type TerminalConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed';
@@ -37,6 +42,8 @@ export class TerminalConnection {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private exited = false;
+  /** The server sent this socket's replay: input now reaches the PTY. */
+  private attached = false;
   /** Last known geometry, re-sent on reconnect so a resize during a drop isn't lost. */
   private pending: { cols: number; rows: number } | null = null;
 
@@ -45,10 +52,13 @@ export class TerminalConnection {
   // runtime code.
   private readonly agentId: number;
   private readonly handlers: TerminalConnectionHandlers;
+  /** Written while not attached; goes out on the next replay (heldInput.ts). */
+  private readonly held: HeldInput;
 
   constructor(agentId: number, handlers: TerminalConnectionHandlers) {
     this.agentId = agentId;
     this.handlers = handlers;
+    this.held = new HeldInput(() => handlers.onInputDropped());
   }
 
   async connect(): Promise<void> {
@@ -64,16 +74,11 @@ export class TerminalConnection {
         '[Webview] Terminal: this page has no server token (open the URL the CLI printed).',
       );
       this.handlers.onStatusChange('closed');
+      this.held.drop();
       return;
     }
 
-    // The token rides the handshake query exactly as it does on /ws (the
-    // server's request log redacts it), so both sockets pass the same gate.
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${window.location.host}${TERMINAL_WS_PREFIX}/${String(
-      this.agentId,
-    )}?token=${encodeURIComponent(serverToken)}`;
-    const socket = new WebSocket(url);
+    const socket = new WebSocket(this.url(serverToken));
     this.socket = socket;
 
     socket.onopen = () => {
@@ -90,23 +95,30 @@ export class TerminalConnection {
         this.handlers.onOutput(frame.data);
       } else if (frame.type === 'replay') {
         this.handlers.onReplay(frame.data, frame.cols, frame.rows);
+        // Only a socket the server kept gets a replay (it refuses a page from
+        // a restarted run first): now what waited may go.
+        this.attached = true;
+        this.held.release((data) => this.send({ type: 'input', data }));
       } else {
         this.exited = true;
+        this.held.drop();
         this.handlers.onExit(frame.exitCode);
         this.handlers.onStatusChange('closed');
       }
     };
 
     socket.onclose = (event: CloseEvent) => {
+      this.attached = false;
       if (this.disposed || this.exited) return;
       // An application close code (bad token, forbidden origin, no such
-      // session) is final: retrying can't fix any of them, and hammering an
-      // auth-rejecting endpoint is pointless.
+      // session, a page from a restarted run) is final: retrying can't fix
+      // any of them, and hammering an auth-rejecting endpoint is pointless.
       if (event.code >= 4000 && event.code < 5000) {
         console.error(
           `[Webview] Terminal: agent ${String(this.agentId)} rejected (${String(event.code)}: ${event.reason})`,
         );
         this.handlers.onStatusChange('closed');
+        if (this.held.drop()) this.handlers.onInputDropped();
         return;
       }
       this.scheduleReconnect();
@@ -129,14 +141,36 @@ export class TerminalConnection {
     }, delay);
   }
 
+  /** The socket url. The token rides the handshake query exactly as it does
+   *  on /ws (the server's request log redacts it), so both sockets pass the
+   *  same gate; the run this page belongs to lets a restarted server refuse
+   *  ids that now name other agents. */
+  private url(token: string): string {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const run = knownServerRun();
+    return `${protocol}//${window.location.host}${TERMINAL_WS_PREFIX}/${String(
+      this.agentId,
+    )}?token=${encodeURIComponent(token)}${run ? `&boot=${encodeURIComponent(run)}` : ''}`;
+  }
+
   private send(frame: Record<string, unknown>): boolean {
     if (this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(JSON.stringify(frame));
     return true;
   }
 
-  write(data: string): void {
-    this.send({ type: 'input', data });
+  /**
+   * Type into the PTY. Not attached right now (reconnecting): it waits for
+   * the next attach, up to INPUT_HOLD_MS. `done` says whether it got there.
+   */
+  write(data: string, done?: WriteDone): void {
+    if (this.disposed || this.exited) {
+      done?.(false);
+    } else if (this.attached && this.send({ type: 'input', data })) {
+      done?.(true);
+    } else {
+      this.held.hold(data, done);
+    }
   }
 
   resize(cols: number, rows: number): void {
@@ -146,6 +180,7 @@ export class TerminalConnection {
 
   dispose(): void {
     this.disposed = true;
+    this.held.drop();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

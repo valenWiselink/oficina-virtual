@@ -32,14 +32,16 @@ function BroadcastBody({ views, onClose }: { views: AgentView[]; onClose: () => 
   const writable = useWritableAgents();
   const [text, setText] = useState('');
   const [chosen, setChosen] = useState<ReadonlySet<number>>(() => new Set());
-  const [sentTo, setSentTo] = useState<number | null>(null);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ sent: number; missed: string[] } | null>(null);
   const groups = groupByFolder(views);
 
+  // All got it: close by itself. Someone did not: stay, so you see who.
   useEffect(() => {
-    if (sentTo === null) return;
+    if (result === null || result.missed.length > 0) return;
     const timer = setTimeout(onClose, SENT_SHOWN_MS);
     return () => clearTimeout(timer);
-  }, [sentTo, onClose]);
+  }, [result, onClose]);
 
   const toggle = (ids: number[], on: boolean) => {
     const next = new Set(chosen);
@@ -52,19 +54,20 @@ function BroadcastBody({ views, onClose }: { views: AgentView[]; onClose: () => 
   };
   const send = () => {
     const message = text.trim();
-    if (!message) return;
-    let n = 0;
-    for (const id of chosen) if (sendToAgent(id, message)) n++;
-    setSentTo(n);
+    if (!message || sending) return;
+    setSending(true);
+    const ids = [...chosen];
+    // Each counts once it reached its terminal (one reconnecting may take a while).
+    void Promise.all(ids.map((id) => sendToAgent(id, message))).then((sent) => {
+      const nameOf = (id: number) => views.find((v) => v.id === id)?.name ?? `Agente ${id}`;
+      setResult({
+        sent: sent.filter(Boolean).length,
+        missed: ids.filter((_, i) => !sent[i]).map(nameOf),
+      });
+    });
   };
 
-  if (sentTo !== null) {
-    return (
-      <p className="m-0 px-8 py-16 text-sm text-text text-center" role="status">
-        Mandado a {sentTo === 1 ? '1 agente' : `${sentTo} agentes`}.
-      </p>
-    );
-  }
+  if (result !== null) return <BroadcastResult {...result} onClose={onClose} />;
   const allIds = views.filter((v) => writable.has(v.id)).map((v) => v.id);
   return (
     <form
@@ -96,14 +99,44 @@ function BroadcastBody({ views, onClose }: { views: AgentView[]; onClose: () => 
         </Button>
         <Button
           type="submit"
-          variant={text.trim() && chosen.size > 0 ? 'accent' : 'disabled'}
+          variant={text.trim() && chosen.size > 0 && !sending ? 'accent' : 'disabled'}
           size="md"
-          disabled={!text.trim() || chosen.size === 0}
+          disabled={!text.trim() || chosen.size === 0 || sending}
         >
-          Mandar{chosen.size > 0 ? ` a ${chosen.size}` : ''}
+          {sending ? 'Mandando…' : `Mandar${chosen.size > 0 ? ` a ${chosen.size}` : ''}`}
         </Button>
       </div>
     </form>
+  );
+}
+
+/** How it went: how many got it, and who did not (their terminal was away). */
+function BroadcastResult({
+  sent,
+  missed,
+  onClose,
+}: {
+  sent: number;
+  missed: string[];
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-10 px-8 py-16 text-center" role="status">
+      <p className="m-0 text-sm text-text">
+        Mandado a {sent === 1 ? '1 agente' : `${sent} agentes`}.
+      </p>
+      {missed.length > 0 && (
+        <>
+          <p className="m-0 text-xs text-danger">
+            No les llegó a: {missed.join(', ')}. Su terminal no estaba conectada; probá de nuevo en
+            un rato.
+          </p>
+          <Button size="md" onClick={onClose}>
+            Cerrar
+          </Button>
+        </>
+      )}
+    </div>
   );
 }
 

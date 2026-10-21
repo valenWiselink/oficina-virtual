@@ -42,3 +42,19 @@ export const FOLD_CHARS = 1400;
 export function isLongAnswer(text: string): boolean {
   return text.split('\n').length > FOLD_LINES || text.length > FOLD_CHARS;
 }
+
+/** Where a message sent from the chat is: on its way to the agent's terminal,
+ *  in it, or never got there (it was away past the hold). */
+export type PendingDelivery = 'sending' | 'sent' | 'failed';
+
+/**
+ * What the chat says under a message the conversation does not show yet. A
+ * busy agent reads it when its turn ends, so "En cola" lasts while it works;
+ * once it stops, `late` (no sign of it for a while) sends you to the terminal.
+ */
+export function pendingNote(delivery: PendingDelivery, busy: boolean, late: boolean): string {
+  if (delivery === 'failed') return 'No le llegó: su terminal no estaba conectada';
+  if (delivery === 'sending') return 'Enviando…';
+  if (busy) return 'En cola: lo lee cuando termine lo que está haciendo';
+  return late ? 'Todavía no aparece en la conversación: fijate en la terminal' : 'Enviando…';
+}

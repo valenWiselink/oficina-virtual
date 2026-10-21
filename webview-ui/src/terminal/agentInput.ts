@@ -23,19 +23,27 @@ export function registerAgentInput(agentId: number, handle: TerminalInputHandle 
   changed();
 }
 
-/** Delay between the pasted text and Enter, so the TUI takes the paste first. */
-const ENTER_AFTER_MS = 40;
+/** Delay between the pasted text and Enter, so the TUI takes the paste first —
+ *  late enough for a background session, whose input travels through
+ *  `claude attach` (the server's own sendToTerminal waits 80 ms). */
+const ENTER_AFTER_MS = 150;
 
 /**
  * Send a message to an agent: a bracketed paste (newlines stay inside the
- * message), then Enter. False when the agent has no terminal here.
+ * message), then Enter. Resolves true once it reached the agent's terminal —
+ * right away, or when a terminal that is reconnecting comes back (it waits up
+ * to INPUT_HOLD_MS); false when the agent has no terminal here, or it did not
+ * come back in time. Only true may count as done.
  */
-export function sendToAgent(agentId: number, text: string): boolean {
+export function sendToAgent(agentId: number, text: string): Promise<boolean> {
   const input = handles.get(agentId);
-  if (!input) return false;
+  if (!input) return Promise.resolve(false);
   input.paste(text);
-  setTimeout(() => input.send('\r'), ENTER_AFTER_MS);
-  return true;
+  // Input keeps its order and a reconnect sends or drops it whole, so the
+  // Enter getting there means the message did too.
+  return new Promise((resolve) => {
+    setTimeout(() => input.send('\r', resolve), ENTER_AFTER_MS);
+  });
 }
 
 function subscribe(listener: () => void): () => void {

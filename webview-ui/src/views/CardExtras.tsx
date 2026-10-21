@@ -7,23 +7,36 @@ import { sendToAgent } from '../terminal/agentInput.js';
 import type { AgentView } from './agentViews.js';
 import { QUICK_REPLIES } from './cardRules.js';
 
-/** "Dale, seguí" and friends: one tap writes it to the agent. */
+/** "Dale, seguí" and friends: one tap writes it to the agent. It counts as
+ *  done (onSent) only once it reached the agent's terminal. */
 export function QuickReplies({ view, onSent }: { view: AgentView; onSent: () => void }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
+  const reply = (text: string) => {
+    setState('sending');
+    void sendToAgent(view.id, text).then((sent) => {
+      setState(sent ? 'idle' : 'failed');
+      if (sent) onSent();
+    });
+  };
   return (
-    <div className="flex flex-wrap gap-4" onClick={(e) => e.stopPropagation()}>
+    <div className="flex flex-wrap items-center gap-4" onClick={(e) => e.stopPropagation()}>
       {QUICK_REPLIES.map((r) => (
         <button
           key={r.label}
           type="button"
           title={`Le escribe: «${r.text}»`}
-          className="border border-border bg-bg-dark hover:bg-btn-hover text-text text-2xs font-medium rounded-full px-8 py-2 cursor-pointer"
-          onClick={() => {
-            if (sendToAgent(view.id, r.text)) onSent();
-          }}
+          disabled={state === 'sending'}
+          className="border border-border bg-bg-dark hover:bg-btn-hover text-text text-2xs font-medium rounded-full px-8 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+          onClick={() => reply(r.text)}
         >
           {r.label}
         </button>
       ))}
+      {state === 'failed' && (
+        <span className="text-2xs text-danger" role="status">
+          No le llegó: su terminal no está conectada. Probá de nuevo.
+        </span>
+      )}
     </div>
   );
 }
@@ -36,7 +49,9 @@ export function CompactButton({ view }: { view: AgentView }) {
       title="Le manda /compact: resume la charla para liberar contexto"
       onClick={(e) => {
         e.stopPropagation();
-        sendToAgent(view.id, '/compact');
+        // If its terminal is reconnecting it waits; if it never comes back the
+        // terminal itself says so.
+        void sendToAgent(view.id, '/compact');
       }}
     >
       Compactar ({view.contextPct}%)

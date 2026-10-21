@@ -5,7 +5,8 @@ import { setBackgroundAgents, useBackgroundAgents } from '../agents/backgroundAg
 import { APP_THEME_CHOICES, setAppThemeChoice, useAppThemeChoice } from '../effects/appTheme.js';
 import { setCalm, useCalmMode } from '../effects/calmMode.js';
 import { TERMINAL_DOCKS, type TerminalDock } from '../hooks/useTerminalDock.js';
-import { isSoundEnabled, setSoundEnabled } from '../notificationSound.js';
+import { chooseSoundMode, SOUND_MODES, useSoundMode } from '../notificationSound.js';
+import { TeTocaRuleSetting } from '../onboarding/TeTocaRuleSetting.js';
 import { transport } from '../transport/index.js';
 import { setOperatorName, useOperatorName } from '../views/officeMemory.js';
 import { TerminalSchemePicker } from './TerminalSchemePicker.js';
@@ -66,7 +67,7 @@ export function SettingsModal({
   onShowGuide,
   onShowIntro,
 }: SettingsModalProps) {
-  const [soundLocal, setSoundLocal] = useState(isSoundEnabled);
+  const soundMode = useSoundMode();
   const backgroundAgents = useBackgroundAgents();
   const calm = useCalmMode();
   const appTheme = useAppThemeChoice();
@@ -115,17 +116,16 @@ export function SettingsModal({
         />
       </Section>
       <Section title="Avisos">
-        <Switch
+        <ChoiceRow
           label="Sonidos"
-          description="Un sonido cuando un agente termina o te pide permiso"
-          checked={soundLocal}
-          onChange={() => {
-            const newVal = !isSoundEnabled();
-            setSoundEnabled(newVal);
-            setSoundLocal(newVal);
-            transport.send({ type: 'setSoundEnabled', enabled: newVal });
-          }}
+          description="Toc-toc cuando te necesitan; un plin suave cuando terminan sin nada para vos"
+          choices={SOUND_MODES}
+          value={soundMode}
+          onChange={(next) =>
+            chooseSoundMode(next, (enabled) => transport.send({ type: 'setSoundEnabled', enabled }))
+          }
         />
+        <TeTocaRuleSetting />
       </Section>
       <Section title="Agentes">
         <Switch

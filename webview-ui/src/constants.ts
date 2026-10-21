@@ -180,14 +180,15 @@ export interface SoundNote {
   at: number;
   ring: number;
 }
-/** An agent finished: a bright "plin", a quick rising C-major arpeggio rung
- *  like a little bell (C6 E6 G6). */
+/** An agent finished with nothing for you: a soft "plin", a quick rising
+ *  C-major arpeggio rung like a little bell (C6 E6 G6), at half the volume it
+ *  had when it also announced "te toca" (that is the toc-toc now). */
 export const DONE_NOTES: readonly SoundNote[] = [
   { hz: 1046.5, at: 0, ring: 0.45 },
   { hz: 1318.51, at: 0.07, ring: 0.45 },
   { hz: 1567.98, at: 0.14, ring: 0.6 },
 ];
-export const DONE_VOLUME = 0.1;
+export const DONE_VOLUME = 0.05;
 /** Something needs you: a lower, plainer "toc-toc" (A5 twice), unmistakably
  *  not the happy one. */
 export const PERMISSION_NOTES: readonly SoundNote[] = [

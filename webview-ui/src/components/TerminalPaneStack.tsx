@@ -26,8 +26,6 @@ interface TerminalPaneStackProps {
   /** Input into whichever pane is showing — how the mobile key bar types and
    *  pastes. Resolved at call time, so it follows tab switches. */
   inputRef?: Ref<TerminalInputHandle>;
-  /** Each pane's input handle as it comes and goes (the chat sends through it). */
-  onInputHandle?: (agentId: number, handle: TerminalInputHandle | null) => void;
 }
 
 /**
@@ -47,7 +45,6 @@ export function TerminalPaneStack({
   onRegisterSearch,
   placement,
   inputRef,
-  onInputHandle,
 }: TerminalPaneStackProps) {
   const inputs = useRef(new Map<number, TerminalInputHandle>());
   const shownRef = useRef(shownAgentId);
@@ -69,7 +66,6 @@ export function TerminalPaneStack({
   const registerInput = (agentId: number, handle: TerminalInputHandle | null) => {
     if (handle) inputs.current.set(agentId, handle);
     else inputs.current.delete(agentId);
-    onInputHandle?.(agentId, handle);
   };
 
   return agentIds.map((agentId) => {
@@ -93,7 +89,7 @@ export function TerminalPaneStack({
           autoFocus={autoFocus}
           onSearchRequest={onSearchRequest}
           onRegisterSearch={onRegisterSearch}
-          onRegisterInput={inputRef || onInputHandle ? registerInput : undefined}
+          onRegisterInput={inputRef ? registerInput : undefined}
         />
       </div>
     );

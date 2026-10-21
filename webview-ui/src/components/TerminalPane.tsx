@@ -53,10 +53,15 @@ interface TerminalPaneProps {
   onRegisterInput?: (agentId: number, handle: TerminalInputHandle | null) => void;
 }
 
+/** Said in the terminal when what you wrote while it reconnected never went. */
+const INPUT_DROPPED_NOTE =
+  '[No le llegó lo que escribiste mientras la terminal se reconectaba. Escribilo de nuevo.]';
+
 /** Ways to feed input into a pane's PTY from outside the terminal itself. */
 export interface TerminalInputHandle {
-  /** Write raw bytes (key sequences) straight to the PTY. */
-  send: (data: string) => void;
+  /** Write raw bytes (key sequences) straight to the PTY; while it reconnects
+   *  they wait (terminalClient.ts). `done` says whether they got there. */
+  send: (data: string, done?: (sent: boolean) => void) => void;
   /** Paste text through xterm, which wraps it in bracketed-paste markers when
    *  the running app has turned that mode on — Claude Code has, and without
    *  the markers a multiline paste would submit at its first newline. */
@@ -183,6 +188,9 @@ export function TerminalPane({
         term.write(`\r\n\x1b[90m[el proceso terminó con código ${String(exitCode)}]\x1b[0m\r\n`);
       },
       onStatusChange: (status) => statusRef.current?.(agentId, status),
+      onInputDropped: () => {
+        term.write(`\r\n\x1b[90m${INPUT_DROPPED_NOTE}\x1b[0m\r\n`);
+      },
     });
     void connection.connect();
 
@@ -196,8 +204,15 @@ export function TerminalPane({
       },
     });
     const input: TerminalInputHandle = {
-      send: (data) => connection.write(data),
-      paste: (data) => term.paste(data),
+      send: (data, done) => connection.write(data, done),
+      paste: (data) => {
+        try {
+          term.paste(data);
+        } catch {
+          // A pane never shown is not opened yet: xterm has already handed the
+          // paste to onData, then fails clearing a textarea it does not have.
+        }
+      },
     };
     registerInputRef.current?.(agentId, input);
     // Anything in the office can write to this agent (agentInput.ts).

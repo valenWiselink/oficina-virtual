@@ -17,6 +17,7 @@ import { NicknameDice } from '../launch/NicknameDice.js';
 import { transport } from '../transport/index.js';
 import { markWelcomeDone } from './onboardingStore.js';
 import { samePath } from './samePath.js';
+import { TeTocaRuleSetting } from './TeTocaRuleSetting.js';
 
 type Step = 'hola' | 'avisos' | 'carpeta' | 'agente';
 
@@ -157,6 +158,9 @@ function Hello({
         <Feature icon="chat" text="Les escribís y los ves trabajar sin cambiar de ventana." />
       </ul>
       <ClaudeCheck claude={claude} />
+      <div className="-mx-8">
+        <TeTocaRuleSetting />
+      </div>
       <div className="flex items-center gap-8 pt-2">
         <Button variant="ghost" size="md" onClick={onSkip}>
           Saltar
