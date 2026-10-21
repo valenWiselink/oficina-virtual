@@ -121,10 +121,15 @@ Ayuda).
   esfuerzo y supervisión de los que corren en la oficina (los reinicia en la misma
   conversación, así que tienen que estar quietos). Un modelo más grande es un
   Clawd distinto (cría, pinzas, leyenda), y el esfuerzo muy alto suda una gota.
-- **Sonidos** (Ajustes → Avisos): toc-toc cuando un agente te necesita (un
-  permiso, una pregunta, un «Te toca»); un plin suave cuando termina sin nada
-  para vos, como mucho uno cada 45 segundos. Elegís «Todo», «Sólo cuando te
-  necesitan» o «Nada».
+- **Sonidos** (Ajustes → Avisos): la puerta, dos golpes de madera graves,
+  cuando un agente está frenado esperándote (un permiso o una pregunta); dos
+  notitas suaves que suben con un «Te toca»; un plin suave cuando termina sin
+  nada para vos, como mucho uno cada 45 segundos. La oficina se calla lo que ya
+  ves: no suena el plin del agente que tenés abierto, y mientras escribís el
+  plin y el «Te toca» esperan a que pares y suena uno solo (la puerta no espera
+  nunca). El aviso de Windows sale mudo, porque ya suena la oficina. Elegís
+  «Todo», «Sólo cuando te necesitan» o «Nada»; el Modo calma calla además la
+  chispita del «Hecho» y del merge.
 - **Supervisores**: cualquier agente puede supervisar un espacio, agentes elegidos
   o a todos. Le llegan los permisos, las preguntas y los turnos terminados de su
   equipo; aprueba lo seguro, te pide lo demás con un «Te toca» y te cuenta qué hizo

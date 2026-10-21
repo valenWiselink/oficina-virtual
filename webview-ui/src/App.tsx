@@ -37,7 +37,7 @@ import type { TakenLook } from './launch/launchMemory.js';
 import { UsageLimitsMeter } from './limits/UsageLimitsMeter.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
-import { playCheerSound } from './notificationSound.js';
+import { playCheerSound, useAgentsInView } from './notificationSound.js';
 import { OfficeState } from './office/engine/officeState.js';
 import { useOnboarding } from './onboarding/useOnboarding.js';
 import { agentLabel } from './permissions/agentLabel.js';
@@ -237,18 +237,17 @@ function App() {
   const { requestEdit, editDialog } = useEditAgent(agentViews);
   useSupervisionSync(agentViews, workspaceState);
   useNeedsYouSignals(agentViews);
-  // A chat or terminal on screen is read ("Terminó" loses its dot): the
-  // drawer's panes on desktop, the terminal page on a phone.
-  useReadMarks(
-    agentViews,
-    isMobile
-      ? mobileShell.view === 'terminal'
-        ? [terminalDrawer.shownAgentId]
-        : []
-      : terminalDrawer.isOpen
-        ? [terminalDrawer.shownAgentId, terminalDrawer.pinnedId]
-        : [],
-  );
+  // A chat or terminal on screen is read ("Terminó" loses its dot) and its
+  // plin is not news: the drawer's panes on desktop, the terminal page on a phone.
+  const onScreen = isMobile
+    ? mobileShell.view === 'terminal'
+      ? [terminalDrawer.shownAgentId]
+      : []
+    : terminalDrawer.isOpen
+      ? [terminalDrawer.shownAgentId, terminalDrawer.pinnedId]
+      : [];
+  useReadMarks(agentViews, onScreen);
+  useAgentsInView(onScreen);
 
   const { reveal: revealTerminal } = terminalDrawer;
   const { showTerminal: showMobileTerminal } = mobileShell;

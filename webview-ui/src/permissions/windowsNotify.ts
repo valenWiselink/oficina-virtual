@@ -1,4 +1,5 @@
 import { isFocused, noteWhileFocused } from '../focus/focusMode.js';
+import { officeSoundsForYou } from '../notificationSound.js';
 
 /** The notices for a wait that is not a permission ("te espera"); the
  *  rest (permissions) are urgent. */
@@ -10,7 +11,9 @@ const WAIT_TAG_PREFIX = 'oficina-espera-';
  * when the tab is visible the card itself, the character and the sound
  * already say it, and a toast on top would be noise. In focus mode only
  * urgent ones go out (a permission blocks an agent); by default a notice is
- * urgent unless its tag is a wait's.
+ * urgent unless its tag is a wait's. It goes out silent whenever the office
+ * makes its own sound (a permission used to sound twice); with "Nada", or
+ * before the page may play audio, Windows' own sound is the only one.
  */
 export function notifyWindows(
   title: string,
@@ -25,7 +28,7 @@ export function notifyWindows(
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   if (document.visibilityState === 'visible' && document.hasFocus()) return;
   try {
-    const toast = new Notification(title, { body, tag });
+    const toast = new Notification(title, { body, tag, silent: officeSoundsForYou() });
     toast.onclick = () => {
       window.focus();
       toast.close();

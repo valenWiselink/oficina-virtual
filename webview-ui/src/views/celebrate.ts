@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 
-/** How long a card shows its celebration (hop and sparks). */
-export const CHEER_MS = 1600;
+import { TRAVEL_MS } from './cardTravel.js';
+
+/** How long a card shows its celebration (hop and sparks), counting the
+ *  moment it travels to "Terminó" before it starts. */
+export const CHEER_MS = TRAVEL_MS + 1600;
 
 /** "Hecho" pressed for an agent: the graph (if on screen) celebrates it, and
  *  so does its board card — which moves column right then and remounts, so

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { AgentKind, AgentView } from './agentViews.js';
+import { TRAVEL_MS } from './cardTravel.js';
 
 /** How a card arrives: a new agent pops in, one that starts needing you hops. */
 export type CardMotion = 'pop' | 'hop';
 
-/** Long enough for the CSS animation to finish before the class goes. */
-const MOTION_MS = 700;
+/** Long enough for the CSS animation to finish before the class goes (a hop
+ *  starts once the card has travelled to "Te necesita"). */
+const MOTION_MS = TRAVEL_MS + 700;
 
 /**
  * What moved since the last look: an agent never seen before pops in, one

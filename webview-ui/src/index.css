@@ -364,19 +364,21 @@
 
 /* Small joys (never in calm mode: the components leave the classes off).
    A new card pops in, a card arriving at "Te necesita" hops, a column count
-   bumps when it changes, a celebrated card hops with sparks in its colour. */
+   bumps when it changes, a celebrated card hops with sparks in its colour.
+   A card that travels to another column (views/cardTravel.ts) sets
+   --card-travel, so its hop, cheer and sparks start when it lands. */
 @layer components {
   .anim-pop-in {
     animation: pop-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
   }
   .anim-hop {
-    animation: hop 560ms ease-out both;
+    animation: hop 560ms ease-out var(--card-travel, 0ms) both;
   }
   .anim-bump {
     animation: bump 380ms ease-out;
   }
   .anim-cheer {
-    animation: cheer 800ms ease-out 2;
+    animation: cheer 800ms ease-out var(--card-travel, 0ms) 2;
   }
   .anim-float-up {
     animation: float-up 380ms ease-out both;
@@ -388,8 +390,10 @@
     border-radius: 2px;
     background: var(--spark-color);
     pointer-events: none;
-    animation: spark 900ms ease-out both;
-    animation-delay: var(--spark-delay, 0ms);
+    /* Hidden until its turn comes (forwards, not both), then out and gone. */
+    opacity: 0;
+    animation: spark 900ms ease-out forwards;
+    animation-delay: calc(var(--spark-delay, 0ms) + var(--card-travel, 0ms));
   }
 }
 

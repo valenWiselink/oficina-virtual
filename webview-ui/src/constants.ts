@@ -182,26 +182,73 @@ export interface SoundNote {
 }
 /** An agent finished with nothing for you: a soft "plin", a quick rising
  *  C-major arpeggio rung like a little bell (C6 E6 G6), at half the volume it
- *  had when it also announced "te toca" (that is the toc-toc now). */
+ *  had when it also announced "te toca" (that is its own sound now). */
 export const DONE_NOTES: readonly SoundNote[] = [
   { hz: 1046.5, at: 0, ring: 0.45 },
   { hz: 1318.51, at: 0.07, ring: 0.45 },
   { hz: 1567.98, at: 0.14, ring: 0.6 },
 ];
 export const DONE_VOLUME = 0.05;
-/** Something needs you: a lower, plainer "toc-toc" (A5 twice), unmistakably
- *  not the happy one. */
-export const PERMISSION_NOTES: readonly SoundNote[] = [
-  { hz: 880, at: 0, ring: 0.14 },
-  { hz: 880, at: 0.17, ring: 0.14 },
-];
-export const PERMISSION_VOLUME = 0.12;
-/** "Hecho" pressed: a short sparkle up (G6 B6 D7 G7), quieter than the rest. */
+/** One hit on wood: its pitch, when it lands, how long it rings. */
+export interface WoodHit {
+  hz: number;
+  at: number;
+  ring: number;
+  /** How hard, against the sound's volume (1 when left out). */
+  force?: number;
+}
+/** A sound made of the office's wood (effects/soundSynth.ts): each hit is a
+ *  sine body, one inharmonic overtone (a wooden bar's second mode) and a
+ *  short click of band-passed noise. */
+export interface WoodSound {
+  hits: readonly WoodHit[];
+  volume: number;
+  /** The body starts this many times higher and falls to its pitch in 25 ms:
+   *  the thud of a knuckle (1: no fall). */
+  thud: number;
+  /** The overtone's pitch, as a multiple of the body's. */
+  overtone: number;
+  overtoneLevel: number;
+  /** Centre of the click's band. */
+  clickHz: number;
+  clickLevel: number;
+}
+/** The same wood for every sound that calls you, so there is nothing new to learn. */
+const WOOD = { overtone: 2.76, clickHz: 1400 } as const;
+/** Something blocks an agent until you answer (a permission, a question):
+ *  a knock on the door, two low knuckle hits on wood (G3). */
+export const DOOR_SOUND: WoodSound = {
+  ...WOOD,
+  hits: [
+    { hz: 196, at: 0, ring: 0.2 },
+    { hz: 196, at: 0.17, ring: 0.2, force: 0.85 },
+  ],
+  volume: 0.32,
+  thud: 1.3,
+  // Strong enough that a laptop's small speakers, which lose the body, still knock.
+  overtoneLevel: 0.8,
+  clickLevel: 0.5,
+};
+/** A finished turn left you something ("te toca": merge, try): two soft
+ *  notes going up a fourth on the same wood (D5, G5), well below the door. */
+export const TETOCA_SOUND: WoodSound = {
+  ...WOOD,
+  hits: [
+    { hz: 587.33, at: 0, ring: 0.3 },
+    { hz: 783.99, at: 0.13, ring: 0.42 },
+  ],
+  volume: 0.055,
+  thud: 1,
+  overtoneLevel: 0.25,
+  clickLevel: 0.15,
+};
+/** "Hecho" pressed or a PR merged: a short sparkle up (G5 B5 D6 G6, an
+ *  octave below where it used to shrill), quieter than the rest. */
 export const CHEER_NOTES: readonly SoundNote[] = [
-  { hz: 1567.98, at: 0, ring: 0.25 },
-  { hz: 1975.53, at: 0.05, ring: 0.25 },
-  { hz: 2349.32, at: 0.1, ring: 0.25 },
-  { hz: 3135.96, at: 0.15, ring: 0.4 },
+  { hz: 783.99, at: 0, ring: 0.25 },
+  { hz: 987.77, at: 0.05, ring: 0.25 },
+  { hz: 1174.66, at: 0.1, ring: 0.25 },
+  { hz: 1567.98, at: 0.15, ring: 0.4 },
 ];
 export const CHEER_VOLUME = 0.06;
 
