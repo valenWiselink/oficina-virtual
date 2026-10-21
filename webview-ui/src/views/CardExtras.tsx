@@ -52,7 +52,7 @@ function useAgentSend(agentId: number) {
   const send = (text: string, onSent: () => void) => {
     if (state === 'sending') return;
     setState('sending');
-    void Promise.resolve(sendToAgent(agentId, text)).then((ok) => {
+    void sendToAgent(agentId, text).then((ok) => {
       setState(ok ? 'idle' : 'failed');
       if (ok) onSent();
     });

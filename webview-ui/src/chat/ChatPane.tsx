@@ -184,7 +184,8 @@ export function ChatPane({
         view={view}
         actions={actions}
         onSent={(text) => {
-          addPending(view.id, text, false);
+          // ChoiceReplies calls this only once the message went out.
+          settleDelivery(view.id, addPending(view.id, text), true);
           pinnedToEnd.current = true;
         }}
       />
