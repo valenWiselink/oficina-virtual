@@ -510,6 +510,16 @@ export function handleClientMessage(
       break;
     }
 
+    case 'setUsageLimits': {
+      // Installs or removes the office's status line in ~/.claude/settings.json.
+      const limits = runtime?.usageLimits;
+      if (typeof msg.enabled !== 'boolean' || !limits) break;
+      void limits.setEnabled(msg.enabled).then((error) => {
+        if (error) send({ ...limits.message(), error });
+      });
+      break;
+    }
+
     case 'setShowHostDirectories': {
       if (typeof msg.enabled !== 'boolean' || !adapter) break;
       adapter.setSetting(KEY_SHOW_HOST_DIRECTORIES, msg.enabled);
@@ -896,6 +906,9 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   // Which of the agents' PRs are merged: what is already known, not news.
   const prs = ctx.runtime?.prWatch?.all();
   if (ctx.privileged && prs) send({ type: 'prStatuses', items: prs });
+  // The plan's usage limits (and whether the status line that reads them is on).
+  const limits = ctx.runtime?.usageLimits;
+  if (ctx.privileged && limits) send({ ...limits.message() });
   // For the first-run welcome: can an agent start here at all?
   if (ctx.privileged) {
     void Promise.all([claudeStatus(), claudeTheme()]).then(([status, theme]) =>

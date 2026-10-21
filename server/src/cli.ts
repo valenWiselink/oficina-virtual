@@ -47,6 +47,8 @@ import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
 import { setStateGuessingAllowed } from './timerManager.js';
 import { setRecapCallback } from './transcriptParser.js';
+import { uninstallStatusLine } from './usageLimits/statusLineInstaller.js';
+import { UsageLimitsWatch } from './usageLimits/usageLimitsWatch.js';
 import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
 
 // ── Argument parsing ──────────────────────────────────────────
@@ -213,6 +215,7 @@ async function main(): Promise<void> {
   if (process.argv.includes('--uninstall-hooks')) {
     try {
       await uninstallClaudeHooks();
+      await uninstallStatusLine();
       process.exit(0);
     } catch (err) {
       console.error(`[Pixel Agents] ${err instanceof Error ? err.message : String(err)}`);
@@ -279,6 +282,12 @@ async function main(): Promise<void> {
     setRecapCallback((id, text, at) => dayLog.recap(id, text, at));
     for (const root of claudeProvider.getAllSessionRoots?.() ?? []) dayLog.readRecapsFrom(root);
     runtime.prWatch = watchAgentPrs(store, runtime.dayLog);
+    // The plan's usage limits, read from the office's status line (opt-in).
+    runtime.usageLimits = new UsageLimitsWatch({
+      broadcast: (message) => store.broadcast({ ...message }),
+      packageRoot,
+    });
+    runtime.usageLimits.start();
 
     // Supervisor agents: who supervises whom, and what reaches them (their
     // agents' permissions, questions and finished turns).

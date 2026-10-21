@@ -30,7 +30,7 @@ interface ClaudeHookEntry {
 }
 
 /** Partial shape of ~/.claude/settings.json (only the hooks field is relevant). */
-interface ClaudeSettings {
+export interface ClaudeSettings {
   hooks?: Record<string, ClaudeHookEntry[]>;
   [key: string]: unknown;
 }
@@ -104,7 +104,7 @@ function parseClaudeSettings(raw: string | null): ClaudeSettings {
 }
 
 /** Read and parse ~/.claude/settings.json (see parseClaudeSettings for the throw contract). */
-function readClaudeSettings(): ClaudeSettings {
+export function readClaudeSettings(): ClaudeSettings {
   return parseClaudeSettings(readRawClaudeSettings());
 }
 
@@ -129,7 +129,7 @@ function sleep(ms: number): Promise<void> {
  * first attempt: retrying a permission error just delays the same failure, and
  * the caller must hear about it rather than get a false "installed".
  */
-async function mutateClaudeSettings(
+export async function mutateClaudeSettings(
   mutate: (settings: ClaudeSettings) => boolean,
 ): Promise<boolean> {
   let lastError: Error | null = null;

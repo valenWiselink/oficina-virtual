@@ -52,6 +52,7 @@ import {
   setTeamSwitchCallback,
 } from './transcriptParser.js';
 import type { AgentState } from './types.js';
+import type { UsageLimitsWatch } from './usageLimits/usageLimitsWatch.js';
 import { WorkflowWatch } from './workflowWatch.js';
 
 const DEDUPE_EVERY_MS = 3000;
@@ -100,6 +101,8 @@ export class AgentRuntime {
   dayLog?: DayLog;
   /** Which of the agents' PRs got merged (standalone, via gh). */
   prWatch?: PrWatch;
+  /** The plan's usage limits, from the office's status line (standalone). */
+  usageLimits?: UsageLimitsWatch;
   /** Shut the standalone office down in order (set by the CLI). */
   requestShutdown?: () => void;
   private hookEventHandler: HookEventHandler;
