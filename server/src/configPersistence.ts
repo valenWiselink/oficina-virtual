@@ -20,6 +20,8 @@ export interface AdapterSettings {
   showHostDirectories: boolean;
   /** Agents as Claude Code background sessions (they outlive the office). */
   backgroundAgents: boolean;
+  /** Claude Code spinner verbs and tips in Spanish (spinnerSettings.ts). */
+  spanishTerminal: boolean;
 }
 
 /** All keys in AdapterSettings. Used by adapters to map `pixel-agents.foo` → `foo`.
@@ -38,6 +40,7 @@ export const ADAPTER_SETTING_KEYS = [
   'bypassPermissions',
   'showHostDirectories',
   'backgroundAgents',
+  'spanishTerminal',
 ] as const;
 
 export type AdapterSettingKey = (typeof ADAPTER_SETTING_KEYS)[number];
@@ -89,6 +92,7 @@ const DEFAULT_ADAPTER_SETTINGS: AdapterSettings = {
   bypassPermissions: false,
   showHostDirectories: false,
   backgroundAgents: true,
+  spanishTerminal: true,
 };
 
 function getConfigFilePath(): string {
@@ -206,6 +210,10 @@ function parseAdapterSettings(raw: unknown): AdapterSettings {
       typeof obj.backgroundAgents === 'boolean'
         ? obj.backgroundAgents
         : DEFAULT_ADAPTER_SETTINGS.backgroundAgents,
+    spanishTerminal:
+      typeof obj.spanishTerminal === 'boolean'
+        ? obj.spanishTerminal
+        : DEFAULT_ADAPTER_SETTINGS.spanishTerminal,
   };
 }
 

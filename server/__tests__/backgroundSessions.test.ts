@@ -8,6 +8,7 @@ import { setAgentRun } from '../src/agentEdits.js';
 import { AgentRuntime } from '../src/agentRuntime.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
+import { spinnerSettingsPath } from '../src/spinnerSettings.js';
 import {
   backgroundArgs,
   backgroundName,
@@ -167,6 +168,7 @@ describe('launchAgent with background sessions', () => {
     expect(start[2]).toMatch(/^oficina-pagos-[0-9a-f]{4}$/);
     expect(start).toContain('opus');
     expect(start).not.toContain('--session-id');
+    expect(start).toContain('--settings');
     expect(spawned[0].args.slice(-2)).toEqual(['attach', '4d1e47e7']);
     const agent = store.get(1)!;
     expect(agent.sessionId).toBe(SID);
@@ -205,6 +207,12 @@ describe('launchAgent with background sessions', () => {
     const start = calls.find((c) => c.includes('--bg'))!;
     expect(start.slice(0, 3)).toEqual(['--resume', SID, '--bg']);
     expect(start).toContain('sonnet');
+    // Claude Code carries --settings into the background session and keeps it
+    // across the supervisor's restarts (docs: agent-view, "What carries over").
+    expect(start.slice(start.indexOf('--settings'), start.indexOf('--settings') + 2)).toEqual([
+      '--settings',
+      spinnerSettingsPath(),
+    ]);
     expect(store.get(1)!.bgId).toBe('4d1e47e7');
   });
 
