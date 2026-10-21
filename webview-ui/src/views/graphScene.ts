@@ -96,6 +96,9 @@ export interface SceneMarks {
   /** While you hover an agent, what stays crisp (graphHover.ts focusOf);
    *  everything else fades. null: everything crisp. */
   focus?: ReadonlySet<string> | null;
+  /** How visible the rest stays (hovering: 40 %; a filter or a meeting in
+   *  focus: less). */
+  focusAlpha?: number;
   /** While you drag an agent over another: the one that would get its answer,
    *  and the dragged one (drawn see-through, so the target shows). */
   dropTarget?: number | null;
@@ -275,7 +278,7 @@ export function drawScene(
     f,
     nodes,
     passive: { boxes: [], circles: [], segments: [] },
-    fade: fader(ctx, marks.focus),
+    fade: fader(ctx, marks.focus, marks.focusAlpha),
   };
   background(ctx, th, f);
   worldTransform(ctx, f);
