@@ -185,13 +185,14 @@ describe('launchStandaloneAgent', () => {
     expect(harness.spawnArgs[0].args).not.toContain('--append-system-prompt-file');
   });
 
-  it('leaves --settings out while the Spanish terminal is off, and empties its file', () => {
+  // The file itself (emptied, never deleted) is spinnerSettings.test.ts's:
+  // here it sits in the shared home that parallel test files also launch in.
+  it('leaves --settings out while the Spanish terminal is off', () => {
     setSpanishTerminal(false);
     try {
       const harness = workingPtyManager();
       launch(harness, { directoryPath: tempDir });
       expect(harness.spawnArgs[0].args).not.toContain('--settings');
-      expect(JSON.parse(fs.readFileSync(spinnerSettingsPath(), 'utf-8'))).toEqual({});
     } finally {
       setSpanishTerminal(true);
     }
