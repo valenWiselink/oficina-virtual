@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentView } from '../src/views/agentViews.js';
-import { ClawdLife, isAsleep, SLEEP_AFTER_MS } from '../src/views/clawdLife.js';
+import { ClawdLife, GLANCE_MS, isAsleep, SLEEP_AFTER_MS } from '../src/views/clawdLife.js';
+import { nodMotion } from '../src/views/clawdTricks.js';
+import { dayKey, takeDailyWave } from '../src/views/officeLife.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
   id,
@@ -87,13 +89,24 @@ describe('isAsleep', () => {
 });
 
 describe('ClawdLife: hello, arrivals, tricks, coffee', () => {
-  it('everyone waves when the page opens, one after another', () => {
+  it('everyone waves when the graph opens for the day, one after another', () => {
     const life = new ClawdLife();
     life.observe([view(1), view(2)], 1000);
+    expect(life.waving(0, 1000)).toBe(false);
+    life.showGraph(1000, true);
     expect(life.waving(0, 1000)).toBe(true);
     expect(life.waving(1, 1000)).toBe(false);
     expect(life.waving(1, 1300)).toBe(true);
     expect(life.waving(0, 5000)).toBe(false);
+  });
+
+  it('coming back to the graph: no wave, just a blink all together', () => {
+    const life = new ClawdLife();
+    life.observe([view(1), view(2)], 0);
+    life.showGraph(1000, false);
+    expect(life.waving(0, 1000)).toBe(false);
+    expect(life.glancing(1010)).toBe(true);
+    expect(life.glancing(1000 + GLANCE_MS)).toBe(false);
   });
 
   it('only an agent that shows up later arrives', () => {
@@ -135,5 +148,67 @@ describe('ClawdLife: hello, arrivals, tricks, coffee', () => {
     life.celebrate(1);
     life.observe([view(1)], 0);
     expect(life.hop(1, 230)).toBeGreaterThan(5);
+  });
+});
+
+describe('the big wave, once a day', () => {
+  const store = () => {
+    const data = new Map<string, string>();
+    return {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+    };
+  };
+
+  it('the first time each day, never again that day', () => {
+    const s = store();
+    expect(takeDailyWave('2026-10-21', s)).toBe(true);
+    expect(takeDailyWave('2026-10-21', s)).toBe(false);
+    expect(takeDailyWave('2026-10-22', s)).toBe(true);
+  });
+
+  it('with storage blocked it waves, as it always did', () => {
+    expect(takeDailyWave('2026-10-21', null)).toBe(true);
+    const broken = {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {},
+    };
+    expect(takeDailyWave('2026-10-21', broken)).toBe(true);
+  });
+
+  it('the day by the local clock', () => {
+    expect(dayKey(new Date(2026, 9, 1, 23, 59))).toBe('2026-10-01');
+  });
+});
+
+describe('the nod: your message got to it', () => {
+  it('nods when it goes from waiting on you, finished or idle to work', () => {
+    for (const from of ['needs', 'done', 'idle'] as const) {
+      const life = new ClawdLife();
+      life.observe([view(1, { kind: from })], 0);
+      life.observe([view(1, { kind: 'work' })], 1000);
+      expect(life.nod(1, 1100)).not.toBeNull();
+    }
+  });
+
+  it('not at first sight, not between busy states, not for a supervised one', () => {
+    const life = new ClawdLife();
+    life.observe([view(1, { kind: 'work' })], 0);
+    expect(life.nod(1, 10)).toBeNull();
+    life.observe([view(1, { kind: 'think' })], 100);
+    expect(life.nod(1, 110)).toBeNull();
+    const other = new ClawdLife();
+    other.observe([view(2, { kind: 'done' })], 0);
+    other.observe([view(2, { kind: 'work', askingSupervisor: { id: 9, name: 'Jefa' } })], 100);
+    expect(other.nod(2, 110)).toBeNull();
+  });
+
+  it('two small dips of the head, then still', () => {
+    expect(nodMotion(0).lift).toBeCloseTo(0);
+    expect(nodMotion(0.25).lift).toBeLessThan(0);
+    expect(nodMotion(0.25).blink).toBe(true);
+    expect(nodMotion(0.5).lift).toBeCloseTo(0);
   });
 });

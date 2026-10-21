@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { Pt } from '../src/views/graphCamera.js';
 import type { GraphTarget } from '../src/views/graphHit.js';
-import { DOUBLE_CLICK_MS, type Grab, PointerTracker } from '../src/views/graphPointers.js';
+import {
+  DOUBLE_CLICK_MS,
+  type Grab,
+  LONG_PRESS_MS,
+  PointerTracker,
+} from '../src/views/graphPointers.js';
 
 /** A host that records what the tracker asked for; `at` says what is under
  *  each point (by its x: 100 = a lead, 200 = its member, 300 = the minimap). */
@@ -27,8 +32,13 @@ function host() {
       minimapTo: (p: Pt) => log.push(`minimap ${p.x},${p.y}`),
       hold: (g: Grab, p: Pt) => log.push(`hold ${grab(g)} at ${p.x},${p.y}`),
       release: (g: Grab, keep: boolean) => log.push(`release ${grab(g)} ${keep ? 'keep' : 'drop'}`),
-      click: (t: GraphTarget | null, _p: Pt, repeat: boolean) =>
-        log.push(`click ${t ? t.type : 'background'}${repeat ? ' again' : ''}`),
+      longPress: (t: GraphTarget | null) => log.push(`long ${t ? t.type : 'background'}`),
+      box: (from: Pt, to: Pt, done: boolean) =>
+        log.push(`box ${from.x},${from.y}->${to.x},${to.y}${done ? ' done' : ''}`),
+      click: (t: GraphTarget | null, _p: Pt, repeat: boolean, mods?: { ctrl: boolean }) =>
+        log.push(
+          `click ${t ? t.type : 'background'}${repeat ? ' again' : ''}${mods?.ctrl ? ' ctrl' : ''}`,
+        ),
     },
   };
 }
@@ -122,5 +132,49 @@ describe('PointerTracker', () => {
     t.down(1, { x: 100, y: 0 });
     t.cancel(1);
     expect(log).toEqual([]);
+  });
+
+  it('a finger held still is a long press, and no click follows', () => {
+    const { log, host: h } = host();
+    const t = new PointerTracker(h);
+    t.down(1, { x: 100, y: 0 }, 1000, true);
+    t.tick(1000 + LONG_PRESS_MS - 1);
+    t.move(1, { x: 101, y: 1 });
+    t.tick(1000 + LONG_PRESS_MS);
+    t.up(1, { x: 101, y: 1 }, 1000 + LONG_PRESS_MS + 50);
+    expect(log).toEqual(['long agent']);
+  });
+
+  it('a mouse never long-presses, and a moving finger neither', () => {
+    const { log, host: h } = host();
+    const t = new PointerTracker(h);
+    t.down(1, { x: 100, y: 0 }, 0, false);
+    t.tick(5000);
+    t.up(1, { x: 100, y: 0 }, 5000);
+    t.down(2, { x: 0, y: 0 }, 6000, true);
+    t.move(2, { x: 30, y: 0 });
+    t.tick(6000 + LONG_PRESS_MS * 2);
+    t.up(2, { x: 30, y: 0 }, 9000);
+    expect(log).toEqual(['click agent', 'pan 30,0']);
+  });
+
+  it('Shift + drag on the background draws a box instead of panning', () => {
+    const { log, host: h } = host();
+    const t = new PointerTracker(h);
+    t.down(1, { x: 0, y: 0 }, 0, false, { shift: true, ctrl: false });
+    t.move(1, { x: 50, y: 40 });
+    t.up(1, { x: 50, y: 40 }, 10);
+    expect(log).toEqual(['box 0,0->50,40', 'box 0,0->50,40 done']);
+  });
+
+  it('Shift + drag on an agent still moves it; Ctrl comes with the click', () => {
+    const { log, host: h } = host();
+    const t = new PointerTracker(h);
+    t.down(1, { x: 100, y: 0 }, 0, false, { shift: true, ctrl: false });
+    t.move(1, { x: 100, y: 30 });
+    t.up(1, { x: 100, y: 30 }, 10);
+    t.down(2, { x: 100, y: 0 }, 1000, false, { shift: false, ctrl: true });
+    t.up(2, { x: 100, y: 0 }, 1010);
+    expect(log).toEqual(['hold agent 1 at 100,30', 'release agent 1 keep', 'click agent ctrl']);
   });
 });

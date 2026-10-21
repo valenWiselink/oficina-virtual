@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClaudeStatus, HooksConsentRequest } from '../../../core/src/messages.js';
 import { isSupervised } from '../identity/identityStore.js';
 import { applySavedSound, officeSounds, playPermissionSound } from '../notificationSound.js';
+import { addFileLink } from '../office/behaviors/fileLinksStore.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
 import { reconcileExistingAgents } from '../office/engine/existingAgents.js';
 import type { OfficeState } from '../office/engine/officeState.js';
@@ -660,6 +661,11 @@ export function useExtensionMessages(
             },
           };
         });
+      } else if (msg.type === 'subagentFileLink') {
+        // A member read a file its sibling wrote: the graph draws the pass.
+        const from = os.getSubagentId(msg.id, msg.fromParentToolId as string);
+        const to = os.getSubagentId(msg.id, msg.toParentToolId as string);
+        if (from !== null && to !== null) addFileLink(from, to, msg.fileName as string);
       } else if (msg.type === 'subagentClear') {
         const id = msg.id as number;
         const parentToolId = msg.parentToolId as string;

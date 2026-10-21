@@ -6,12 +6,15 @@ import { useDayTint } from '../effects/dayTint.js';
 import { useWorkspaces } from '../workspaces/workspaceStore.js';
 import type { AgentView } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
-import { onCelebration } from './celebrate.js';
-import { ClawdLife } from './clawdLife.js';
+import type { ClawdLife } from './clawdLife.js';
+import { filterFocus, type GraphFilter } from './graphFilter.js';
 import { onRevealOnGraph } from './graphReveal.js';
+import { dayKey, officeLife, takeDailyWave } from './officeLife.js';
 import { type GraphControls, useGraphCanvas } from './useGraphCanvas.js';
 import { useGraphHover } from './useGraphHover.js';
 import { useGraphKeys } from './useGraphKeys.js';
+import { useGraphMenu } from './useGraphMenu.js';
+import { useGraphPicks } from './useGraphPicks.js';
 import { useGraphPill } from './useGraphPill.js';
 import { useGraphSelection } from './useGraphSelection.js';
 
@@ -25,59 +28,64 @@ export function useGraphView(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   rootRef: RefObject<HTMLDivElement | null>,
 ) {
-  const lifeRef = useRef(new ClawdLife());
+  const lifeRef = useRef(officeLife);
   const sel = useGraphSelection(views, actions, lifeRef.current);
   const hover = useGraphHover(views);
   const pill = useGraphPill(views);
   const [followId, setFollowId] = useState<number | null>(null);
   const [slow, setSlow] = useState(false);
+  const [filter, setFilter] = useState<GraphFilter>('all');
+  const [meetingId, setMeetingId] = useState<number | null>(null);
+  const picks = useGraphPicks(() => sel.marked?.id ?? null);
+  const look = { calm: useCalmMode(), tint: useDayTint(), theme: useAppTheme() };
   const controls = useGraphCanvas(canvasRef, {
+    ...look,
     views,
     selected: sel.marked,
-    calm: useCalmMode(),
-    tint: useDayTint(),
-    theme: useAppTheme(),
     life: lifeRef.current,
     cameraKey: useWorkspaces().current,
-    onSelect: (picked, repeat) => {
+    onSelect: (target, repeat) => {
       pill.close();
-      sel.clicked(picked, repeat);
+      picks.clear();
+      sel.clicked(target, repeat);
     },
+    picked: picks.set,
+    onPick: picks.onPick,
     onPill: pill.onPill,
-    onFollow: setFollowId,
-    onSlow: () => setSlow(true),
+    dim: filterFocus(views, filter),
+    onMenu: (target, at) => menu.open(target, at),
+    onDrop: (fromId, toId) => actions.onHandOffTo?.(fromId, toId),
+    ...{ onFollow: setFollowId, onMeeting: setMeetingId, onSlow: () => setSlow(true) },
     onHover: hover.setHover,
-    onFrame: () => {
-      hover.place(controls, rootRef.current);
-      pill.place(controls, rootRef.current);
-    },
+    onFrame: () => [hover, pill].forEach((o) => o.place(controls, rootRef.current)),
   });
-  const release = releaser(followId, controls, pill, sel);
+  const { pick, select, selected, selection } = sel;
+  const menu = useGraphMenu({ views, actions, controls, following: followId, pick, select });
+  const release = releaser(followId, controls, { pill, sel, picks });
   useGraphEvents({ rootRef, controls, release, opened: sel.opened, life: lifeRef.current });
-  const { selected, selection, select } = sel;
-  const keys = useGraphKeys({
-    views,
-    actions,
-    controls,
-    release,
-    following: followId,
-    selected,
-    selection,
-    select,
-  });
-  return { sel, hover, pill, followId, slow, controls, keys };
+  const keyInputs = { views, actions, controls, release, selected, selection, select };
+  const keys = useGraphKeys({ ...keyInputs, following: followId });
+  const state = { filter, setFilter, meetingId, followId, slow };
+  return { views, sel, hover, pill, picks, controls, keys, menu, ...state };
 }
 
-/** Esc, from the graph: stop following, then shrink the pill, then let go
- *  of the selection. */
+/** Esc, from the graph, one thing at a time: a drag in progress (nothing
+ *  dropped), a focused meeting, the agents picked together, following, the
+ *  grown pill, and last the selection. */
 function releaser(
   followId: number | null,
   controls: GraphControls,
-  pill: { isOpen: () => boolean; close: () => void },
-  sel: { clear: () => void },
+  open: {
+    pill: { isOpen: () => boolean; close: () => void };
+    sel: { clear: () => void };
+    picks: { any: boolean; clear: () => void };
+  },
 ): () => void {
+  const { pill, sel, picks } = open;
   return () => {
-    if (followId !== null) controls.follow(null);
+    if (controls.cancelDrag() || controls.unfocusMeeting()) return;
+    if (picks.any) picks.clear();
+    else if (followId !== null) controls.follow(null);
     else if (pill.isOpen()) pill.close();
     else sel.clear();
   };
@@ -94,7 +102,8 @@ function useGraphEvents(input: {
 }) {
   const latest = useRef(input);
   latest.current = input;
-  useEffect(() => onCelebration((id) => latest.current.life.celebrate(id)), []);
+  // On screen: the big wave once a day, else a blink all together.
+  useEffect(() => latest.current.life.showGraph(Date.now(), takeDailyWave(dayKey(new Date()))), []);
   // Alt+N, Alt+1…9, Ctrl+K or a terminal tab: select it and bring it into view.
   useEffect(
     () =>

@@ -10,7 +10,12 @@ import {
   GraphToolbar,
   SlowNotice,
 } from './GraphChrome.js';
+import { GraphContextMenu } from './GraphContextMenu.js';
+import { GraphFilterBar } from './GraphFilterBar.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
+import { GraphMeetingBanner } from './GraphMeetingBanner.js';
+import { GraphMemberPanel } from './GraphMemberPanel.js';
+import { GraphPickPanel } from './GraphPickPanel.js';
 import { GraphPillActions } from './GraphPillActions.js';
 import { useGraphView } from './useGraphView.js';
 
@@ -54,6 +59,14 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
         onFocus={g.keys.onFocus}
       />
       <GraphOverlays g={g} views={views} actions={actions} />
+      {g.menu.menu && (
+        <GraphContextMenu
+          menu={g.menu.menu}
+          bounds={{ w: rootRef.current?.clientWidth ?? 0, h: rootRef.current?.clientHeight ?? 0 }}
+          onPick={g.menu.run}
+          onClose={g.menu.close}
+        />
+      )}
     </div>
   );
 }
@@ -70,11 +83,16 @@ function GraphOverlays({
 }) {
   const { sel, pill, controls, keys } = g;
   const followed = views.find((v) => v.id === g.followId);
+  const meeting = views.find((v) => v.id === g.meetingId);
   return (
     <>
       {followed && <FollowBanner view={followed} onStop={() => controls.follow(null)} />}
+      {meeting && <GraphMeetingBanner lead={meeting} onBack={() => controls.unfocusMeeting()} />}
       <GraphToolbar controls={controls} />
-      {g.hover.facts && <GraphHoverCard facts={g.hover.facts} cardRef={g.hover.cardRef} />}
+      <GraphFilterBar views={views} filter={g.filter} onChange={g.setFilter} />
+      {g.hover.facts && !g.menu.menu && (
+        <GraphHoverCard facts={g.hover.facts} cardRef={g.hover.cardRef} />
+      )}
       {pill.view && (
         <GraphPillActions
           view={pill.view}
@@ -90,16 +108,44 @@ function GraphOverlays({
       {g.slow && <SlowNotice />}
       {keys.hint && <GraphHint text={keys.hint} />}
       {keys.help && <GraphKeysHelp onClose={keys.closeHelp} />}
-      {sel.selected && (
-        <GraphPanel
-          view={sel.selected}
-          member={sel.selection?.member}
-          actions={actions}
-          following={g.followId === sel.selected.id}
-          onFollow={(on) => controls.follow(on ? sel.selected!.id : null)}
-          onClose={sel.clear}
-        />
-      )}
+      <PickedPanel g={g} actions={actions} />
     </>
+  );
+}
+
+/** The picked agent's panel, a member's own (clicked in its meeting), or
+ *  the several picked together. */
+function PickedPanel({ g, actions }: { g: GraphState; actions: BoardActions }) {
+  const { sel, controls, picks } = g;
+  if (picks.any) {
+    const views = g.views.filter((v) => picks.set.has(v.id));
+    if (views.length > 0)
+      return <GraphPickPanel views={views} actions={actions} onClear={picks.clear} />;
+  }
+  const lead = sel.selected;
+  if (!lead) return null;
+  const memberId = sel.selection?.member;
+  const member = lead.subagents.find((s) => s.id === memberId);
+  if (member) {
+    return (
+      <GraphMemberPanel
+        lead={lead}
+        member={member}
+        onLead={() => {
+          sel.pick({ id: lead.id });
+          controls.focusOn(lead.id);
+        }}
+        onClose={sel.clear}
+      />
+    );
+  }
+  return (
+    <GraphPanel
+      view={lead}
+      actions={actions}
+      following={g.followId === lead.id}
+      onFollow={(on) => controls.follow(on ? lead.id : null)}
+      onClose={sel.clear}
+    />
   );
 }

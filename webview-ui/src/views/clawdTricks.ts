@@ -61,6 +61,14 @@ export function burstHop(p: number): number {
   return Math.abs(Math.sin(p * Math.PI * 3)) * 10 * (1 - p);
 }
 
+/** The nod when your message got to it and it set to work: two small dips
+ *  of the head (world px down) with a blink at the bottom of each. */
+export const NOD_MS = 420;
+export function nodMotion(p: number): { lift: number; blink: boolean } {
+  const dip = Math.abs(Math.sin(p * Math.PI * 2));
+  return { lift: -dip * 2, blink: dip > 0.85 };
+}
+
 /** A new agent arriving: grows from small with an overshoot, and a hop. */
 export function arrivalMotion(p: number): { scaleK: number; lift: number } {
   const c = 1.7;

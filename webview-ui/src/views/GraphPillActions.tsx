@@ -116,7 +116,7 @@ export function GraphPillActions({
       ref={boxRef}
       role="group"
       aria-label={`Lo que pide ${view.name}`}
-      className="absolute left-0 top-0 z-30 w-[300px] rounded-lg border border-status-permission bg-status-permission-bg px-8 py-6 flex flex-col gap-6 shadow-soft"
+      className="absolute left-0 top-0 z-[70] w-[300px] rounded-lg border border-status-permission bg-status-permission-bg px-8 py-6 flex flex-col gap-6 shadow-soft"
       style={{ visibility: 'hidden' }}
     >
       <span

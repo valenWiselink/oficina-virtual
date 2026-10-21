@@ -1,14 +1,14 @@
 import { isSupervisor } from '../agents/supervisionRules.js';
-import { CLAWD_BOSS_COLORS, FILE_LINK_COLOR } from '../constants.js';
 import { outfitOf } from '../identity/clawdOutfit.js';
 import { clip } from '../identity/identityStore.js';
 import { liveFileLinks } from '../office/behaviors/fileLinksStore.js';
 import type { AgentView } from './agentViews.js';
 import { clawdColor } from './clawdColor.js';
+import { GAZE_NEAR_PX, type GazeContext, gazeTarget, lookToward } from './clawdGaze.js';
 import { impatience } from './clawdImpatience.js';
 import { type ClawdLife, isAsleep } from './clawdLife.js';
 import { effortLevel, effortMarks, modelLook } from './clawdLook.js';
-import { activityProp, arrivalMotion, trickMotion } from './clawdTricks.js';
+import { activityProp, arrivalMotion, nodMotion, trickMotion } from './clawdTricks.js';
 import {
   type Bounds,
   type Camera,
@@ -25,7 +25,6 @@ import {
   drawChip,
   drawClawd,
   drawEffortFlame,
-  drawFilePass,
   drawLabelAt,
   drawLibrary,
   drawNodeDisc,
@@ -39,6 +38,7 @@ import {
   type Pose,
   poseFor,
   rgba,
+  setFont,
 } from './graphDraw.js';
 import {
   drawCheckPop,
@@ -51,8 +51,7 @@ import {
   sparkColors,
 } from './graphExtras.js';
 import { floatOffset } from './graphFloat.js';
-import type { Box, Hit, HitScene, Passive } from './graphHit.js';
-import { DIM_ALPHA } from './graphHover.js';
+import type { Box, Hit, HitScene } from './graphHit.js';
 import { placeLabel, type Side } from './graphLabels.js';
 import {
   keepsMeetingEdge,
@@ -62,12 +61,14 @@ import {
   librarySpot,
   libraryVisitors,
 } from './graphLibrary.js';
+import { drawLinks, fader, type Pen } from './graphLinks.js';
+import { meetingAngle, type MeetingCircle, meetingCircles, meetingRadius } from './graphMeeting.js';
 import { pinOf } from './graphPins.js';
 import type { SimEdge, SimNode } from './graphSim.js';
 
-/** The world the nodes live in (the camera shows part or all of it). */
-export const WORLD: ViewSize = { w: 1400, h: 880 };
-export const VOS = { x: 80, y: 56 };
+export { meetingAngle, meetingRadius } from './graphMeeting.js';
+export { VOS, WORLD } from './graphWorld.js';
+import { VOS, WORLD } from './graphWorld.js';
 const SUB_R = 22;
 const NAME_CHARS = 20;
 const STATUS_CHARS = 26;
@@ -83,6 +84,8 @@ export interface SceneFrame {
   /** Close-up cards under each agent (zoomed in). */
   detail: boolean;
   stage: string;
+  /** The pointer in world coords while it moved lately (the Clawds look). */
+  pointer?: Pt | null;
 }
 
 /** What the frame marks: the selected agent, or one member of its meeting. */
@@ -93,12 +96,21 @@ export interface SceneMarks {
   /** While you hover an agent, what stays crisp (graphHover.ts focusOf);
    *  everything else fades. null: everything crisp. */
   focus?: ReadonlySet<string> | null;
+  /** While you drag an agent over another: the one that would get its answer,
+   *  and the dragged one (drawn see-through, so the target shows). */
+  dropTarget?: number | null;
+  dragged?: number | null;
+  /** Agents picked together: a dashed ring each. */
+  picked?: ReadonlySet<number>;
 }
 
 /** What is clickable (graphHit.ts reads it) and what was drawn. */
 export interface SceneOut extends HitScene {
   /** Everything drawn, in world coords (for "Encuadrar todo" and the minimap). */
   content: Bounds;
+  /** Each meeting's circle around its lead (a double click in its hole
+   *  focuses it), world coords. */
+  meetings: MeetingCircle[];
 }
 
 /** Where each node wants to be: a stable ring, pulled by what it is doing. */
@@ -158,22 +170,6 @@ export function layout(nodes: Map<string, SimNode>, list: AgentView[]) {
     });
   });
   for (const id of [...nodes.keys()]) if (!live.has(id)) nodes.delete(id);
-}
-
-/** The free wedge on the lead's right (its label goes there), in radians. */
-const LABEL_WEDGE = (80 * Math.PI) / 180;
-/** Arc each subagent needs so their name chips do not touch. */
-const SUB_ARC_PX = 125;
-
-/** How far a meeting's subagents sit from their lead. */
-export function meetingRadius(count: number): number {
-  return Math.max(150, (count * SUB_ARC_PX) / (Math.PI * 2 - LABEL_WEDGE));
-}
-
-/** Where the j-th of n subagents sits around its lead (0 rad = right). */
-export function meetingAngle(j: number, n: number): number {
-  const span = Math.PI * 2 - LABEL_WEDGE;
-  return LABEL_WEDGE / 2 + (span * (j + 0.5)) / n;
 }
 
 export function edgesOf(list: AgentView[]): SimEdge[] {
@@ -253,135 +249,6 @@ function worldTransform(ctx: CanvasRenderingContext2D, f: SceneFrame) {
   ctx.setTransform(z, 0, 0, z, -f.cam.x * z, -f.cam.y * z);
 }
 
-/** What every part of one frame draws with, and where it reports what a
- *  click must not take for the background. */
-interface Pen {
-  ctx: CanvasRenderingContext2D;
-  th: GraphTheme;
-  f: SceneFrame;
-  nodes: Map<string, SimNode>;
-  passive: Passive;
-  fade: Fade;
-}
-
-type Fade = <T>(keys: readonly string[], draw: () => T) => T;
-
-/** Draws a part at full strength when all its nodes (`a3`, `s-7`, 'vos',
- *  'library') are in focus or nothing is hovered; faded otherwise. */
-function fader(ctx: CanvasRenderingContext2D, focus: ReadonlySet<string> | null | undefined): Fade {
-  return (keys, draw) => {
-    if (!focus || keys.every((k) => focus.has(k))) return draw();
-    ctx.save();
-    ctx.globalAlpha *= DIM_ALPHA;
-    try {
-      return draw();
-    } finally {
-      ctx.restore();
-    }
-  };
-}
-
-interface LineStyle {
-  color: string;
-  width?: number;
-  alpha?: number;
-  dash?: number[];
-  /** Soft dots (to the library, or to a member that went there), not the
-   *  supervisor's dashes. */
-  dotted?: boolean;
-}
-
-/** One straight link between two nodes (or a node and the library), named
- *  by `keys` (it stays crisp when both are in focus). */
-function strokeLink(pen: Pen, a: Pt, b: Pt, style: LineStyle, keys: [string, string]) {
-  pen.fade(keys, () => strokePath(pen.ctx, a, b, style));
-  pen.passive.segments.push([
-    { x: a.x, y: a.y },
-    { x: b.x, y: b.y },
-  ]);
-}
-
-function strokePath(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, style: LineStyle) {
-  ctx.save();
-  ctx.strokeStyle = style.color;
-  ctx.globalAlpha *= style.alpha ?? (style.dotted ? 0.5 : 1);
-  ctx.lineWidth = style.width ?? (style.dotted ? 2 : 1.4);
-  if (style.dotted) {
-    ctx.lineCap = 'round';
-    ctx.setLineDash([0.1, 6]);
-  } else if (style.dash) {
-    ctx.setLineDash(style.dash);
-  }
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawLinks(pen: Pen, list: AgentView[]) {
-  drawMeetingLinks(pen, list);
-  // A supervisor's dashed line to each agent it looks after.
-  for (const v of list) {
-    const b = pen.nodes.get(`a${v.id}`);
-    for (const bossId of v.supervisedBy) {
-      const a = pen.nodes.get(`a${bossId}`);
-      if (!a || !b) continue;
-      const style = { color: CLAWD_BOSS_COLORS.link, dash: [5, 6] };
-      strokeLink(pen, a, b, style, [`a${bossId}`, `a${v.id}`]);
-    }
-  }
-  for (const link of liveFileLinks()) {
-    const a = pen.nodes.get(`s${link.fromId}`);
-    const b = pen.nodes.get(`s${link.toId}`);
-    if (!a || !b) continue;
-    const file = `${clip(link.lastFile, 22)}${link.count > 1 ? ` ×${link.count}` : ''}`;
-    // Calm mode: the dashes stay still.
-    const t = pen.f.calm ? 0 : pen.f.t;
-    const keys = [`s${link.fromId}`, `s${link.toId}`];
-    const chip = pen.fade(keys, () =>
-      drawFilePass(pen.ctx, pen.th, a, b, file, FILE_LINK_COLOR, t),
-    );
-    pen.passive.boxes.push(chip);
-    pen.passive.segments.push([
-      { x: a.x, y: a.y },
-      { x: b.x, y: b.y },
-    ]);
-  }
-}
-
-/** A lead's lines to its members, and to the library while it reads there. */
-function drawMeetingLinks(pen: Pen, list: AgentView[]) {
-  const visitors = libraryVisitors(list).length;
-  const library = libraryCenter(visitors, WORLD.h);
-  const libraryR = libraryRadius(visitors);
-  for (const v of list) {
-    const a = pen.nodes.get(`a${v.id}`);
-    if (!a) continue;
-    // A researching agent too big to walk in: a dotted line to the library.
-    if (v.kind === 'research') {
-      const d = Math.hypot(library.x - a.x, library.y - a.y) || 1;
-      const k = Math.max(0, d - libraryR) / d;
-      const edge = { x: a.x + (library.x - a.x) * k, y: a.y + (library.y - a.y) * k };
-      strokeLink(pen, a, edge, { color: pen.th.research, dotted: true }, [`a${v.id}`, 'library']);
-    }
-    for (const s of v.subagents) {
-      const b = pen.nodes.get(`s${s.id}`);
-      if (!b) continue;
-      // Gone to the library: still tied to its lead, by a dotted line.
-      strokeLink(
-        pen,
-        a,
-        b,
-        s.kind === 'research'
-          ? { color: colorOf(v), dotted: true }
-          : { color: colorOf(v), alpha: 0.45, width: 1.6 },
-        [`a${v.id}`, `s${s.id}`],
-      );
-    }
-  }
-}
-
 /** The nodes where they are drawn: floating gently (not in calm mode). The
  *  simulation keeps its own positions; only the picture moves. */
 function floating(nodes: Map<string, SimNode>, f: SceneFrame): Map<string, SimNode> {
@@ -436,6 +303,7 @@ export function drawScene(
     arrows,
     pills,
     passive: pen.passive,
+    meetings: meetingCircles(list, nodes),
   };
 }
 
@@ -514,14 +382,19 @@ function drawBodies(
   at: Placing,
 ): Hit[] {
   const hits: Hit[] = [];
+  const gaze = gazeOf(pen, list, life);
   list.forEach((v, index) => {
     drawMembers(pen, v, marks, at, hits);
     const n = pen.nodes.get(`a${v.id}`);
     if (!n) return;
     // A member picked in its meeting takes the ring.
     const selected = v.id === marks.selectedId && marks.selectedMember == null;
-    const state = { selected, pulsing: at.pulsing.has(v.id), index };
-    pen.fade([`a${v.id}`], () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life));
+    const state = { selected, pulsing: at.pulsing.has(v.id), index, gaze };
+    const body = () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life);
+    if (v.id === marks.dragged && marks.dropTarget != null) seeThrough(pen.ctx, body);
+    else pen.fade([`a${v.id}`], body);
+    if (v.id === marks.dropTarget) drawDropRing(pen, n);
+    if (marks.picked?.has(v.id)) drawPickRing(pen, n);
     grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
   });
   const order = [...list].sort(
@@ -575,6 +448,55 @@ function drawMember(
   return drawChip(ctx, th, n.x, top, clip(s.label, NAME_CHARS), subColor, s.kind);
 }
 
+function seeThrough(ctx: CanvasRenderingContext2D, draw: () => void) {
+  ctx.save();
+  ctx.globalAlpha *= 0.45;
+  draw();
+  ctx.restore();
+}
+
+/** The agent a dragged one would hand its answer to: a ring and what
+ *  dropping does. */
+function drawDropRing(pen: Pen, n: SimNode) {
+  const { ctx, th } = pen;
+  ctx.save();
+  ctx.strokeStyle = th.accent;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, n.r + 9, 0, Math.PI * 2);
+  ctx.stroke();
+  setFont(ctx, 600, 11);
+  ctx.fillStyle = th.accent;
+  ctx.textAlign = 'center';
+  ctx.fillText('Soltalo para pasarle su respuesta', n.x, n.y - n.r - 16);
+  ctx.restore();
+}
+
+/** One of the agents picked together. */
+function drawPickRing(pen: Pen, n: SimNode) {
+  const { ctx, th } = pen;
+  ctx.save();
+  ctx.strokeStyle = th.accent;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, n.r + 7, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** What the eyes can turn to this frame: the pointer and who celebrates. */
+function gazeOf(pen: Pen, list: AgentView[], life: ClawdLife): GazeContext {
+  const party = list.find((v) => life.burst(v.id, pen.f.now) !== null);
+  const at = party ? pen.nodes.get(`a${party.id}`) : undefined;
+  return {
+    pointer: pen.f.pointer ?? null,
+    near: GAZE_NEAR_PX / pen.f.cam.zoom,
+    celebrant: party && at ? { id: party.id, at } : null,
+    vos: VOS,
+  };
+}
+
 /** How Clawd stands right now: his state's pose plus the little life on top
  *  (hello wave, arrival, trick, celebration bounces, what he holds, the
  *  fidgeting of a long wait), and how far up he is lifted. What you dressed
@@ -601,6 +523,7 @@ function livePose(
   if (isAsleep(v, f.now)) Object.assign(pose, { sleep: true, blink: false });
   if (life.blinking(v.id, f.now)) pose.blink = true;
   if (f.calm) return { pose, lift: 0 };
+  if (life.glancing(f.now) && !pose.sleep) pose.blink = true;
   const fidget = v.kind === 'needs' ? impatience(f.now - waitStart(v), f.t, v.id) : null;
   if (fidget) {
     // Tapping and checking the time replaces the wave: still visible, calmer.
@@ -611,6 +534,12 @@ function livePose(
   let lift = life.hop(v.id, f.now);
   if (pose.wave === undefined && !pose.sleep && life.waving(index, f.now)) {
     pose.wave = Math.floor(f.t * 5) % 2;
+  }
+  const nod = life.nod(v.id, f.now);
+  if (nod !== null) {
+    const m = nodMotion(nod);
+    lift += m.lift;
+    if (m.blink) pose.blink = true;
   }
   const arriving = life.arrival(v.id, f.now);
   if (arriving !== null) {
@@ -635,7 +564,7 @@ function drawAgentBody(
   f: SceneFrame,
   v: AgentView,
   n: SimNode,
-  at: { selected: boolean; pulsing: boolean; index: number },
+  at: { selected: boolean; pulsing: boolean; index: number; gaze: GazeContext },
   life: ClawdLife,
 ): void {
   const color = colorOf(v);
@@ -653,6 +582,12 @@ function drawAgentBody(
   // Clawd fills his disc, as in the preview (the disc grows with activity).
   const scale = n.r / 15;
   const { pose, lift } = livePose(v, f, life, at.index);
+  // Eyes: to whoever celebrates, the pointer nearby, or "Vos" (not in calm).
+  const target =
+    f.calm || pose.sleep
+      ? null
+      : gazeTarget(at.gaze, { id: v.id, at: n, waits: v.kind === 'needs' });
+  if (target) pose.look = lookToward(n, target);
   const foot = n.y + clawdHeight(scale, f.dpr) / 2 - lift;
   clawdAt(ctx, f, n.x, foot, scale, color, pose);
   worldTransform(ctx, f);

@@ -5,7 +5,7 @@ import { riskyReason } from '../permissions/riskyCommand.js';
 import { CONFIRM_WINDOW_MS } from '../permissions/useRiskyApprove.js';
 import type { AgentView } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
-import { approveStep, type GraphKey, graphKeyOf } from './graphKeys.js';
+import { type GraphKey, graphKeyOf, twoPressStep } from './graphKeys.js';
 import { stepIn, tabOrder } from './graphPick.js';
 import type { GraphControls, GraphSelection } from './useGraphCanvas.js';
 
@@ -29,8 +29,28 @@ interface KeyUi {
   say: (text: string) => void;
   helpOpen: boolean;
   setHelp: (open: boolean) => void;
-  armed: RefObject<{ requestId: string; at: number } | null>;
+  armed: RefObject<{ token: string; at: number } | null>;
   cursor: RefObject<number | null>;
+  /** The agent picked with Tab (not a click): A and H act on it at once. */
+  keyed: RefObject<number | null>;
+}
+
+/** A and H: act now, or arm and say why a second press is needed. */
+function pressTwice(v: AgentView, ui: KeyUi, token: string, risk: string | null): boolean {
+  const byKeys = ui.keyed.current === v.id;
+  const now = Date.now();
+  if (twoPressStep(!!risk || !byKeys, ui.armed.current, token, now, CONFIRM_WINDOW_MS) === 'act') {
+    ui.armed.current = null;
+    return true;
+  }
+  ui.armed.current = { token, at: now };
+  const key = token.startsWith('approve') ? 'A' : 'H';
+  ui.say(
+    risk
+      ? `Riesgoso: ${risk}. Apretá A otra vez para aprobarlo`
+      : `¿${v.name}? Apretá ${key} otra vez (o elegilo con Tab)`,
+  );
+  return false;
 }
 
 function approve(v: AgentView, inp: GraphKeyInputs, ui: KeyUi): void {
@@ -40,13 +60,7 @@ function approve(v: AgentView, inp: GraphKeyInputs, ui: KeyUi): void {
     return;
   }
   const risk = riskyReason(p.toolName, p.toolInput as Record<string, unknown>);
-  const now = Date.now();
-  if (approveStep(!!risk, ui.armed.current, p.requestId, now, CONFIRM_WINDOW_MS) === 'arm') {
-    ui.armed.current = { requestId: p.requestId, at: now };
-    ui.say(`Riesgoso: ${risk}. Apretá A otra vez para aprobarlo`);
-    return;
-  }
-  ui.armed.current = null;
+  if (!pressTwice(v, ui, `approve:${p.requestId}`, risk)) return;
   inp.actions.onAllow(p.requestId);
   ui.say(`Aprobado lo que pedía ${v.name}`);
 }
@@ -56,6 +70,7 @@ function markDone(v: AgentView, inp: GraphKeyInputs, ui: KeyUi): void {
     ui.say(`${v.name} no te dejó nada para marcar`);
     return;
   }
+  if (!pressTwice(v, ui, `done:${v.yourTurnId}`, null)) return;
   inp.actions.onYourTurnDone(v.yourTurnId);
   ui.say('Listo, marcado como hecho');
 }
@@ -65,6 +80,7 @@ function markDone(v: AgentView, inp: GraphKeyInputs, ui: KeyUi): void {
 function step(dir: 1 | -1, inp: GraphKeyInputs, ui: KeyUi): boolean {
   const next = stepIn(tabOrder(inp.views), ui.cursor.current, dir);
   ui.cursor.current = next;
+  ui.keyed.current = next;
   if (next === null) return false;
   inp.select({ id: next });
   inp.controls.focusOn(next);
@@ -124,18 +140,21 @@ function run(key: GraphKey, inp: GraphKeyInputs, ui: KeyUi): boolean {
 export function useGraphKeys(inp: GraphKeyInputs) {
   const [hint, setHint] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
-  const armed = useRef<{ requestId: string; at: number } | null>(null);
+  const armed = useRef<{ token: string; at: number } | null>(null);
   const cursor = useRef<number | null>(null);
+  const keyed = useRef<number | null>(null);
   const selectedId = inp.selection?.id ?? null;
   useEffect(() => {
     cursor.current = selectedId;
+    // Picked some other way (a click, Alt+N): no longer "picked with Tab".
+    if (keyed.current !== selectedId) keyed.current = null;
   }, [selectedId]);
   useEffect(() => {
     if (!hint) return;
     const timer = setTimeout(() => setHint(null), HINT_MS);
     return () => clearTimeout(timer);
   }, [hint]);
-  const ui: KeyUi = { say: setHint, helpOpen: help, setHelp, armed, cursor };
+  const ui: KeyUi = { say: setHint, helpOpen: help, setHelp, armed, cursor, keyed };
 
   return {
     hint,
@@ -143,6 +162,8 @@ export function useGraphKeys(inp: GraphKeyInputs) {
     closeHelp: () => setHelp(false),
     onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => {
       const key = graphKeyOf(e);
+      // Only the very next press confirms: anything else in between disarms.
+      if (key?.kind !== 'approve' && key?.kind !== 'done') armed.current = null;
       if (!key || !run(key, inp, ui)) return;
       e.preventDefault();
       e.stopPropagation();

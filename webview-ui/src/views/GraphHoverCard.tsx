@@ -28,7 +28,7 @@ export function GraphHoverCard({
     <div
       ref={cardRef}
       role="tooltip"
-      className="absolute left-0 top-0 z-30 w-[260px] soft-panel px-10 py-8 flex flex-col gap-3 pointer-events-none"
+      className="absolute left-0 top-0 z-[70] w-[260px] soft-panel px-10 py-8 flex flex-col gap-3 pointer-events-none"
       style={{ visibility: 'hidden' }}
     >
       <span className="flex items-start gap-6 text-sm font-semibold text-text break-words">

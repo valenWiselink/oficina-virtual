@@ -38,6 +38,9 @@ export function stepGraph(
   edges: SimEdge[],
   dt: number,
   bounds: { w: number; h: number; margin: number },
+  /** A node you hold: it passes over the others without pushing them away
+   *  (so you can drop it on one). */
+  ghost?: string,
 ): void {
   const list = [...nodes.values()];
   const fx = new Map<string, { x: number; y: number }>();
@@ -48,6 +51,7 @@ export function stepGraph(
     for (let j = i + 1; j < list.length; j++) {
       const a = list[i];
       const b = list[j];
+      if (a.id === ghost || b.id === ghost) continue;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const d = Math.hypot(dx, dy) || 0.01;

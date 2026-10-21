@@ -54,6 +54,7 @@ import { DayKeeper } from './views/DayKeeper.js';
 import { revealOnGraph } from './views/graphReveal.js';
 import { GraphView } from './views/GraphView.js';
 import { OfficeCheers } from './views/OfficeCheers.js';
+import { useOfficeLife } from './views/officeLife.js';
 import { useReadMarks } from './views/unread.js';
 import { useAgentViews } from './views/useAgentViews.js';
 import { useNeedsYouSignals } from './views/useNeedsYouSignals.js';
@@ -130,6 +131,7 @@ function App() {
   const [historyTab, setHistoryTab] = useState<HistoryTab>('dia');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
+  const [broadcastPreset, setBroadcastPreset] = useState<number[] | undefined>(undefined);
   const [launchSignal, setLaunchSignal] = useState(0);
   useCommandPaletteShortcut(() => setIsPaletteOpen(true));
   const openHistory = (tab: HistoryTab) => {
@@ -217,7 +219,7 @@ function App() {
   const permissionCards = usePermissionCards(describePermissionAgent);
 
   const nameOfAgent = useCallback((id: number) => agentLabel(getOfficeState(), id), []);
-  const { requestHandOff, handOffDialog } = useHandOff({
+  const { requestHandOff, handOffTo, handOffDialog } = useHandOff({
     terminalAgentIds,
     nameOf: nameOfAgent,
   });
@@ -238,6 +240,7 @@ function App() {
   const { requestEdit, editDialog } = useEditAgent(agentViews);
   useSupervisionSync(agentViews, workspaceState);
   useNeedsYouSignals(agentViews);
+  useOfficeLife(agentViews);
   // A chat or terminal on screen is read ("Terminó" loses its dot) and its
   // plin is not news: the drawer's panes on desktop, the terminal page on a phone.
   const onScreen = isMobile
@@ -360,6 +363,11 @@ function App() {
         onDeny: (requestId) => permissionCards.deny(requestId),
         onAdopt: terminalAvailable ? requestAdopt : undefined,
         onHandOff: requestHandOff,
+        onHandOffTo: handOffTo,
+        onMessageMany: (ids) => {
+          setBroadcastPreset(ids);
+          setIsBroadcastOpen(true);
+        },
         onClose: handleCloseAgent,
         onEdit: requestEdit,
         onOpenTerminal: (id) => {
@@ -573,7 +581,10 @@ function App() {
             onSetView={setView}
             onOpenHistory={() => openHistory('dia')}
             onOpenSettings={() => setIsSettingsOpen(true)}
-            onBroadcast={() => setIsBroadcastOpen(true)}
+            onBroadcast={() => {
+              setBroadcastPreset(undefined);
+              setIsBroadcastOpen(true);
+            }}
             onToggleFocus={() => (isFocused() ? endFocus() : startFocus())}
             onOpenPrs={() => openHistory('prs')}
           />
@@ -581,6 +592,7 @@ function App() {
             open={isBroadcastOpen}
             onClose={() => setIsBroadcastOpen(false)}
             views={agentViews}
+            initial={broadcastPreset}
           />
         </>
       )}

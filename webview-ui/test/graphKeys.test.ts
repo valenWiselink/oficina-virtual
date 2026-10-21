@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  approveStep,
   GRAPH_KEYS_HELP,
   graphKeyOf,
   type KeyLike,
   PAN_STEP_PX,
+  twoPressStep,
   ZOOM_STEP,
 } from '../src/views/graphKeys.js';
 
@@ -81,15 +81,21 @@ describe('graphKeyOf', () => {
   });
 });
 
-describe('approveStep (A on a permission)', () => {
-  it('a plain one is approved at once', () => {
-    expect(approveStep(false, null, 'r1', 0, 4000)).toBe('allow');
+describe('twoPressStep (A and H)', () => {
+  it('acts at once when there is no doubt (picked with Tab, not risky)', () => {
+    expect(twoPressStep(false, null, 'approve:r1', 0, 4000)).toBe('act');
   });
 
-  it('a risky one needs A twice, for the same request, within the window', () => {
-    expect(approveStep(true, null, 'r1', 0, 4000)).toBe('arm');
-    expect(approveStep(true, { requestId: 'r1', at: 0 }, 'r1', 3000, 4000)).toBe('allow');
-    expect(approveStep(true, { requestId: 'r1', at: 0 }, 'r1', 5000, 4000)).toBe('arm');
-    expect(approveStep(true, { requestId: 'r0', at: 0 }, 'r1', 100, 4000)).toBe('arm');
+  it('otherwise asks twice, for the same thing, within the window', () => {
+    expect(twoPressStep(true, null, 'approve:r1', 0, 4000)).toBe('arm');
+    expect(twoPressStep(true, { token: 'approve:r1', at: 0 }, 'approve:r1', 3000, 4000)).toBe(
+      'act',
+    );
+    expect(twoPressStep(true, { token: 'approve:r1', at: 0 }, 'approve:r1', 5000, 4000)).toBe(
+      'arm',
+    );
+    expect(twoPressStep(true, { token: 'approve:r0', at: 0 }, 'approve:r1', 100, 4000)).toBe('arm');
+    // An A armed does not confirm an H.
+    expect(twoPressStep(true, { token: 'approve:r1', at: 0 }, 'done:t1', 100, 4000)).toBe('arm');
   });
 });

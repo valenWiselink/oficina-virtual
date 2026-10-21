@@ -5,12 +5,18 @@ export type PaneMode = 'chat' | 'terminal';
 
 const KEY = 'oficina.vistaTerminal';
 const SHOW_TERMINAL_EVENT = 'oficina:mostrar-terminal';
+const SHOW_CHAT_EVENT = 'oficina:mostrar-chat';
 
 /** Show this agent's raw terminal rather than its chat — where a prompt the
  *  office cannot answer (a permission it no longer holds) is answered. A
  *  one-off: the remembered default stays as it was. */
 export function showTerminalOf(agentId: number): void {
   window.dispatchEvent(new CustomEvent<number>(SHOW_TERMINAL_EVENT, { detail: agentId }));
+}
+
+/** Show this agent's chat (the graph's menu, «Ver chat»). Also a one-off. */
+export function showChatOf(agentId: number): void {
+  window.dispatchEvent(new CustomEvent<number>(SHOW_CHAT_EVENT, { detail: agentId }));
 }
 
 function recallDefault(): PaneMode {
@@ -34,14 +40,18 @@ export function usePaneModes(): [
   const [byAgent, setByAgent] = useState<Record<number, PaneMode>>({});
   const [fallback, setFallback] = useState<PaneMode>(recallDefault);
   useEffect(() => {
-    const onShow = (e: Event) => {
+    const show = (mode: PaneMode) => (e: Event) => {
       const agentId = (e as CustomEvent<number>).detail;
-      setByAgent((prev) =>
-        prev[agentId] === 'terminal' ? prev : { ...prev, [agentId]: 'terminal' },
-      );
+      setByAgent((prev) => (prev[agentId] === mode ? prev : { ...prev, [agentId]: mode }));
     };
-    window.addEventListener(SHOW_TERMINAL_EVENT, onShow);
-    return () => window.removeEventListener(SHOW_TERMINAL_EVENT, onShow);
+    const onTerminal = show('terminal');
+    const onChat = show('chat');
+    window.addEventListener(SHOW_TERMINAL_EVENT, onTerminal);
+    window.addEventListener(SHOW_CHAT_EVENT, onChat);
+    return () => {
+      window.removeEventListener(SHOW_TERMINAL_EVENT, onTerminal);
+      window.removeEventListener(SHOW_CHAT_EVENT, onChat);
+    };
   }, []);
   const modeOf = useCallback(
     (agentId: number, fresh = false) => byAgent[agentId] ?? (fresh ? 'terminal' : fallback),

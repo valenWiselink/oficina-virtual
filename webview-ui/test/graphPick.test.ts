@@ -4,7 +4,15 @@ import type { AgentView } from '../src/views/agentViews.js';
 import { ClawdLife } from '../src/views/clawdLife.js';
 import { TRICK_CLICKS } from '../src/views/clawdTricks.js';
 import { poseFor } from '../src/views/graphDraw.js';
-import { mostUrgent, pillActs, selectionOf, stepIn, tabOrder } from '../src/views/graphPick.js';
+import {
+  mostUrgent,
+  pickNext,
+  pillActs,
+  selectionOf,
+  simplePermissions,
+  stepIn,
+  tabOrder,
+} from '../src/views/graphPick.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
   id,
@@ -114,5 +122,34 @@ describe('selectionOf (opened elsewhere)', () => {
     expect(selectionOf(views, 2)).toEqual({ id: 2 });
     expect(selectionOf(views, 9)).toEqual({ id: 1, member: 9 });
     expect(selectionOf(views, 42)).toEqual({ id: 42 });
+  });
+});
+
+describe('picking several', () => {
+  it('Ctrl+click toggles; the first one also takes the agent already selected', () => {
+    expect(pickNext([], [3], 'toggle', 1)).toEqual([1, 3]);
+    expect(pickNext([], [3], 'toggle', null)).toEqual([3]);
+    expect(pickNext([1, 3], [3], 'toggle', 1)).toEqual([1]);
+    expect(pickNext([1], [1], 'toggle', 1)).toEqual([]);
+  });
+
+  it('a box adds the ones inside it', () => {
+    expect(pickNext([2], [2, 4], 'add', null)).toEqual([2, 4]);
+  });
+
+  it('only the plain permissions are approved all at once', () => {
+    const ask = (id: number, command: string) =>
+      view(id, {
+        kind: 'needs',
+        permission: {
+          type: 'permissionPending',
+          requestId: `r${id}`,
+          toolName: 'Bash',
+          toolInput: { command },
+          createdAt: 0,
+        },
+      });
+    const simple = simplePermissions([ask(1, 'npm test'), ask(2, 'git push origin main'), view(3)]);
+    expect(simple.map((p) => p.requestId)).toEqual(['r1']);
   });
 });

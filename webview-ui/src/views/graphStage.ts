@@ -1,17 +1,19 @@
 import { liveFileLinks } from '../office/behaviors/fileLinksStore.js';
 import type { AgentView } from './agentViews.js';
+import { GAZE_HOLD_MS } from './clawdGaze.js';
 import type { ClawdLife } from './clawdLife.js';
 import {
   type Bounds,
   type Camera,
   centerOn,
+  fitCamera,
   isVisible,
   panBy,
   type Pt,
   toScreen,
   toWorld,
 } from './graphCamera.js';
-import { type GraphTheme, readTheme } from './graphDraw.js';
+import { type GraphTheme, readTheme, rgba } from './graphDraw.js';
 import { drawMinimap, MINIMAP, minimapToWorld } from './graphExtras.js';
 import {
   applyWheel,
@@ -24,7 +26,7 @@ import { type Box, type GraphTarget, hitTest } from './graphHit.js';
 import { focusOf, HoverDwell, type HoverTarget } from './graphHover.js';
 import { mostUrgent } from './graphPick.js';
 import { setPin } from './graphPins.js';
-import { type Grab, type PointerHost, PointerTracker } from './graphPointers.js';
+import { type Grab, type Mods, type PointerHost, PointerTracker } from './graphPointers.js';
 import { CameraRig } from './graphRig.js';
 import { drawScene, edgesOf, layout, type SceneOut, VOS, WORLD } from './graphScene.js';
 import { type SimNode, stepGraph } from './graphSim.js';
@@ -40,6 +42,8 @@ const TOOLBAR_CLEARANCE_PX = 64;
 /** A double click comes this close (at least). */
 const DOUBLE_CLICK_ZOOM = 1.8;
 const VOS_ZOOM = 1.5;
+/** Room kept around a focused meeting's circle (its name chips). */
+const MEETING_ROOM = 60;
 /** How long focusOn waits for an agent that is not drawn yet. */
 const FOCUS_WAIT_MS = 2000;
 
@@ -72,6 +76,18 @@ export interface GraphInputs {
   /** The mouse came onto an agent's request pill, or a click hit it: it
    *  grows into its actions. */
   onPill?: (id: number, how: 'hover' | 'click') => void;
+  /** Right click, or a finger held still: the menu of what is there. */
+  onMenu?: (target: GraphTarget | null, at: Pt) => void;
+  /** Agents picked together (Ctrl+click, Shift + box). */
+  picked?: ReadonlySet<number>;
+  /** Ctrl+click toggles one; a box adds the agents inside it. */
+  onPick?: (ids: number[], how: 'toggle' | 'add') => void;
+  /** What stays crisp without hovering (the filter by state); null: all. */
+  dim?: ReadonlySet<string> | null;
+  /** An agent dragged and dropped on another one's disc (`toId`). */
+  onDrop?: (fromId: number, toId: number) => void;
+  /** A meeting got the focus (a double click in its hole), or let go (null). */
+  onMeeting?: (leadId: number | null) => void;
   /** The camera started (id) or stopped (null) going along with an agent. */
   onFollow?: (id: number | null) => void;
 }
@@ -95,6 +111,10 @@ export interface GraphControls {
   /** Centre an agent (or member) and come at least this close (default:
    *  as a double click does). */
   centerOn: (id: number, member?: number, zoom?: number) => void;
+  /** Esc while dragging: put it back, nothing dropped. false: no drag. */
+  cancelDrag: () => boolean;
+  /** Esc with a meeting focused: the camera goes back. false: none was. */
+  unfocusMeeting: () => boolean;
 }
 
 /** Each workspace's zoom and position, kept while the office is open (also
@@ -130,9 +150,16 @@ export class GraphStage implements PointerHost {
   private readonly frameTimes: number[] = [];
   /** The mouse over the canvas (no button), for the hover card. */
   private mouse: Pt | null = null;
+  private mouseMovedAt = -Infinity;
   private readonly dwell = new HoverDwell();
   private hover: HoverTarget | null = null;
   private pillHover: number | null = null;
+  /** While dragging an agent: the one under it that would get its answer. */
+  private dropOn: number | null = null;
+  /** Shift + drag: the box being drawn (screen px). */
+  private boxRect: { from: Pt; to: Pt } | null = null;
+  /** A meeting in focus, and the camera to go back to. */
+  private meeting: { id: number; back: { cam: Camera; autoFit: boolean } } | null = null;
   /** focusOn's node, until it is drawn (or the wait runs out). */
   private pendingFocus: { key: string; until: number } | null = null;
 
@@ -219,17 +246,23 @@ export class GraphStage implements PointerHost {
     layout(this.nodes, inp.views);
     if (this.held) this.holdNode(this.held);
     this.focusPending(now);
+    this.pointers.tick(now);
     // What you hold pulls nobody: dragging a member leaves its lead in place.
     const held = this.held?.node;
     const edges = edgesOf(inp.views).filter((e) => e.a !== held && e.b !== held);
-    stepGraph(this.nodes, edges, dt, { w: WORLD.w, h: WORLD.h, margin: 48 });
-    const wall = Date.now();
-    inp.life.observe(inp.views, wall);
+    stepGraph(this.nodes, edges, dt, { w: WORLD.w, h: WORLD.h, margin: 48 }, held);
     // Fit above the toolbar, which floats over the bottom of the canvas.
     const { w, h } = this.rig.view;
     const followed =
       this.rig.following !== null ? this.nodes.get(`a${this.rig.following}`) : undefined;
     this.rig.step(this.out?.content ?? null, { w, h: h - TOOLBAR_CLEARANCE_PX }, followed);
+    this.draw(inp, now);
+    inp.onFrame?.();
+  }
+
+  /** Paint this frame: the scene, the minimap and a pick box. */
+  private draw(inp: GraphInputs, now: number): void {
+    const wall = Date.now();
     const cam = this.rig.cam;
     if (!this.detail && cam.zoom >= DETAIL_ON) this.detail = true;
     else if (this.detail && cam.zoom < DETAIL_OFF) this.detail = false;
@@ -239,11 +272,17 @@ export class GraphStage implements PointerHost {
       calm: inp.calm || this.slow,
       detail: this.detail,
       stage: this.stageColor,
+      // The Clawds look at the pointer a moment after it moves.
+      pointer:
+        this.mouse && now - this.mouseMovedAt < GAZE_HOLD_MS ? toWorld(cam, this.mouse) : null,
     };
     const marks = {
       selectedId: inp.selected?.id ?? null,
       selectedMember: inp.selected?.member,
-      focus: this.updateHover(inp, now),
+      focus: this.updateHover(inp, now) ?? this.meetingFocus(inp) ?? inp.dim ?? null,
+      dropTarget: this.dropOn,
+      dragged: this.held?.node.startsWith('a') ? Number(this.held.node.slice(1)) : null,
+      picked: inp.picked,
     };
     this.out = drawScene(this.ctx, this.th, scene, inp.views, this.nodes, marks, inp.life);
     this.minimap = drawMinimapIfNeeded(
@@ -256,7 +295,7 @@ export class GraphStage implements PointerHost {
       this.nodes,
     );
     if (this.minimap) this.lastMinimap = this.minimap;
-    inp.onFrame?.();
+    if (this.boxRect) drawPickBox(this.ctx, this.th, this.boxRect, this.dpr);
   }
 
   private focusPending(now: number): void {
@@ -270,6 +309,7 @@ export class GraphStage implements PointerHost {
   /** The mouse moved over the canvas without a button (null: it left). */
   pointAt(p: Pt | null): void {
     this.mouse = p;
+    if (p) this.mouseMovedAt = performance.now();
   }
 
   /** Who the mouse rests on (after the dwell) and what stays crisp then. */
@@ -331,9 +371,33 @@ export class GraphStage implements PointerHost {
     // Dragging an agent stops fitting and following (it would run away).
     this.rig.moveTo(this.rig.cam);
     this.held = { node: nodeKey(grab), at: toWorld(this.rig.cam, p) };
+    this.dropOn = grab.member === undefined ? this.dropTargetAt(p, grab.id) : null;
+  }
+
+  /** The agent whose disc (not its label) is under p and could get a
+   *  dragged agent's answer: one with its terminal in the office. */
+  private dropTargetAt(p: Pt, self: number): number | null {
+    if (!this.out) return null;
+    const w = toWorld(this.rig.cam, p);
+    const hit = this.out.hits.find(
+      (h) =>
+        h.member === undefined &&
+        h.id !== self &&
+        Math.hypot(h.disc.x - w.x, h.disc.y - w.y) <= h.disc.r,
+    );
+    const v = hit ? this.inputs().views.find((x) => x.id === hit.id) : undefined;
+    return v?.hasTerminal ? v.id : null;
   }
 
   release(grab: Grab, keep: boolean): void {
+    const to = this.dropOn;
+    this.dropOn = null;
+    // Dropped on another agent: it gets its answer, and it goes back home.
+    if (keep && to !== null && grab.member === undefined) {
+      this.held = null;
+      this.inputs().onDrop?.(grab.id, to);
+      return;
+    }
     // An agent stays where you drop it; a member goes back to its seat.
     if (keep && this.held && grab.member === undefined) {
       const key = this.inputs().views.find((v) => v.id === grab.id)?.key;
@@ -342,8 +406,30 @@ export class GraphStage implements PointerHost {
     this.held = null;
   }
 
-  click(target: GraphTarget | null, p: Pt, repeat: boolean): void {
+  /** Shift + drag on the background: the box, and on letting go the agents
+   *  whose discs are inside it join the pick. */
+  box(from: Pt, to: Pt, done: boolean): void {
+    this.boxRect = done ? null : { from, to };
+    if (!done || !this.out) return;
+    const a = toWorld(this.rig.cam, from);
+    const b = toWorld(this.rig.cam, to);
+    const inside = (x: number, lo: number, hi: number) =>
+      x >= Math.min(lo, hi) && x <= Math.max(lo, hi);
+    const ids = this.out.hits
+      .filter(
+        (h) => h.member === undefined && inside(h.disc.x, a.x, b.x) && inside(h.disc.y, a.y, b.y),
+      )
+      .map((h) => h.id);
+    if (ids.length > 0) this.inputs().onPick?.([...new Set(ids)], 'add');
+  }
+
+  click(target: GraphTarget | null, p: Pt, repeat: boolean, mods?: Mods): void {
     const { views, onSelect } = this.inputs();
+    // Ctrl+click on an agent: in or out of the pick, nothing else.
+    if (mods?.ctrl && target?.type === 'agent' && target.member === undefined) {
+      this.inputs().onPick?.([target.id], 'toggle');
+      return;
+    }
     const zoom = this.rig.cam.zoom;
     switch (target?.type) {
       case 'agent':
@@ -366,10 +452,54 @@ export class GraphStage implements PointerHost {
         return;
       case 'passive':
         // Drawn things are not the background: the panel stays.
+        if (repeat) this.focusMeetingAt(p);
         return;
       default:
         if (!repeat) onSelect(null, false);
+        else this.focusMeetingAt(p);
     }
+  }
+
+  /** A double click in a meeting's hole: frame it and fade the rest. */
+  private focusMeetingAt(p: Pt): void {
+    const w = toWorld(this.rig.cam, p);
+    const m = this.out?.meetings.find((c) => Math.hypot(c.x - w.x, c.y - w.y) <= c.r);
+    if (!m || this.meeting?.id === m.id) return;
+    const back = this.meeting?.back ?? { cam: this.rig.cam, autoFit: this.rig.autoFit };
+    this.rig.follow(null);
+    const pad = m.r + MEETING_ROOM;
+    const bounds = { minX: m.x - pad, minY: m.y - pad, maxX: m.x + pad, maxY: m.y + pad };
+    this.rig.go(fitCamera(bounds, this.rig.view, 40));
+    this.meeting = { id: m.id, back };
+    this.inputs().onMeeting?.(m.id);
+  }
+
+  private meetingFocus(inp: GraphInputs): ReadonlySet<string> | null {
+    if (!this.meeting) return null;
+    if (!inp.views.some((v) => v.id === this.meeting!.id)) {
+      this.unfocusMeeting();
+      return null;
+    }
+    return focusOf(inp.views, { id: this.meeting.id }, liveFileLinks());
+  }
+
+  private unfocusMeeting(): boolean {
+    const m = this.meeting;
+    if (!m) return false;
+    this.meeting = null;
+    if (m.back.autoFit) this.rig.fit();
+    else this.rig.go(m.back.cam);
+    this.inputs().onMeeting?.(null);
+    return true;
+  }
+
+  longPress(target: GraphTarget | null, p: Pt): void {
+    this.inputs().onMenu?.(target, p);
+  }
+
+  /** A right click at p (screen px). */
+  menuAt(p: Pt): void {
+    this.inputs().onMenu?.(this.targetAt(p), p);
   }
 
   /** "Vos" opens the most urgent wait (as Alt+N); a double click centres it;
@@ -395,6 +525,14 @@ export class GraphStage implements PointerHost {
       zoomBy: (factor) => this.rig.zoomBy(factor),
       fitAll: () => this.rig.fit(),
       panBy: (dx, dy) => this.pan(dx, dy),
+      unfocusMeeting: () => this.unfocusMeeting(),
+      cancelDrag: () => {
+        if (!this.held) return false;
+        this.pointers.abort();
+        this.held = null;
+        this.dropOn = null;
+        return true;
+      },
       focusOn: (id, member) => {
         // Opening someone else ends going along with another.
         if (this.rig.following !== id) this.rig.follow(null);
@@ -421,6 +559,27 @@ export class GraphStage implements PointerHost {
   }
 }
 
+/** The box Shift + drag draws to pick several. */
+function drawPickBox(
+  ctx: CanvasRenderingContext2D,
+  th: GraphTheme,
+  r: { from: Pt; to: Pt },
+  dpr: number,
+) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const x = Math.min(r.from.x, r.to.x);
+  const y = Math.min(r.from.y, r.to.y);
+  const w = Math.abs(r.to.x - r.from.x);
+  const h = Math.abs(r.to.y - r.from.y);
+  ctx.fillStyle = rgba(th.accent, 0.08);
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = th.accent;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  ctx.setLineDash([]);
+}
+
 /** The minimap shows only when part of the graph is out of view. */
 function drawMinimapIfNeeded(
   ctx: CanvasRenderingContext2D,
@@ -438,7 +597,8 @@ function drawMinimapIfNeeded(
   if (allInView) return null;
   const box = {
     x: view.w - MINIMAP.w - MINIMAP.margin,
-    y: view.h - MINIMAP.h - 84,
+    // Above the zoom buttons and the filter by state.
+    y: view.h - MINIMAP.h - 128,
     w: MINIMAP.w,
     h: MINIMAP.h,
   };

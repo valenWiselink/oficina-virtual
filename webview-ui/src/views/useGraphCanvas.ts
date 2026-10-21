@@ -18,8 +18,13 @@ function attachInput(canvas: HTMLCanvasElement, stage: GraphStage): () => void {
     e.preventDefault();
     stage.wheel(e as WheelEvent & { wheelDeltaY?: number }, local(e), e.timeStamp);
   };
+  let lastTouch = false;
   const onDown = (e: PointerEvent) => {
-    stage.pointers.down(e.pointerId, local(e));
+    // Only the main button: the right one opens the menu (contextmenu).
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    lastTouch = e.pointerType === 'touch';
+    const mods = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
+    stage.pointers.down(e.pointerId, local(e), e.timeStamp, lastTouch, mods);
     canvas.setPointerCapture(e.pointerId);
   };
   const onMove = (e: PointerEvent) => {
@@ -39,12 +44,19 @@ function attachInput(canvas: HTMLCanvasElement, stage: GraphStage): () => void {
   };
   const onCancel = (e: PointerEvent) => stage.pointers.cancel(e.pointerId);
   const onLeave = () => stage.pointAt(null);
+  // A right click opens the menu; a finger gets it by holding still (the
+  // tracker's long press), so the browser's own touch menu is ignored.
+  const onContext = (e: MouseEvent) => {
+    e.preventDefault();
+    if (!lastTouch && !stage.pointers.busy) stage.menuAt(local(e));
+  };
   const listeners: Array<[string, (e: never) => void]> = [
     ['pointerdown', onDown],
     ['pointermove', onMove],
     ['pointerup', onUp],
     ['pointercancel', onCancel],
     ['pointerleave', onLeave],
+    ['contextmenu', onContext],
   ];
   canvas.addEventListener('wheel', onWheel, { passive: false });
   for (const [type, fn] of listeners) canvas.addEventListener(type, fn as EventListener);
@@ -100,5 +112,7 @@ export function useGraphCanvas(
     focusOn: (id, member) => api.current?.focusOn(id, member),
     follow: (id) => api.current?.follow(id),
     centerOn: (id, member, zoom) => api.current?.centerOn(id, member, zoom),
+    cancelDrag: () => api.current?.cancelDrag() ?? false,
+    unfocusMeeting: () => api.current?.unfocusMeeting() ?? false,
   };
 }
