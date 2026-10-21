@@ -12,6 +12,7 @@ import {
 } from './GraphChrome.js';
 import { GraphContextMenu } from './GraphContextMenu.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
+import { GraphMemberPanel } from './GraphMemberPanel.js';
 import { GraphPillActions } from './GraphPillActions.js';
 import { useGraphView } from './useGraphView.js';
 
@@ -101,16 +102,38 @@ function GraphOverlays({
       {g.slow && <SlowNotice />}
       {keys.hint && <GraphHint text={keys.hint} />}
       {keys.help && <GraphKeysHelp onClose={keys.closeHelp} />}
-      {sel.selected && (
-        <GraphPanel
-          view={sel.selected}
-          member={sel.selection?.member}
-          actions={actions}
-          following={g.followId === sel.selected.id}
-          onFollow={(on) => controls.follow(on ? sel.selected!.id : null)}
-          onClose={sel.clear}
-        />
-      )}
+      <PickedPanel g={g} actions={actions} />
     </>
+  );
+}
+
+/** The picked agent's panel, or a member's own (clicked in its meeting). */
+function PickedPanel({ g, actions }: { g: GraphState; actions: BoardActions }) {
+  const { sel, controls } = g;
+  const lead = sel.selected;
+  if (!lead) return null;
+  const memberId = sel.selection?.member;
+  const member = lead.subagents.find((s) => s.id === memberId);
+  if (member) {
+    return (
+      <GraphMemberPanel
+        lead={lead}
+        member={member}
+        onLead={() => {
+          sel.pick({ id: lead.id });
+          controls.focusOn(lead.id);
+        }}
+        onClose={sel.clear}
+      />
+    );
+  }
+  return (
+    <GraphPanel
+      view={lead}
+      actions={actions}
+      following={g.followId === lead.id}
+      onFollow={(on) => controls.follow(on ? lead.id : null)}
+      onClose={sel.clear}
+    />
   );
 }
