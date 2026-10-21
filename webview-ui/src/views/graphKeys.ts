@@ -35,8 +35,8 @@ export const ZOOM_STEP = 1.25;
 export const GRAPH_KEYS_HELP: ReadonlyArray<[string, string]> = [
   ['Tab / Shift+Tab', 'Recorrer los agentes (primero los que te esperan)'],
   ['Enter', 'Abrir su terminal'],
-  ['A', 'Aprobar su permiso (si es riesgoso, A otra vez)'],
-  ['H', 'Marcar «Hecho» lo que te dejó'],
+  ['A', 'Aprobar su permiso (dos veces seguidas si es riesgoso o si no lo elegiste con Tab)'],
+  ['H', 'Marcar «Hecho» lo que te dejó (dos veces si no lo elegiste con Tab)'],
   ['F', 'Seguirlo con la cámara'],
   ['Esc', 'Dejar de seguir, o soltarlo'],
   ['Shift+1', 'Ver a todos'],
@@ -82,16 +82,20 @@ export function graphKeyOf(ev: KeyLike): GraphKey | null {
   return LETTERS[ev.key.toLowerCase()] ?? null;
 }
 
-/** A risky permission asks for A twice: the first press arms it (for
- *  `windowMs`, like the card's second click), the second one approves. */
-export function approveStep(
-  risky: boolean,
-  armed: { requestId: string; at: number } | null,
-  requestId: string,
+/** A key that acts on an agent (A, H) asks to be pressed twice in a row when
+ *  it could be a slip: a risky permission, or an agent you did not pick with
+ *  Tab (a click leaves the graph focused, and a stray "a" typed for the
+ *  terminal must not approve anything). The first press arms it for
+ *  `windowMs`; any other key in between disarms it (the caller forgets
+ *  `armed`), so typing a word never confirms. */
+export function twoPressStep(
+  needsTwo: boolean,
+  armed: { token: string; at: number } | null,
+  token: string,
   now: number,
   windowMs: number,
-): 'allow' | 'arm' {
-  if (!risky) return 'allow';
-  const live = !!armed && armed.requestId === requestId && now - armed.at < windowMs;
-  return live ? 'allow' : 'arm';
+): 'act' | 'arm' {
+  if (!needsTwo) return 'act';
+  const live = !!armed && armed.token === token && now - armed.at < windowMs;
+  return live ? 'act' : 'arm';
 }
