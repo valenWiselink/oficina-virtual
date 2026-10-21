@@ -38,6 +38,7 @@ import {
   type Pose,
   poseFor,
   rgba,
+  setFont,
 } from './graphDraw.js';
 import {
   drawCheckPop,
@@ -93,6 +94,8 @@ export interface SceneMarks {
   /** While you hover an agent, what stays crisp (graphHover.ts focusOf);
    *  everything else fades. null: everything crisp. */
   focus?: ReadonlySet<string> | null;
+  /** While you drag an agent over another: the one that would get its answer. */
+  dropTarget?: number | null;
 }
 
 /** What is clickable (graphHit.ts reads it) and what was drawn. */
@@ -394,6 +397,7 @@ function drawBodies(
     const selected = v.id === marks.selectedId && marks.selectedMember == null;
     const state = { selected, pulsing: at.pulsing.has(v.id), index, gaze };
     pen.fade([`a${v.id}`], () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life));
+    if (v.id === marks.dropTarget) drawDropRing(pen, n);
     grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
   });
   const order = [...list].sort(
@@ -445,6 +449,23 @@ function drawMember(
   worldTransform(ctx, f);
   const top = at.above ? n.y - n.r - 26 : n.y + n.r + 6;
   return drawChip(ctx, th, n.x, top, clip(s.label, NAME_CHARS), subColor, s.kind);
+}
+
+/** The agent a dragged one would hand its answer to: a ring and what
+ *  dropping does. */
+function drawDropRing(pen: Pen, n: SimNode) {
+  const { ctx, th } = pen;
+  ctx.save();
+  ctx.strokeStyle = th.accent;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, n.r + 9, 0, Math.PI * 2);
+  ctx.stroke();
+  setFont(ctx, 600, 11);
+  ctx.fillStyle = th.accent;
+  ctx.textAlign = 'center';
+  ctx.fillText('Soltalo para pasarle su respuesta', n.x, n.y - n.r - 16);
+  ctx.restore();
 }
 
 /** What the eyes can turn to this frame: the pointer and who celebrates. */

@@ -111,5 +111,6 @@ export function useGraphCanvas(
     focusOn: (id, member) => api.current?.focusOn(id, member),
     follow: (id) => api.current?.follow(id),
     centerOn: (id, member, zoom) => api.current?.centerOn(id, member, zoom),
+    cancelDrag: () => api.current?.cancelDrag() ?? false,
   };
 }

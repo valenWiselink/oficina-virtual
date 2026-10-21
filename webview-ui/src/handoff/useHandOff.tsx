@@ -17,6 +17,8 @@ interface UseHandOffInputs {
  */
 export function useHandOff({ terminalAgentIds, nameOf }: UseHandOffInputs): {
   requestHandOff: (fromId: number) => void;
+  /** Straight to a receiver (an agent dropped on another on the graph). */
+  handOffTo: (fromId: number, toId: number) => void;
   handOffDialog: React.ReactNode;
 } {
   const [fromId, setFromId] = useState<number | null>(null);
@@ -26,6 +28,15 @@ export function useHandOff({ terminalAgentIds, nameOf }: UseHandOffInputs): {
     setOutcome(null);
     setFromId(id);
   }, []);
+
+  const handOffTo = useCallback(
+    (from: number, to: number) => {
+      setFromId(from);
+      setOutcome(`Pasando su última respuesta a «${nameOf(to)}»…`);
+      transport.send({ type: 'handOffResult', fromId: from, toId: to });
+    },
+    [nameOf],
+  );
 
   useEffect(
     () =>
@@ -94,5 +105,5 @@ export function useHandOff({ terminalAgentIds, nameOf }: UseHandOffInputs): {
     </Modal>
   );
 
-  return { requestHandOff, handOffDialog };
+  return { requestHandOff, handOffTo, handOffDialog };
 }

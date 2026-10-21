@@ -132,6 +132,12 @@ export class PointerTracker {
     this.end(id, p, now, true);
   }
 
+  /** Drop what is pressed (Esc while dragging): nothing more happens with
+   *  it, not even its release. */
+  abort(): void {
+    if (this.press) this.press.used = true;
+  }
+
   /** The browser took the pointer (a system gesture): never a click. */
   cancel(id: number): void {
     this.end(id, this.pointers.get(id) ?? { x: 0, y: 0 }, 0, false);

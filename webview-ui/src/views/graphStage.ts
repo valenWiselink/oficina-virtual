@@ -75,6 +75,8 @@ export interface GraphInputs {
   onPill?: (id: number, how: 'hover' | 'click') => void;
   /** Right click, or a finger held still: the menu of what is there. */
   onMenu?: (target: GraphTarget | null, at: Pt) => void;
+  /** An agent dragged and dropped on another one's disc (`toId`). */
+  onDrop?: (fromId: number, toId: number) => void;
   /** The camera started (id) or stopped (null) going along with an agent. */
   onFollow?: (id: number | null) => void;
 }
@@ -98,6 +100,8 @@ export interface GraphControls {
   /** Centre an agent (or member) and come at least this close (default:
    *  as a double click does). */
   centerOn: (id: number, member?: number, zoom?: number) => void;
+  /** Esc while dragging: put it back, nothing dropped. false: no drag. */
+  cancelDrag: () => boolean;
 }
 
 /** Each workspace's zoom and position, kept while the office is open (also
@@ -137,6 +141,8 @@ export class GraphStage implements PointerHost {
   private readonly dwell = new HoverDwell();
   private hover: HoverTarget | null = null;
   private pillHover: number | null = null;
+  /** While dragging an agent: the one under it that would get its answer. */
+  private dropOn: number | null = null;
   /** focusOn's node, until it is drawn (or the wait runs out). */
   private pendingFocus: { key: string; until: number } | null = null;
 
@@ -227,7 +233,7 @@ export class GraphStage implements PointerHost {
     // What you hold pulls nobody: dragging a member leaves its lead in place.
     const held = this.held?.node;
     const edges = edgesOf(inp.views).filter((e) => e.a !== held && e.b !== held);
-    stepGraph(this.nodes, edges, dt, { w: WORLD.w, h: WORLD.h, margin: 48 });
+    stepGraph(this.nodes, edges, dt, { w: WORLD.w, h: WORLD.h, margin: 48 }, held);
     const wall = Date.now();
     // Fit above the toolbar, which floats over the bottom of the canvas.
     const { w, h } = this.rig.view;
@@ -251,6 +257,7 @@ export class GraphStage implements PointerHost {
       selectedId: inp.selected?.id ?? null,
       selectedMember: inp.selected?.member,
       focus: this.updateHover(inp, now),
+      dropTarget: this.dropOn,
     };
     this.out = drawScene(this.ctx, this.th, scene, inp.views, this.nodes, marks, inp.life);
     this.minimap = drawMinimapIfNeeded(
@@ -339,9 +346,33 @@ export class GraphStage implements PointerHost {
     // Dragging an agent stops fitting and following (it would run away).
     this.rig.moveTo(this.rig.cam);
     this.held = { node: nodeKey(grab), at: toWorld(this.rig.cam, p) };
+    this.dropOn = grab.member === undefined ? this.dropTargetAt(p, grab.id) : null;
+  }
+
+  /** The agent whose disc (not its label) is under p and could get a
+   *  dragged agent's answer: one with its terminal in the office. */
+  private dropTargetAt(p: Pt, self: number): number | null {
+    if (!this.out) return null;
+    const w = toWorld(this.rig.cam, p);
+    const hit = this.out.hits.find(
+      (h) =>
+        h.member === undefined &&
+        h.id !== self &&
+        Math.hypot(h.disc.x - w.x, h.disc.y - w.y) <= h.disc.r,
+    );
+    const v = hit ? this.inputs().views.find((x) => x.id === hit.id) : undefined;
+    return v?.hasTerminal ? v.id : null;
   }
 
   release(grab: Grab, keep: boolean): void {
+    const to = this.dropOn;
+    this.dropOn = null;
+    // Dropped on another agent: it gets its answer, and it goes back home.
+    if (keep && to !== null && grab.member === undefined) {
+      this.held = null;
+      this.inputs().onDrop?.(grab.id, to);
+      return;
+    }
     // An agent stays where you drop it; a member goes back to its seat.
     if (keep && this.held && grab.member === undefined) {
       const key = this.inputs().views.find((v) => v.id === grab.id)?.key;
@@ -412,6 +443,13 @@ export class GraphStage implements PointerHost {
       zoomBy: (factor) => this.rig.zoomBy(factor),
       fitAll: () => this.rig.fit(),
       panBy: (dx, dy) => this.pan(dx, dy),
+      cancelDrag: () => {
+        if (!this.held) return false;
+        this.pointers.abort();
+        this.held = null;
+        this.dropOn = null;
+        return true;
+      },
       focusOn: (id, member) => {
         // Opening someone else ends going along with another.
         if (this.rig.following !== id) this.rig.follow(null);

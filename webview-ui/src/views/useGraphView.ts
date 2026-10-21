@@ -46,6 +46,7 @@ export function useGraphView(
     },
     onPill: pill.onPill,
     onMenu: (target, at) => menu.open(target, at),
+    onDrop: (fromId, toId) => actions.onHandOffTo?.(fromId, toId),
     onFollow: setFollowId,
     onSlow: () => setSlow(true),
     onHover: hover.setHover,
@@ -71,7 +72,7 @@ export function useGraphView(
   return { sel, hover, pill, followId, slow, controls, keys, menu };
 }
 
-/** Esc, from the graph: stop following, then shrink the pill, then let go
+/** Esc, from the graph: drop a drag, stop following, then shrink the pill, then let go
  *  of the selection. */
 function releaser(
   followId: number | null,
@@ -80,6 +81,8 @@ function releaser(
   sel: { clear: () => void },
 ): () => void {
   return () => {
+    // A drag in progress goes back first (nothing dropped).
+    if (controls.cancelDrag()) return;
     if (followId !== null) controls.follow(null);
     else if (pill.isOpen()) pill.close();
     else sel.clear();

@@ -218,7 +218,7 @@ function App() {
   const permissionCards = usePermissionCards(describePermissionAgent);
 
   const nameOfAgent = useCallback((id: number) => agentLabel(getOfficeState(), id), []);
-  const { requestHandOff, handOffDialog } = useHandOff({
+  const { requestHandOff, handOffTo, handOffDialog } = useHandOff({
     terminalAgentIds,
     nameOf: nameOfAgent,
   });
@@ -363,6 +363,7 @@ function App() {
         onDeny: (requestId) => permissionCards.deny(requestId),
         onAdopt: terminalAvailable ? requestAdopt : undefined,
         onHandOff: requestHandOff,
+        onHandOffTo: handOffTo,
         onClose: handleCloseAgent,
         onEdit: requestEdit,
         onOpenTerminal: (id) => {

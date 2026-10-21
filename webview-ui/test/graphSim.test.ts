@@ -57,3 +57,26 @@ describe('floating bubbles', () => {
     expect(floatOffset('a1', 1.3)).not.toBe(floatOffset('a2', 1.3));
   });
 });
+
+describe('stepGraph: a node you hold', () => {
+  it('passes over the others without pushing them', () => {
+    const node = (id: string, x: number) => ({
+      id,
+      x,
+      y: 100,
+      vx: 0,
+      vy: 0,
+      r: 20,
+      ax: x,
+      ay: 100,
+    });
+    const nodes = new Map([
+      ['a1', node('a1', 100)],
+      ['a2', node('a2', 105)],
+    ]);
+    stepGraph(nodes, [], 0.05, { w: 1000, h: 1000, margin: 0 }, 'a1');
+    expect(nodes.get('a2')!.x).toBeCloseTo(105);
+    stepGraph(nodes, [], 0.05, { w: 1000, h: 1000, margin: 0 });
+    expect(nodes.get('a2')!.x).toBeGreaterThan(105);
+  });
+});
