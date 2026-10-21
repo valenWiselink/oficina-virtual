@@ -92,6 +92,9 @@ export interface GraphControls {
   /** Go along with an agent ("Seguir"); null stops. Moving the view by hand
    *  stops it too. */
   follow: (id: number | null) => void;
+  /** Centre an agent (or member) and come at least this close (default:
+   *  as a double click does). */
+  centerOn: (id: number, member?: number, zoom?: number) => void;
 }
 
 /** Each workspace's zoom and position, kept while the office is open (also
@@ -399,6 +402,8 @@ export class GraphStage implements PointerHost {
         this.pendingFocus = { key, until: performance.now() + FOCUS_WAIT_MS };
       },
       follow: (id) => this.rig.follow(id),
+      centerOn: (id, member, zoom = DOUBLE_CLICK_ZOOM) =>
+        this.centerNode(nodeKey({ id, member }), Math.max(this.rig.cam.zoom, zoom)),
       pillOf: (id) => {
         const box = this.out?.pills.find((x) => x.id === id)?.box;
         if (!box) return null;

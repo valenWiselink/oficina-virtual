@@ -43,6 +43,8 @@ export function useGraphSelection(views: AgentView[], actions: BoardActions, lif
     /** What the canvas marks: only an agent that is on the graph. */
     marked: selected && selection ? selection : null,
     clear: () => setSelection(null),
+    /** Select on the graph only (a key: its terminal opens with Enter). */
+    select: (next: GraphSelection) => setSelection(next),
     pick,
     clicked,
     opened,

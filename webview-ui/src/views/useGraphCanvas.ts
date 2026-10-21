@@ -99,5 +99,6 @@ export function useGraphCanvas(
     pillOf: (id) => api.current?.pillOf(id) ?? null,
     focusOn: (id, member) => api.current?.focusOn(id, member),
     follow: (id) => api.current?.follow(id),
+    centerOn: (id, member, zoom) => api.current?.centerOn(id, member, zoom),
   };
 }

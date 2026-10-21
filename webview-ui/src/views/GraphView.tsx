@@ -8,12 +8,20 @@ import type { AgentView } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
 import { onCelebration } from './celebrate.js';
 import { ClawdLife } from './clawdLife.js';
-import { FollowBanner, GraphPanel, GraphToolbar, SlowNotice } from './GraphChrome.js';
+import {
+  FollowBanner,
+  GraphHint,
+  GraphKeysHelp,
+  GraphPanel,
+  GraphToolbar,
+  SlowNotice,
+} from './GraphChrome.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
 import { GraphPillActions } from './GraphPillActions.js';
 import { onRevealOnGraph } from './graphReveal.js';
 import { type GraphControls, useGraphCanvas } from './useGraphCanvas.js';
 import { useGraphHover } from './useGraphHover.js';
+import { useGraphKeys } from './useGraphKeys.js';
 import { useGraphPill } from './useGraphPill.js';
 import { useGraphSelection } from './useGraphSelection.js';
 
@@ -30,7 +38,8 @@ import { useGraphSelection } from './useGraphSelection.js';
  * shows its quick card and fades everyone but its team; the amber pill of
  * what it asks grows into «Aprobar · Rechazar · Ver» (or «Hecho · Abrir PR»).
  * Opening an agent elsewhere (Alt+N, Ctrl+K, a terminal tab) selects it here
- * too, and "Seguir" keeps the camera on it.
+ * too, and "Seguir" keeps the camera on it. With the focus on the graph its
+ * keys work ("?" lists them).
  */
 export function GraphView({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,6 +83,16 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
     else sel.clear();
   };
   useGraphEvents({ rootRef, controls, release, opened: sel.opened, life: lifeRef.current });
+  const keys = useGraphKeys({
+    views,
+    actions,
+    controls,
+    selected: sel.selected,
+    selection: sel.selection,
+    select: sel.select,
+    following: followId,
+    release,
+  });
 
   return (
     <div
@@ -86,8 +105,11 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
         ref={canvasRef}
         tabIndex={0}
         className="absolute inset-0 w-full h-full touch-none outline-none focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
-        role="img"
-        aria-label={`Grafo de agentes: ${views.map((v) => `${v.name}, ${v.statusText}`).join('; ')}`}
+        role="application"
+        aria-roledescription="grafo"
+        aria-label={`Grafo de agentes (apretá ? para ver los atajos): ${views.map((v) => `${v.name}, ${v.statusText}`).join('; ')}`}
+        onKeyDown={keys.onKeyDown}
+        onFocus={keys.onFocus}
       />
       {followed && <FollowBanner view={followed} onStop={() => controls.follow(null)} />}
       <GraphToolbar controls={controls} />
@@ -105,6 +127,8 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
         />
       )}
       {slow && <SlowNotice />}
+      {keys.hint && <GraphHint text={keys.hint} />}
+      {keys.help && <GraphKeysHelp onClose={keys.closeHelp} />}
       {sel.selected && (
         <GraphPanel
           view={sel.selected}
