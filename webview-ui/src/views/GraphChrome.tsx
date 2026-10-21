@@ -2,7 +2,7 @@ import { Button } from '../components/ui/Button.js';
 import type { AgentView } from './agentViews.js';
 import { type BoardActions, BoardCard } from './BoardCard.js';
 import { clawdColor } from './clawdColor.js';
-import { GRAPH_KEYS_HELP } from './graphKeys.js';
+import { GRAPH_KEYS_HELP, GRAPH_MOUSE_HELP } from './graphKeys.js';
 import { clearPins, useHasPins } from './graphPins.js';
 import type { GraphControls } from './useGraphCanvas.js';
 
@@ -135,7 +135,20 @@ export function GraphHint({ text }: { text: string }) {
   );
 }
 
-/** "?": the graph's keys. */
+function HelpList({ rows }: { rows: ReadonlyArray<[string, string]> }) {
+  return (
+    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-12 gap-y-4 text-xs">
+      {rows.map(([keys, what]) => (
+        <div key={keys} className="contents">
+          <dt className="font-semibold text-text whitespace-nowrap">{keys}</dt>
+          <dd className="m-0 text-text-2">{what}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** "?": the graph's keys, and what the mouse does. */
 export function GraphKeysHelp({ onClose }: { onClose: () => void }) {
   return (
     <div
@@ -158,14 +171,9 @@ export function GraphKeysHelp({ onClose }: { onClose: () => void }) {
       <span className="text-2xs text-text-muted">
         Andan cuando el grafo tiene el foco: hacé clic en el fondo o llegá con Tab.
       </span>
-      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-12 gap-y-4 text-xs">
-        {GRAPH_KEYS_HELP.map(([keys, what]) => (
-          <div key={keys} className="contents">
-            <dt className="font-semibold text-text whitespace-nowrap">{keys}</dt>
-            <dd className="m-0 text-text-2">{what}</dd>
-          </div>
-        ))}
-      </dl>
+      <HelpList rows={GRAPH_KEYS_HELP} />
+      <span className="text-xs font-semibold text-text mt-4">Con el mouse</span>
+      <HelpList rows={GRAPH_MOUSE_HELP} />
     </div>
   );
 }
