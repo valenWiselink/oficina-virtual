@@ -118,10 +118,12 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   per-pane header, Chat | Terminal, split with a pinned agent, search.
 - `chat/` — chat view of a transcript; sending pastes into the agent's PTY.
 - Writing to an agent: `terminal/agentInput.ts` `sendToAgent` resolves whether
-  it reached the PTY. Input typed while a terminal reconnects is held 30 s
-  (`terminal/heldInput.ts`) and sent or dropped whole; only `true` may count as
-  done. The control socket holds messages only briefly and never one that
-  changes an agent by id (`transport/sendQueue.ts`).
+  it reached the PTY (only `true` may count as done). A whole message sent
+  while its terminal reconnects waits up to 30 s (`terminal/heldInput.ts`) and
+  goes as paste + Enter; keys typed by hand are never held — sent late they
+  could answer a permission — they are dropped and the terminal says so. The
+  control socket holds messages only briefly and never one that changes an
+  agent by id (`transport/sendQueue.ts`).
 - Sounds: `notificationSound.ts` (Ajustes: Todo / Sólo cuando te necesitan /
   Nada) and `effects/turnSounds.ts` (toc-toc for a need, a spaced soft plin
   for a turn with nothing for you, chosen 1.5 s after the turn ends).

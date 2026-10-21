@@ -14,7 +14,7 @@ import { parseServerFrame } from '../../../core/src/terminalFrames.js';
 import { reconnectDelayMs } from '../transport/reconnectBackoff.js';
 import { knownServerRun } from '../transport/serverBoot.js';
 import { serverToken } from '../transport/serverToken.js';
-import { HeldInput, type WriteDone } from './heldInput.js';
+import { HeldMessages, type WriteDone } from './heldInput.js';
 
 export interface TerminalConnectionHandlers {
   onOutput(data: string): void;
@@ -23,10 +23,16 @@ export interface TerminalConnectionHandlers {
   onReplay(data: string, cols: number, rows: number): void;
   onExit(exitCode: number): void;
   onStatusChange(status: TerminalConnectionStatus): void;
-  /** What was written while it reconnected never went (it did not come back
-   *  in time, or the server refused it): say so where it was typed. */
+  /** What was written while it reconnected never went (keys typed by hand,
+   *  or a message it did not come back in time for): say so where it was
+   *  typed. */
   onInputDropped(): void;
 }
+
+/** Between a message's paste and its Enter, so the TUI takes the paste first —
+ *  late enough for a background session, whose input travels through
+ *  `claude attach` (the server's own sendToTerminal waits 80 ms). */
+const MESSAGE_ENTER_AFTER_MS = 150;
 
 export type TerminalConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed';
 
@@ -47,6 +53,9 @@ export class TerminalConnection {
   private refused = false;
   /** The server sent this socket's replay: input now reaches the PTY. */
   private attached = false;
+  /** Something written while detached was dropped and that was said (once
+   *  per drop; said again after the reattach, whose replay clears the screen). */
+  private toldDropped = false;
   /** Last known geometry, re-sent on reconnect so a resize during a drop isn't lost. */
   private pending: { cols: number; rows: number } | null = null;
 
@@ -55,13 +64,13 @@ export class TerminalConnection {
   // runtime code.
   private readonly agentId: number;
   private readonly handlers: TerminalConnectionHandlers;
-  /** Written while not attached; goes out on the next replay (heldInput.ts). */
-  private readonly held: HeldInput;
+  /** Whole messages sent while not attached: they go on the next replay. */
+  private readonly held: HeldMessages<() => string>;
 
   constructor(agentId: number, handlers: TerminalConnectionHandlers) {
     this.agentId = agentId;
     this.handlers = handlers;
-    this.held = new HeldInput(() => handlers.onInputDropped());
+    this.held = new HeldMessages(() => this.tellDropped());
   }
 
   async connect(): Promise<void> {
@@ -102,7 +111,10 @@ export class TerminalConnection {
         // Only a socket the server kept gets a replay (it refuses a page from
         // a restarted run first): now what waited may go.
         this.attached = true;
-        this.held.release((data) => this.send({ type: 'input', data }));
+        // The replay just wiped the notice written while away: say it again.
+        if (this.toldDropped) this.handlers.onInputDropped();
+        this.toldDropped = false;
+        this.sendHeld();
       } else {
         this.exited = true;
         this.held.drop();
@@ -123,7 +135,7 @@ export class TerminalConnection {
         );
         this.refused = true;
         this.handlers.onStatusChange('closed');
-        if (this.held.drop()) this.handlers.onInputDropped();
+        if (this.held.drop()) this.tellDropped();
         return;
       }
       this.scheduleReconnect();
@@ -165,17 +177,54 @@ export class TerminalConnection {
   }
 
   /**
-   * Type into the PTY. Not attached right now (reconnecting): it waits for
-   * the next attach, up to INPUT_HOLD_MS. `done` says whether it got there.
+   * Keys typed into the terminal. Not attached right now (reconnecting):
+   * they are dropped, and the terminal says so once — sent late they could
+   * answer whatever Claude asks by then (a permission, another question).
    */
-  write(data: string, done?: WriteDone): void {
-    if (this.disposed || this.exited || this.refused) {
-      done?.(false);
-    } else if (this.attached && this.send({ type: 'input', data })) {
-      done?.(true);
-    } else {
-      this.held.hold(data, done);
+  write(data: string): void {
+    if (this.attached && this.send({ type: 'input', data })) return;
+    if (!this.disposed) this.tellDropped();
+  }
+
+  private tellDropped(): void {
+    if (this.toldDropped) return;
+    this.toldDropped = true;
+    this.handlers.onInputDropped();
+  }
+
+  /**
+   * A whole message (sendToAgent): its paste, then Enter. While the terminal
+   * reconnects it waits up to INPUT_HOLD_MS for the next attach; `done` says
+   * whether it got there. `paste` is encoded at send time (bracketed or not,
+   * as the app wants it then).
+   */
+  sendMessage(paste: () => string, done: WriteDone): void {
+    if (this.disposed || this.exited || this.refused) done(false);
+    else if (this.attached) this.deliver(paste, done);
+    else this.held.hold(paste, done);
+  }
+
+  private deliver(paste: () => string, done: WriteDone): void {
+    if (!this.send({ type: 'input', data: paste() })) {
+      done(false);
+      return;
     }
+    setTimeout(() => done(this.send({ type: 'input', data: '\r' })), MESSAGE_ENTER_AFTER_MS);
+  }
+
+  /** Back attached: the held messages go one after another, each with its
+   *  own pause before Enter. */
+  private sendHeld(): void {
+    const queue = this.held.take();
+    const next = () => {
+      const held = queue.shift();
+      if (!held) return;
+      this.deliver(held.item, (sent) => {
+        held.done(sent);
+        next();
+      });
+    };
+    next();
   }
 
   resize(cols: number, rows: number): void {

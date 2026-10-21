@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ClientMessage } from '../../core/src/messages.js';
 import { pendingNote } from '../src/chat/chatText.js';
-import { HeldInput, INPUT_HOLD_MS } from '../src/terminal/heldInput.js';
 import { HELD_MAX_AGE_MS, mayHold, stillWorthSending } from '../src/transport/sendQueue.js';
 import { knownServerRun, resetServerRunForTests } from '../src/transport/serverBoot.js';
 import { WebSocketTransport } from '../src/transport/webSocketTransport.js';
@@ -129,36 +128,6 @@ describe('the office transport and server restarts', () => {
     h.last().open();
     vi.advanceTimersByTime(1_500);
     expect(h.last().sent).toEqual([{ type: 'webviewReady' }]);
-  });
-});
-
-describe('input written while a terminal reconnects', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
-  it('goes out whole and in order when it attaches again', () => {
-    const written: string[] = [];
-    const results: boolean[] = [];
-    const held = new HeldInput(() => results.push(false));
-    held.hold('Dale, seguí');
-    held.hold('\r', (sent) => results.push(sent));
-    vi.advanceTimersByTime(INPUT_HOLD_MS - 1);
-    held.release((d) => written.push(d));
-    expect(written).toEqual(['Dale, seguí', '\r']);
-    expect(results).toEqual([true]);
-  });
-
-  it('is dropped whole and said when the terminal stays away', () => {
-    const expired = vi.fn();
-    const results: boolean[] = [];
-    const held = new HeldInput(expired);
-    held.hold('Hacé el PR', (sent) => results.push(sent));
-    vi.advanceTimersByTime(INPUT_HOLD_MS);
-    expect(results).toEqual([false]);
-    expect(expired).toHaveBeenCalledOnce();
-    const written: string[] = [];
-    held.release((d) => written.push(d));
-    expect(written).toEqual([]);
   });
 });
 

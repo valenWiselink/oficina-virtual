@@ -1,22 +1,23 @@
-/** How long what you write to a terminal that is reconnecting waits for it. */
+/** How long a whole message sent to a terminal that is reconnecting waits. */
 export const INPUT_HOLD_MS = 30_000;
 
 /** Told whether a write reached the agent's terminal. */
 export type WriteDone = (sent: boolean) => void;
 
-interface Held {
-  data: string;
-  done?: WriteDone;
+export interface Held<T> {
+  item: T;
+  done: WriteDone;
 }
 
 /**
- * Input written while a terminal is not attached (reconnecting after a drop,
- * a restart, a relaunch): kept in order and sent whole once it attaches
- * again, or dropped whole when it stays away past the hold — the tail of
- * what you typed without its start would mean something else.
+ * Whole messages (sendToAgent: the chat, quick replies, a message to several)
+ * sent while a terminal is not attached — reconnecting after a drop, a
+ * restart, a relaunch: kept in order for the next attach, or dropped when it
+ * stays away past the hold. Keys typed by hand are never kept (see
+ * TerminalConnection.write): late, they could answer another question.
  */
-export class HeldInput {
-  private items: Held[] = [];
+export class HeldMessages<T> {
+  private items: Array<Held<T>> = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly onExpire: () => void;
   private readonly holdMs: number;
@@ -27,34 +28,29 @@ export class HeldInput {
     this.holdMs = holdMs;
   }
 
-  /** Keep it; the hold runs from the oldest thing kept. */
-  hold(data: string, done?: WriteDone): void {
-    this.items.push({ data, done });
+  /** Keep it; the hold runs from the oldest one kept. */
+  hold(item: T, done: WriteDone): void {
+    this.items.push({ item, done });
     this.timer ??= setTimeout(() => {
       if (this.drop()) this.onExpire();
     }, this.holdMs);
   }
 
-  /** The terminal is back: write everything, oldest first, and say it went. */
-  release(write: (data: string) => void): void {
-    const items = this.take();
-    for (const item of items) write(item.data);
-    for (const item of items) item.done?.(true);
+  /** The terminal is back: everything kept, oldest first (the caller sends
+   *  each and settles its `done`). */
+  take(): Array<Held<T>> {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    const items = this.items;
+    this.items = [];
+    return items;
   }
 
   /** It is not coming back: throw it all away and say it did not go.
    *  True when there was something to drop. */
   drop(): boolean {
     const items = this.take();
-    for (const item of items) item.done?.(false);
+    for (const held of items) held.done(false);
     return items.length > 0;
-  }
-
-  private take(): Held[] {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
-    const items = this.items;
-    this.items = [];
-    return items;
   }
 }

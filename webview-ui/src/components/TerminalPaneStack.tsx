@@ -59,6 +59,10 @@ export function TerminalPaneStack({
       paste: (data) => {
         if (shownRef.current !== null) inputs.current.get(shownRef.current)?.paste(data);
       },
+      submit: (text) => {
+        const input = shownRef.current !== null ? inputs.current.get(shownRef.current) : undefined;
+        return input ? input.submit(text) : Promise.resolve(false);
+      },
     }),
     [],
   );
