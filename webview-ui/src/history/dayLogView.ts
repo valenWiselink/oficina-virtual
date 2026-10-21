@@ -90,6 +90,8 @@ export interface DaySummary {
   tasks: number;
   turns: number;
   prs: number;
+  /** PRs merged today (distinct). */
+  merged: number;
   answered: number;
   /** Whoever finished the most (tasks and turns), when anyone did. */
   star?: { agent: string; agentId?: number; count: number };
@@ -109,6 +111,8 @@ export function daySummary(entries: DayLogEntry[]): DaySummary {
     tasks: entries.filter((e) => e.kind === 'tarea').length,
     turns: entries.filter((e) => e.kind === 'termino').length,
     prs: new Set(entries.filter((e) => e.prUrl).map((e) => e.prUrl)).size,
+    merged: new Set(entries.filter((e) => e.kind === 'mergeado').map((e) => e.prUrl ?? e.text))
+      .size,
     answered: entries.filter((e) => e.kind === 'respuesta').length,
     star,
   };

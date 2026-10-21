@@ -1,12 +1,10 @@
 import { useCalmMode } from '../effects/calmMode.js';
 import { useDayTint } from '../effects/dayTint.js';
-import { useNow } from '../hooks/useNow.js';
 import { type AgentView, BOARD_COLUMNS, byUrgency } from './agentViews.js';
 import { type BoardActions, BoardCard } from './BoardCard.js';
-import { dayNote, emptyLine, greeting, localDay, officeSummary } from './boardMood.js';
+import { BoardGreeting, EmptyColumnLine } from './BoardGreeting.js';
 import { useCardMotions } from './cardMotion.js';
-import { cleanDays, dayRecord, useOperatorName, yesterdayLine } from './officeMemory.js';
-import { streakLength } from './streak.js';
+import { dismissAbsence } from './presence.js';
 import { byLatest } from './unread.js';
 
 /**
@@ -15,8 +13,8 @@ import { byLatest } from './unread.js';
  * column as soon as its state changes. "Te necesita" puts what blocks an
  * agent first and the longest wait on top; "Terminó", the latest answer on
  * top (a dot marks the ones you have not read); the rest keep id order.
- * Above them, a greeting for the hour (and the day, when it is a special
- * one) with the office at a glance. New cards pop in, a card that starts
+ * Above them, the greeting line (BoardGreeting: the hour, the day, the
+ * office at a glance, «Volviste»). New cards pop in, a card that starts
  * needing you hops, and a column's count bumps when it changes.
  */
 export function BoardView({
@@ -30,26 +28,18 @@ export function BoardView({
   space?: string;
 }) {
   const tint = useDayTint();
-  const date = new Date(useNow());
   const columns = BOARD_COLUMNS.map((col) => ({
     ...col,
     members: views
       .filter((v) => (col.kinds as readonly string[]).includes(v.kind))
       .sort(col.id === 'needs' ? byUrgency : col.id === 'done' ? byLatest : (a, b) => a.id - b.id),
   }));
-  const hello = greeting(date.getHours());
-  const summary = officeSummary({
+  const counts = {
     needs: columns[0].members.length,
     work: columns[1].members.length,
     done: columns[2].members.length,
     idle: columns[3].members.length,
-  });
-  const day = localDay(date);
-  const name = useOperatorName();
-  const streak = streakLength(cleanDays(), day);
-  // Mornings recall yesterday, unless the day itself has something to say.
-  const note =
-    dayNote(date) ?? (date.getHours() < 12 ? yesterdayLine(dayRecord(day - 1)) : undefined);
+  };
   const calm = useCalmMode();
   const motions = useCardMotions(views);
   return (
@@ -58,33 +48,17 @@ export function BoardView({
       className="absolute inset-0 overflow-auto p-14 pt-52 pb-80 transition-colors duration-1000"
       style={{ background: `var(${tint})` }}
     >
-      <p className="m-0 mb-12 px-4 flex items-center gap-6 text-sm text-text-muted">
-        <span className="material-symbols-sharp text-base text-accent" aria-hidden="true">
-          {hello.icon}
-        </span>
-        <span>
-          <span className="font-semibold text-text">
-            {hello.text}
-            {name && `, ${name}`}
-          </span>
-          {note && <span className="text-accent font-medium"> · {note}</span>} · {summary}
-          {streak >= 2 && (
-            <span
-              className="ml-6 inline-flex items-center gap-2 text-text font-medium"
-              title="Días seguidos que cerraste sin nadie esperándote"
-            >
-              <span className="material-symbols-sharp text-xs text-accent" aria-hidden="true">
-                local_fire_department
-              </span>
-              {streak} días seguidos
-            </span>
-          )}
-        </span>
-      </p>
+      <BoardGreeting
+        counts={counts}
+        firstWaiting={columns[0].members[0]?.id}
+        onOpen={actions.onSelect}
+      />
       {space && views.length === 0 && <EmptySpace name={space} />}
       <div
         className="grid gap-10 items-start"
         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(250px, 100%), 1fr))' }}
+        // Opening a card is reading what happened: «Volviste» is done.
+        onClickCapture={(e) => (e.target as Element).closest('article') && dismissAbsence()}
       >
         {columns.map((col) => {
           const hot = col.id === 'needs' && col.members.length > 0;
@@ -115,7 +89,7 @@ export function BoardView({
                 </span>
               </header>
               {col.members.length === 0 ? (
-                <p className="m-0 px-4 pb-4 text-xs text-text-muted">{emptyLine(col.id, day)}</p>
+                <EmptyColumnLine column={col.id} />
               ) : (
                 col.members.map((v) => (
                   <BoardCard key={v.id} view={v} actions={actions} motion={motions.get(v.id)} />
