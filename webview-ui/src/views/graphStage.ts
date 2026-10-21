@@ -281,6 +281,7 @@ export class GraphStage implements PointerHost {
       selectedMember: inp.selected?.member,
       focus: this.updateHover(inp, now) ?? this.meetingFocus(inp) ?? inp.dim ?? null,
       dropTarget: this.dropOn,
+      dragged: this.held?.node.startsWith('a') ? Number(this.held.node.slice(1)) : null,
       picked: inp.picked,
     };
     this.out = drawScene(this.ctx, this.th, scene, inp.views, this.nodes, marks, inp.life);

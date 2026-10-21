@@ -96,8 +96,10 @@ export interface SceneMarks {
   /** While you hover an agent, what stays crisp (graphHover.ts focusOf);
    *  everything else fades. null: everything crisp. */
   focus?: ReadonlySet<string> | null;
-  /** While you drag an agent over another: the one that would get its answer. */
+  /** While you drag an agent over another: the one that would get its answer,
+   *  and the dragged one (drawn see-through, so the target shows). */
   dropTarget?: number | null;
+  dragged?: number | null;
   /** Agents picked together: a dashed ring each. */
   picked?: ReadonlySet<number>;
 }
@@ -388,7 +390,9 @@ function drawBodies(
     // A member picked in its meeting takes the ring.
     const selected = v.id === marks.selectedId && marks.selectedMember == null;
     const state = { selected, pulsing: at.pulsing.has(v.id), index, gaze };
-    pen.fade([`a${v.id}`], () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life));
+    const body = () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life);
+    if (v.id === marks.dragged && marks.dropTarget != null) seeThrough(pen.ctx, body);
+    else pen.fade([`a${v.id}`], body);
     if (v.id === marks.dropTarget) drawDropRing(pen, n);
     if (marks.picked?.has(v.id)) drawPickRing(pen, n);
     grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
@@ -442,6 +446,13 @@ function drawMember(
   worldTransform(ctx, f);
   const top = at.above ? n.y - n.r - 26 : n.y + n.r + 6;
   return drawChip(ctx, th, n.x, top, clip(s.label, NAME_CHARS), subColor, s.kind);
+}
+
+function seeThrough(ctx: CanvasRenderingContext2D, draw: () => void) {
+  ctx.save();
+  ctx.globalAlpha *= 0.45;
+  draw();
+  ctx.restore();
 }
 
 /** The agent a dragged one would hand its answer to: a ring and what
