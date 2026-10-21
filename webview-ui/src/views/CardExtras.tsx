@@ -29,6 +29,28 @@ export function QuickReplies({ view, onSent }: { view: AgentView; onSent: () => 
   );
 }
 
+/**
+ * Write to an agent and learn whether it really went out: the answer can
+ * take a while (its terminal may be reconnecting), so the buttons wait,
+ * then run `onSent` — or say it did not arrive.
+ */
+function useAgentSend(agentId: number) {
+  const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
+  const send = (text: string, onSent: () => void) => {
+    if (state === 'sending') return;
+    setState('sending');
+    void Promise.resolve(sendToAgent(agentId, text)).then((ok) => {
+      setState(ok ? 'idle' : 'failed');
+      if (ok) onSent();
+    });
+  };
+  return { state, send };
+}
+
+function NotArrived() {
+  return <span className="text-2xs text-danger">No le llegó: fijate en su terminal.</span>;
+}
+
 /** The options its answer offers ("1 · Solo el dropdown") and "Como
  *  recomendás": one tap writes "Andá con la 1." to the agent. `onSent`
  *  only runs when the message really went out. */
@@ -39,11 +61,12 @@ export function ChoiceReplies({
   view: AgentView;
   onSent: (text: string) => void;
 }) {
+  const { state, send } = useAgentSend(view.id);
   const buttons = choiceButtons(view.choices);
   if (buttons.length === 0) return null;
   return (
     <div
-      className="flex flex-wrap gap-4"
+      className="flex flex-wrap items-center gap-4"
       onClick={(e) => e.stopPropagation()}
       role="group"
       aria-label="Elegí una opción"
@@ -53,14 +76,14 @@ export function ChoiceReplies({
           key={b.key}
           type="button"
           title={b.title}
-          className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap border border-accent/40 bg-active-bg hover:bg-btn-hover text-text text-2xs font-semibold rounded-full px-8 py-2 cursor-pointer"
-          onClick={() => {
-            if (sendToAgent(view.id, b.text)) onSent(b.text);
-          }}
+          disabled={state === 'sending'}
+          className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap border border-accent/40 bg-active-bg hover:bg-btn-hover text-text text-2xs font-semibold rounded-full px-8 py-2 cursor-pointer disabled:cursor-default disabled:opacity-60"
+          onClick={() => send(b.text, () => onSent(b.text))}
         >
           {b.label}
         </button>
       ))}
+      {state === 'failed' && <NotArrived />}
     </div>
   );
 }
@@ -70,20 +93,25 @@ export function ChoiceReplies({
 export function TellMergedButton({ view }: { view: AgentView }) {
   const merged = view.mergedPr;
   const told = useMergeTold(merged?.turnId);
+  const { state, send } = useAgentSend(view.id);
   if (!merged || merged.told || told) return null;
   const text = `Ya mergeé el PR #${merged.number}.`;
   return (
-    <Button
-      size="sm"
-      variant="accent"
-      title={`Le escribe: «${text}»`}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (sendToAgent(view.id, text)) markMergeTold(merged.turnId);
-      }}
-    >
-      Avisarle
-    </Button>
+    <>
+      <Button
+        size="sm"
+        variant="accent"
+        title={`Le escribe: «${text}»`}
+        disabled={state === 'sending'}
+        onClick={(e) => {
+          e.stopPropagation();
+          send(text, () => markMergeTold(merged.turnId));
+        }}
+      >
+        Avisarle
+      </Button>
+      {state === 'failed' && <NotArrived />}
+    </>
   );
 }
 
