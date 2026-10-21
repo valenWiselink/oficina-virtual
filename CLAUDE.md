@@ -145,7 +145,9 @@ webview's `OfficeState` (office/engine) is kept as the character registry
 
 - `App.tsx` — composition root.
 - `views/` — `agentViews.ts` turns state into `AgentView`s (kind: needs /
-  work / meet / research / think / done / idle); `BoardView`, `BoardCard`;
+  work / meet / research / think / done / idle); `BoardView`, `BoardCard`
+  (`cardTravel.ts` slides a card to its new column with FLIP and
+  `element.animate`; never in calm mode or with reduced motion);
   the graph: `GraphView`, `useGraphCanvas` (camera, gestures, minimap),
   `graphScene` (layout, drawing), `graphDraw` (procedural Clawd), `graphSim`.
 - `components/TerminalDrawer.tsx` and friends — the docked panel: agent tabs,

@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+
 import { useCalmMode } from '../effects/calmMode.js';
 import { useDayTint } from '../effects/dayTint.js';
 import { useNow } from '../hooks/useNow.js';
@@ -5,14 +7,15 @@ import { type AgentView, BOARD_COLUMNS, byUrgency } from './agentViews.js';
 import { type BoardActions, BoardCard } from './BoardCard.js';
 import { dayNote, emptyLine, greeting, localDay, officeSummary } from './boardMood.js';
 import { useCardMotions } from './cardMotion.js';
+import { useCardTravel } from './cardTravel.js';
 import { cleanDays, dayRecord, useOperatorName, yesterdayLine } from './officeMemory.js';
 import { streakLength } from './streak.js';
 import { byLatest } from './unread.js';
 
 /**
  * Agents grouped by what they need from you: "Te necesita" first (permission
- * or a question), then working, finished and without a task. A card moves
- * column as soon as its state changes. "Te necesita" puts what blocks an
+ * or a question), then working, finished and without a task. A card travels
+ * to its column as soon as its state changes. "Te necesita" puts what blocks an
  * agent first and the longest wait on top; "Terminó", the latest answer on
  * top (a dot marks the ones you have not read); the rest keep id order.
  * Above them, a greeting for the hour (and the day, when it is a special
@@ -52,6 +55,11 @@ export function BoardView({
     dayNote(date) ?? (date.getHours() < 12 ? yesterdayLine(dayRecord(day - 1)) : undefined);
   const calm = useCalmMode();
   const motions = useCardMotions(views);
+  const grid = useRef<HTMLDivElement>(null);
+  const layout = columns.map((c) => `${c.id}:${c.members.map((v) => v.id).join(',')}`).join('|');
+  useCardTravel(grid, layout, space ?? '', calm);
+  // The amber of "Te necesita" fades in and out rather than switching at once.
+  const fade = calm ? '' : 'motion-safe:transition-colors motion-safe:duration-300';
   return (
     <div
       // pt-52: room for the workspace tabs floating over the top-left corner.
@@ -83,7 +91,8 @@ export function BoardView({
       </p>
       {space && views.length === 0 && <EmptySpace name={space} />}
       <div
-        className="grid gap-10 items-start"
+        ref={grid}
+        className="relative grid gap-10 items-start"
         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(250px, 100%), 1fr))' }}
       >
         {columns.map((col) => {
@@ -92,7 +101,7 @@ export function BoardView({
             <section
               key={col.id}
               data-tour={col.id === 'needs' ? 'te-necesita' : undefined}
-              className={`flex flex-col gap-8 p-8 rounded-xl border ${
+              className={`flex flex-col gap-8 p-8 rounded-xl border ${fade} ${
                 hot
                   ? 'border-status-permission bg-status-permission-bg'
                   : 'border-border bg-bg-thumb'
@@ -101,7 +110,7 @@ export function BoardView({
             >
               <header className="flex items-center gap-7 px-4 pt-2">
                 <h2
-                  className={`m-0 text-sm font-semibold ${hot ? 'text-status-permission-text' : 'text-text'}`}
+                  className={`m-0 text-sm font-semibold ${fade} ${hot ? 'text-status-permission-text' : 'text-text'}`}
                 >
                   {col.title}
                 </h2>
@@ -118,7 +127,10 @@ export function BoardView({
                 <p className="m-0 px-4 pb-4 text-xs text-text-muted">{emptyLine(col.id, day)}</p>
               ) : (
                 col.members.map((v) => (
-                  <BoardCard key={v.id} view={v} actions={actions} motion={motions.get(v.id)} />
+                  // The handle cardTravel.ts slides (the card itself hops and cheers).
+                  <div key={v.id} data-card-id={v.id} data-card-column={col.id}>
+                    <BoardCard view={v} actions={actions} motion={motions.get(v.id)} />
+                  </div>
                 ))
               )}
             </section>
