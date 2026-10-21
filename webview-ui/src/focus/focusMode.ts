@@ -3,13 +3,14 @@ import { useSyncExternalStore } from 'react';
 /**
  * "Modo foco": for a while (25 min by default) the office stays quiet about
  * what is not urgent — no "plin" when an agent finishes, no Windows notice
- * for a wait — while permissions still sound and notify (they block an
- * agent). What it kept quiet is counted, and told when the focus ends.
+ * for a wait, no merge or "Terminaron todos" note — while permissions still
+ * sound and notify (they block an agent). What it kept quiet is counted, and
+ * told when the focus ends.
  * Remembered in this browser, so a reload keeps the session going.
  */
 export const DEFAULT_FOCUS_MIN = 25;
 
-export type MissedKind = 'termino' | 'tetoca';
+export type MissedKind = 'termino' | 'tetoca' | 'mergeado' | 'todos';
 
 export interface FocusState {
   active: boolean;
@@ -22,7 +23,7 @@ export interface FocusState {
 }
 
 const KEY = 'oficina.foco';
-const NONE: Record<MissedKind, number> = { termino: 0, tetoca: 0 };
+const NONE: Record<MissedKind, number> = { termino: 0, tetoca: 0, mergeado: 0, todos: 0 };
 const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -104,18 +105,29 @@ export function useFocus(): FocusState {
   return useSyncExternalStore(subscribe, () => state);
 }
 
-/** "3 agentes terminaron mientras tanto": the summary line, or a calm one. */
-export function missedSummary(missed: Record<MissedKind, number>): string {
+/** "3 agentes terminaron y se mergeó 1 PR mientras tanto": the summary
+ *  line, or a calm one. "Terminaron todos" says it better than a count. */
+export function missedSummary(missed: Partial<Record<MissedKind, number>>): string {
+  const { termino = 0, tetoca = 0, mergeado = 0, todos = 0 } = missed;
   const parts: string[] = [];
-  if (missed.termino > 0) {
-    parts.push(missed.termino === 1 ? '1 agente terminó' : `${missed.termino} agentes terminaron`);
+  if (todos > 0) parts.push('terminaron todos');
+  else if (termino > 0) {
+    parts.push(termino === 1 ? '1 agente terminó' : `${termino} agentes terminaron`);
   }
-  if (missed.tetoca > 0) {
-    parts.push(missed.tetoca === 1 ? '1 te dejó algo' : `${missed.tetoca} te dejaron algo`);
+  if (tetoca > 0) parts.push(tetoca === 1 ? '1 te dejó algo' : `${tetoca} te dejaron algo`);
+  if (mergeado > 0) {
+    parts.push(mergeado === 1 ? 'se mergeó 1 PR' : `se mergearon ${mergeado} PRs`);
   }
   return parts.length === 0
     ? 'No pasó nada mientras tanto.'
-    : `${parts.join(' y ')} mientras tanto.`;
+    : `${joinWithY(parts)} mientras tanto.`;
+}
+
+/** "a, b y c". */
+export function joinWithY(parts: readonly string[]): string {
+  return parts.length <= 1
+    ? (parts[0] ?? '')
+    : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`;
 }
 
 /** Whole minutes left, for the pill: rounded (the page clock can lag a few
