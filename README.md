@@ -120,6 +120,12 @@ Ayuda).
   con su conversación). Enganchada, la terminal muestra Claude Code en pantalla
   completa. Si una carpeta todavía no es «de confianza» para Claude Code, ese
   agente arranca en el modo de antes.
+- **Tus límites de Claude** (abajo, al lado de Ajustes): cuánto usaste de la
+  sesión de 5 horas y de la semana, en ámbar desde el 80 % y en rojo desde el
+  95 %; pasando el mouse ves cuándo se reinicia cada uno. Se prende con un clic:
+  la oficina le suma a Claude Code una barra de estado (una línea abajo en la
+  terminal) que le pasa los números después de cada respuesta. Si ya tenés una
+  barra de estado propia, la oficina no la toca.
 - Cerrar la ventana **no** apaga la oficina: tus agentes siguen trabajando.
   Para apagarla: Ajustes → Apagar la oficina.
 - **Espacios**: el «+» de arriba a la izquierda crea uno; elegís qué carpetas

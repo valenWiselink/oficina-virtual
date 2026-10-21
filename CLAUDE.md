@@ -94,6 +94,17 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   rationale was upstream's ADR 0001). Never rewrite a settings shape we did not
   author; hook identity is the `/.pixel-agents/hooks/claude-hook.js` suffix of
   the command's first token, case-insensitive.
+- `usageLimits/` — the plan's usage limits (5-hour session, week). The only
+  documented source is the status line's JSON (`rate_limits`,
+  https://code.claude.com/docs/en/statusline), so on request (`setUsageLimits`)
+  the office sets `statusLine` in `~/.claude/settings.json` to
+  `~/.pixel-agents/hooks/statusline.cmd` (never over the user's own). The
+  wrapper runs `statusline.js` with the office's runtime (the exe with
+  `ELECTRON_RUN_AS_NODE`: one process), which keeps the newest numbers in
+  `~/.pixel-agents/limites.json` (later window wins; within a window, higher
+  use wins, so an idle session re-running cannot roll them back) and prints
+  them under the prompt. `UsageLimitsWatch` polls that file and sends
+  `usageLimits`. Never read the OAuth credentials for this.
 - `terminal/` — PTYs (`@lydell/node-pty`, prebuilt) streamed to the browser.
 
 Agent tracking also still loads the old office assets and layout: the

@@ -120,6 +120,7 @@ components:
         - $ref: '#/components/schemas/SettingsLoaded'
         - $ref: '#/components/schemas/BypassPermissionsUpdated'
         - $ref: '#/components/schemas/BackgroundAgentsUpdated'
+        - $ref: '#/components/schemas/UsageLimits'
         - $ref: '#/components/schemas/HooksStatus'
         - $ref: '#/components/schemas/HooksConsentRequest'
         - $ref: '#/components/schemas/ClaudeStatus'
@@ -186,6 +187,7 @@ components:
         - $ref: '#/components/schemas/SetShowAreas'
         - $ref: '#/components/schemas/SetBypassPermissions'
         - $ref: '#/components/schemas/SetBackgroundAgents'
+        - $ref: '#/components/schemas/SetUsageLimits'
         - $ref: '#/components/schemas/SetShowHostDirectories'
         - $ref: '#/components/schemas/SaveDirectory'
         - $ref: '#/components/schemas/RemoveDirectory'
@@ -974,6 +976,52 @@ components:
           const: backgroundAgentsUpdated
         enabled:
           type: boolean
+
+    UsageLimits:
+      description: |
+        The plan's usage limits (the 5-hour session and the week), as the
+        office's Claude Code status line last saw them, and whether that
+        status line is installed. Sent on the connect handshake to a
+        privileged client and broadcast when either changes. A window is
+        absent until a status line has reported it.
+      type: object
+      additionalProperties: false
+      required: [type, setup]
+      properties:
+        type:
+          const: usageLimits
+        setup:
+          $ref: '#/components/schemas/StatusLineSetup'
+        fiveHour:
+          $ref: '#/components/schemas/RateWindow'
+        sevenDay:
+          $ref: '#/components/schemas/RateWindow'
+        observedAt:
+          description: When a status line last confirmed these numbers (ms epoch).
+          type: number
+        error:
+          description: Why turning the limits on or off failed (only to the office that asked).
+          type: string
+
+    StatusLineSetup:
+      description: |
+        The status line in ~/.claude/settings.json: none (off), the office's
+        (ours), the user's own (foreign), or unreadable (unknown).
+      type: string
+      enum: [off, ours, foreign, unknown]
+
+    RateWindow:
+      description: One usage-limit window.
+      type: object
+      additionalProperties: false
+      required: [usedPercentage, resetsAt]
+      properties:
+        usedPercentage:
+          description: How much of the window is used, 0-100.
+          type: number
+        resetsAt:
+          description: When the window resets, Unix epoch seconds.
+          type: number
 
     BypassPermissionsUpdated:
       description: |
@@ -2124,6 +2172,19 @@ components:
       properties:
         type:
           const: setBackgroundAgents
+        enabled:
+          type: boolean
+
+    SetUsageLimits:
+      description: >-
+        Turn the usage limits on or off: installs or removes the office's
+        status line in ~/.claude/settings.json (never over the user's own).
+      type: object
+      additionalProperties: false
+      required: [type, enabled]
+      properties:
+        type:
+          const: setUsageLimits
         enabled:
           type: boolean
 

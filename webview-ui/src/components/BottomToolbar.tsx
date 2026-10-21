@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { Directory } from '../hooks/useExtensionMessages.js';
+import { UsageLimitsMeter } from '../limits/UsageLimitsMeter.js';
 import { isBrowserRuntime } from '../runtime.js';
 import type { OfficeView } from '../views/useOfficeView.js';
 import { LaunchDrawer } from './LaunchDrawer.js';
@@ -181,6 +182,7 @@ export function BottomToolbar({
         <Icon name="settings" />
         Ajustes
       </Button>
+      <UsageLimitsMeter />
     </div>
   );
 }

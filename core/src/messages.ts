@@ -40,6 +40,7 @@ export type ServerMessage =
   | SettingsLoaded
   | BypassPermissionsUpdated
   | BackgroundAgentsUpdated
+  | UsageLimits
   | HooksStatus
   | HooksConsentRequest
   | ClaudeStatus
@@ -102,6 +103,7 @@ export type ClientMessage =
   | SetShowAreas
   | SetBypassPermissions
   | SetBackgroundAgents
+  | SetUsageLimits
   | SetShowHostDirectories
   | SaveDirectory
   | RemoveDirectory
@@ -430,6 +432,22 @@ export interface BackgroundAgentsUpdated {
   enabled: boolean;
 }
 
+export interface UsageLimits {
+  type: 'usageLimits';
+  setup: StatusLineSetup;
+  fiveHour?: RateWindow;
+  sevenDay?: RateWindow;
+  observedAt?: number;
+  error?: string;
+}
+
+export type StatusLineSetup = 'off' | 'ours' | 'foreign' | 'unknown';
+
+export interface RateWindow {
+  usedPercentage: number;
+  resetsAt: number;
+}
+
 export interface HooksStatus {
   type: 'hooksStatus';
   providerId: string;
@@ -673,19 +691,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_347;
-  supervision?: AnonymousSchema_348;
+  effort?: AnonymousSchema_352;
+  supervision?: AnonymousSchema_353;
 }
 
-export type AnonymousSchema_347 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_352 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_348 {
-  kind: AnonymousSchema_349;
+export interface AnonymousSchema_353 {
+  kind: AnonymousSchema_354;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_349 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_354 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -734,16 +752,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_374;
+  scope: AnonymousSchema_379;
 }
 
-export interface AnonymousSchema_374 {
-  kind: AnonymousSchema_375;
+export interface AnonymousSchema_379 {
+  kind: AnonymousSchema_380;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_375 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_380 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';
@@ -849,6 +867,11 @@ export interface SetBypassPermissions {
 
 export interface SetBackgroundAgents {
   type: 'setBackgroundAgents';
+  enabled: boolean;
+}
+
+export interface SetUsageLimits {
+  type: 'setUsageLimits';
   enabled: boolean;
 }
 

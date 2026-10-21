@@ -32,6 +32,7 @@ import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { markYourTurnDone } from './identity/yourTurnStore.js';
 import { useLaunchDialog } from './launch/LaunchDialog.js';
 import type { TakenLook } from './launch/launchMemory.js';
+import { UsageLimitsMeter } from './limits/UsageLimitsMeter.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
 import { playCheerSound } from './notificationSound.js';
@@ -347,7 +348,8 @@ function App() {
   // mobile mounts it as the first page of the sliding track.
   const officeRegion = (
     <div
-      className={`relative overflow-hidden ${isMobile ? 'w-full h-full' : 'flex-1 min-w-0 min-h-0'}`}
+      // @container: the toolbar's usage meter shrinks with the office, not the window.
+      className={`@container relative overflow-hidden ${isMobile ? 'w-full h-full' : 'flex-1 min-w-0 min-h-0'}`}
     >
       {!isDebugMode ? (
         // The two views replace the pixel office (decided 2026-10-19): the
@@ -413,7 +415,7 @@ function App() {
       {/* Mobile: Settings floats top-left (the layout editor stays desktop-
             only — its tools are drag/hover-driven). */}
       {isMobile && !isDebugMode && !officeReadOnly && (
-        <div className="absolute mobile-safe-top left-8 z-20">
+        <div className="absolute mobile-safe-top left-8 z-20 flex items-center gap-6">
           <Button
             size="sm"
             variant={isSettingsOpen ? 'active' : 'default'}
@@ -422,6 +424,7 @@ function App() {
           >
             Ajustes
           </Button>
+          <UsageLimitsMeter floating />
         </div>
       )}
 
