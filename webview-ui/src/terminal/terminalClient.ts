@@ -42,6 +42,9 @@ export class TerminalConnection {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private exited = false;
+  /** Closed for good (no token, or the server refused it): writes fail now
+   *  instead of waiting for a reconnect that will not come. */
+  private refused = false;
   /** The server sent this socket's replay: input now reaches the PTY. */
   private attached = false;
   /** Last known geometry, re-sent on reconnect so a resize during a drop isn't lost. */
@@ -73,6 +76,7 @@ export class TerminalConnection {
       console.error(
         '[Webview] Terminal: this page has no server token (open the URL the CLI printed).',
       );
+      this.refused = true;
       this.handlers.onStatusChange('closed');
       this.held.drop();
       return;
@@ -117,6 +121,7 @@ export class TerminalConnection {
         console.error(
           `[Webview] Terminal: agent ${String(this.agentId)} rejected (${String(event.code)}: ${event.reason})`,
         );
+        this.refused = true;
         this.handlers.onStatusChange('closed');
         if (this.held.drop()) this.handlers.onInputDropped();
         return;
@@ -164,7 +169,7 @@ export class TerminalConnection {
    * the next attach, up to INPUT_HOLD_MS. `done` says whether it got there.
    */
   write(data: string, done?: WriteDone): void {
-    if (this.disposed || this.exited) {
+    if (this.disposed || this.exited || this.refused) {
       done?.(false);
     } else if (this.attached && this.send({ type: 'input', data })) {
       done?.(true);
