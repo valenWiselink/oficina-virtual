@@ -7,17 +7,29 @@ import { TERMINAL_FONT_FAMILY } from '../constants.js';
 import { useCalmMode } from '../effects/calmMode.js';
 import { useNow } from '../hooks/useNow.js';
 import { useOutfit } from '../identity/clawdOutfit.js';
+import { useTellMerged } from '../identity/mergeToldStore.js';
+import { seenAt } from '../identity/seenStore.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
 import { describeToolInput } from '../permissions/describeToolInput.js';
 import { useWritableAgents } from '../terminal/agentInput.js';
 import { MoveMenu } from '../workspaces/MoveMenu.js';
 import { useWorkspaces } from '../workspaces/workspaceStore.js';
 import { type AgentView, KIND_COLOR, waitedFor } from './agentViews.js';
-import { AgentNote, CompactButton, OutfitMenu, OutfitOverlay, QuickReplies } from './CardExtras.js';
+import {
+  AgentNote,
+  ChoiceReplies,
+  CompactButton,
+  OpenLinkButton,
+  OutfitMenu,
+  OutfitOverlay,
+  QuickReplies,
+  TellMergedButton,
+} from './CardExtras.js';
 import type { CardMotion } from './cardMotion.js';
 import { isImpatient, offersCompact, offersQuickReplies } from './cardRules.js';
 import { useCheer } from './celebrate.js';
 import { clawdColor } from './clawdColor.js';
+import { isUnread } from './unread.js';
 import { effortLabel, modelShortName, usageDetail } from './usageText.js';
 
 /** From this wait on, "hace N min" is set in bold (never in red: red means
@@ -75,9 +87,13 @@ export function BoardCard({
     .join(' · ');
   const ask = permissionSummary(view);
   const color = clawdColor(view.palette, view.hueShift);
+  const tellMerged = useTellMerged(view.mergedPr, writable);
+  const unread = isUnread(view, seenAt(view.key));
   const hasActions =
     (!!view.yourTurnId && !!actions.onYourTurnDone) ||
     !!view.prUrl ||
+    !!view.replyLink ||
+    tellMerged ||
     (!view.hasTerminal && !view.inClaudeApp && !!actions.onAdopt) ||
     compact;
   return (
@@ -111,6 +127,14 @@ export function BoardCard({
             <span className="text-sm font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap">
               {view.name}
             </span>
+            {unread && (
+              <span
+                className="shrink-0 w-8 h-8 rounded-full bg-accent"
+                role="img"
+                aria-label="Sin leer"
+                title="Sin leer: terminó después de la última vez que abriste su chat o su terminal"
+              />
+            )}
             {/* Only where the office could host it: a viewer without terminals
                 would see every agent marked. */}
             {!view.hasTerminal && actions.onAdopt && (
@@ -127,7 +151,7 @@ export function BoardCard({
             )}
           </span>
           <span
-            className={`text-xs flex items-center gap-5 min-w-0 ${
+            className={`text-xs flex items-start gap-5 min-w-0 ${
               view.kind === 'needs'
                 ? 'text-status-permission-text font-medium'
                 : view.kind === 'done'
@@ -136,13 +160,29 @@ export function BoardCard({
             }`}
           >
             <span
-              className="w-7 h-7 rounded-full shrink-0"
+              className="w-7 h-7 mt-4 rounded-full shrink-0"
               style={{ background: KIND_COLOR[view.kind] }}
             />
-            <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+            {/* A "te toca" in up to three lines, whole on hover; the rest on one. */}
+            <span
+              className={
+                view.yourTurn
+                  ? 'line-clamp-3 break-words'
+                  : 'overflow-hidden text-ellipsis whitespace-nowrap'
+              }
+              title={view.yourTurn ? view.statusText : undefined}
+            >
               {view.statusText}
             </span>
           </span>
+          {view.kind === 'done' && view.lastReplyHead && (
+            <span
+              className="text-2xs text-text-muted overflow-hidden text-ellipsis whitespace-nowrap"
+              title={view.lastReplyHead}
+            >
+              {view.lastReplyHead}
+            </span>
+          )}
           {view.waitingSince !== undefined && <WaitedFor since={view.waitingSince} />}
           {meta && (
             <span className="text-2xs text-text-muted overflow-hidden text-ellipsis whitespace-nowrap">
@@ -197,6 +237,12 @@ export function BoardCard({
 
       {/* What it asks of you stays in sight; the rest shows on hover. */}
       {replies && (
+        <ChoiceReplies
+          view={view}
+          onSent={() => view.yourTurnId && actions.onYourTurnDone?.(view.yourTurnId)}
+        />
+      )}
+      {replies && (
         <QuickReplies
           view={view}
           onSent={() => view.yourTurnId && actions.onYourTurnDone?.(view.yourTurnId)}
@@ -214,6 +260,7 @@ export function BoardCard({
               Hecho
             </Button>
           )}
+          {tellMerged && <TellMergedButton view={view} />}
           {view.prUrl && (
             <Button
               size="sm"
@@ -223,6 +270,7 @@ export function BoardCard({
               Abrir PR
             </Button>
           )}
+          {view.replyLink && <OpenLinkButton url={view.replyLink} />}
           {compact && <CompactButton view={view} />}
           {!view.hasTerminal && !view.inClaudeApp && actions.onAdopt && (
             <Button

@@ -1,6 +1,8 @@
 import type {
   AgentIdentity,
+  MergedAsk,
   PermissionPending,
+  ReplyChoices,
   SupervisionScope,
 } from '../../../core/src/messages.js';
 import { statusText } from '../identity/statusText.js';
@@ -112,6 +114,17 @@ export interface AgentView {
   area?: string;
   /** The pull request a "te toca" points at. */
   prUrl?: string;
+  /** "Te necesita" only: what its "te toca" asks, whole. */
+  yourTurn?: string;
+  /** Its answer's first link that is not a PR ("Abrir"), on a "te toca" or
+   *  a finished turn. */
+  replyLink?: string;
+  /** What that answer offers to pick with one tap (options, "Como
+   *  recomendás"), on a "te toca" or a finished turn. */
+  choices?: ReplyChoices;
+  /** "Terminó" because the PR its "te toca" asked for got merged; `told`:
+   *  the office already let it know. `turnId` is that answer's. */
+  mergedPr?: MergedAsk & { turnId: string };
   /** "Te necesita" only: it blocks the agent (permission or question), as
    *  opposed to something left for you at the end of a turn. */
   blocking?: boolean;
@@ -182,12 +195,45 @@ export function waitedFor(since: number, now: number): string {
   return `hace ${h} h ${min % 60} min`;
 }
 
-/** The finished answer leaves you something you have not marked done. */
+/** The finished answer leaves you something you have not marked done (nor
+ *  got done by merging the PR it asked for). */
 function pendingAsk(
   identity: AgentIdentity | undefined,
   done: (turnId: string) => boolean,
 ): boolean {
-  return !!identity?.yourTurn && !!identity.yourTurnId && !done(identity.yourTurnId);
+  return (
+    !!identity?.yourTurn &&
+    !!identity.yourTurnId &&
+    !identity.yourTurnMerged &&
+    !done(identity.yourTurnId)
+  );
+}
+
+/** What "Terminó" says: plain, or that the PR it asked for got merged. */
+function doneText(merged: MergedAsk | undefined): string {
+  if (!merged) return 'Terminó';
+  return merged.told
+    ? `Se mergeó el PR #${merged.number} y ya se enteró`
+    : `Se mergeó el PR #${merged.number}`;
+}
+
+/** The extras of a finished answer the card offers: its link, its choices
+ *  and, when its PR got merged, that PR. */
+function answerExtras(
+  identity: AgentIdentity | undefined,
+  kind: AgentKind,
+  asksYou: boolean,
+): Pick<AgentView, 'replyLink' | 'choices' | 'mergedPr'> {
+  if (!identity || (!asksYou && kind !== 'done')) return {};
+  const merged = identity.yourTurnMerged;
+  return {
+    replyLink: identity.replyLink,
+    choices: identity.replyChoices,
+    mergedPr:
+      kind === 'done' && merged && identity.yourTurnId
+        ? { ...merged, turnId: identity.yourTurnId }
+        : undefined,
+  };
 }
 
 /** A meeting member as one of its lead's subagents. */
@@ -303,7 +349,7 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
       text = `Te toca: ${identity!.yourTurn}`;
     } else if (input.finished(id)) {
       kind = 'done';
-      text = 'Terminó';
+      text = doneText(identity?.yourTurnMerged);
     } else {
       kind = 'idle';
       text = 'Sin tarea';
@@ -352,6 +398,8 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
         permission,
         yourTurnId: asksYou ? identity!.yourTurnId : undefined,
         prUrl: asksYou ? identity?.yourTurnUrl : undefined,
+        yourTurn: asksYou ? identity?.yourTurn : undefined,
+        ...answerExtras(identity, kind, asksYou),
         branch: identity?.gitBranch,
         key: identity?.sessionId ?? name,
         tasks: tasks.map((t) => ({ subject: t.subject, status: t.status })),

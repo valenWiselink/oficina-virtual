@@ -7,12 +7,14 @@ import { dayNote, emptyLine, greeting, localDay, officeSummary } from './boardMo
 import { useCardMotions } from './cardMotion.js';
 import { cleanDays, dayRecord, useOperatorName, yesterdayLine } from './officeMemory.js';
 import { streakLength } from './streak.js';
+import { byLatest } from './unread.js';
 
 /**
  * Agents grouped by what they need from you: "Te necesita" first (permission
  * or a question), then working, finished and without a task. A card moves
  * column as soon as its state changes. "Te necesita" puts what blocks an
- * agent first and the longest wait on top; the other columns keep id order.
+ * agent first and the longest wait on top; "Terminó", the latest answer on
+ * top (a dot marks the ones you have not read); the rest keep id order.
  * Above them, a greeting for the hour (and the day, when it is a special
  * one) with the office at a glance. New cards pop in, a card that starts
  * needing you hops, and a column's count bumps when it changes.
@@ -33,7 +35,7 @@ export function BoardView({
     ...col,
     members: views
       .filter((v) => (col.kinds as readonly string[]).includes(v.kind))
-      .sort(col.id === 'needs' ? byUrgency : (a, b) => a.id - b.id),
+      .sort(col.id === 'needs' ? byUrgency : col.id === 'done' ? byLatest : (a, b) => a.id - b.id),
   }));
   const hello = greeting(date.getHours());
   const summary = officeSummary({

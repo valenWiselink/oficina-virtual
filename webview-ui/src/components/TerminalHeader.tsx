@@ -56,12 +56,16 @@ export function TerminalHeader({
         className="w-7 h-7 rounded-full shrink-0"
         style={{ background: view ? KIND_COLOR[view.kind] : undefined }}
       />
+      {/* One line each in a 36 px strip: the whole text shows on hover. */}
       <div className="flex flex-col min-w-0 flex-1 leading-tight">
-        <span className="text-xs font-semibold text-text truncate">
+        <span
+          className="text-xs font-semibold text-text truncate"
+          title={view?.branch ? `${view.name} · ${view.branch}` : view?.name}
+        >
           {view?.name ?? `Agente ${agentId}`}
           {view?.branch && <span className="font-normal text-text-muted"> · {view.branch}</span>}
         </span>
-        <span className="text-2xs text-text-muted truncate">
+        <span className="text-2xs text-text-muted truncate" title={view?.statusText}>
           {view?.statusText}
           {view?.waitingSince !== undefined && ` · te espera ${waitedFor(view.waitingSince, now)}`}
         </span>
