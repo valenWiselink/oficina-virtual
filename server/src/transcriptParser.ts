@@ -17,6 +17,7 @@ import {
   startPermissionTimer,
   startWaitingTimer,
 } from './timerManager.js';
+import { tapRecord } from './transcriptTaps.js';
 import type { AgentState } from './types.js';
 
 /** Empty set used as safe fallback when no HookProvider is registered. */
@@ -116,6 +117,7 @@ export function processTranscriptLine(
   agent.linesProcessed++;
   try {
     const record = JSON.parse(line);
+    tapRecord(agentId, record);
 
     // -- Agent Teams: extract team metadata via the active provider --
     // The provider reads its CLI's own field names (Claude: record.teamName + record.agentName).

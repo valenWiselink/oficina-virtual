@@ -111,6 +111,11 @@ export const HOOK_EVENT_BUFFER_MS = 5_000;
  *  safety net: if SessionStart never arrives (e.g. the CLI crashes mid-transition),
  *  the agent is cleaned up instead of staying as a zombie with pendingClear forever. */
 export const SESSION_END_GRACE_MS = 2000;
+/** Field the hook script adds to every event: when Claude Code started the
+ *  hook (ms). Background hooks arrive out of order; hookEventOrder sorts it out. */
+export const HOOK_SPAWNED_AT_FIELD = 'oficina_hook_at';
+/** Env var the desktop app's hook relay sets for the script: its own start. */
+export const HOOK_SPAWNED_AT_ENV = 'OFICINA_HOOK_SPAWNED_AT';
 /** Large enough for a Write/Edit PermissionRequest carrying a whole file: a 413
  *  here silently drops the approval card (the terminal prompt still works). */
 export const MAX_HOOK_BODY_SIZE = 4 * 1024 * 1024; // 4MB

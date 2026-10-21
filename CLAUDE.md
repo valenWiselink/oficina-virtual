@@ -47,13 +47,23 @@ npm run pack:win       # unpacked app only: release/win-unpacked/
   user's `~/.pixel-agents/standalone-token`. Closing the window hides it to
   the tray; "Apagar la oficina" sends `oficina:shutdown` over IPC (on Windows
   a signal from the parent is a hard kill that would skip the teardown).
-- Hooks without Node: the server it starts gets `OFICINA_HOOK_EXE`, and the
-  installer writes exec-form hooks (`command` = the exe, `args` =
-  `["--oficina-hook", <script>]`, no shell). `hookRelay.ts` runs the script
-  with `ELECTRON_RUN_AS_NODE` and `stdio: 'inherit'` (Electron's main process
-  itself reads an EMPTY stdin — measured — so it must not read it).
+- Hooks: whenever a usable `node` (18+) is on PATH the installer writes
+  `node "<script>"`, as every office version does (`hookCommand.ts`): the exe
+  starts Electron twice per event (3-18 s with several agents, measured, past
+  the 5 s timeout). Only a PC without Node gets the exec form: the server the
+  app starts has `OFICINA_HOOK_EXE`, and the hooks are `command` = the exe,
+  `args` = `["--oficina-hook", <script>]`, no shell. `hookRelay.ts` runs the
+  script with `ELECTRON_RUN_AS_NODE` and `stdio: 'inherit'` (Electron's main
+  process itself reads an EMPTY stdin — measured — so it must not read it) and
+  passes its own start time (`OFICINA_HOOK_SPAWNED_AT`).
 - The uninstaller runs the exe with `--oficina-uninstall-hooks`
   (`dist/cli.js --uninstall-hooks`).
+- Updates (`updates.ts`): checked at start and every 20 min, downloaded on
+  their own, shown INSIDE the page (`webview-ui/src/updates/`, over the
+  preload's `oficinaDesktop.updates`) with the Release notes
+  (`fullChangelog`). What's new after an update stays in `estado.json` until
+  the page closes it. A page that never asks for the update state (an older
+  office the app attached to) gets the native dialog instead (`updateDialogs.ts`).
 - electron-builder's dependency walk drops `@lydell/node-pty`: it is copied by
   an explicit file set in `electron-builder.yml`. Test runs set
   USERPROFILE/HOME/APPDATA/LOCALAPPDATA to a fake home (the app, its data
@@ -100,7 +110,20 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   only after consent (`consentGate.ts` decides, `consentExecutor.ts` performs;
   rationale was upstream's ADR 0001). Never rewrite a settings shape we did not
   author; hook identity is the `/.pixel-agents/hooks/claude-hook.js` suffix of
-  the command's first token, case-insensitive.
+  the command's first token, case-insensitive. The listen-only events run
+  `async` (Claude Code does not wait for them, so they can arrive out of
+  order); Stop, PermissionRequest and SessionStart/End stay synchronous.
+  `hookEventOrder.ts` drops what newer events contradict, by `tool_use_id` /
+  `agent_id` and by the script's `oficina_hook_at` stamp.
+- `hookHealth.ts` — counts the office's own hooks that Claude Code cut or saw
+  fail (`attachment` records `hook_cancelled` / `hook_non_blocking_error` in
+  the transcripts, via `transcriptTaps.ts`); from 5 in 10 min the page says so.
+- `permissionBroker.ts` / `terminalAsks.ts` — a hold that expires (570 s) or a
+  shutdown is not an answer: the request stays "asked in the terminal" until
+  PostToolUse/Stop/SessionEnd settle it, and is saved
+  (`~/.pixel-agents/permisos-en-terminal.json`) for sessions that outlive the
+  office (background or external), taken back when the agent returns unless
+  its transcript moved on.
 - `usageLimits/` — the plan's usage limits (5-hour session, week). The only
   documented source is the status line's JSON (`rate_limits`,
   https://code.claude.com/docs/en/statusline), so on request (`setUsageLimits`)

@@ -22,6 +22,8 @@ export interface AgentState {
   backgroundAgentToolIds: Set<string>; // tool IDs for run_in_background Agent calls (stay alive until queue-operation)
   isWaiting: boolean;
   permissionSent: boolean;
+  /** Since when (ms) the permission behind permissionSent has been asked. */
+  permissionSince?: number;
   hadToolsInTurn: boolean;
   /** Directory name — the agent's origin label (only set for multi-root workspaces) */
   directoryName?: string;

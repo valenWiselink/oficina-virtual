@@ -50,6 +50,8 @@ const { areHooksInstalled, installHooks, uninstallHooks, copyHookScript } =
   await import('../src/providers/hook/claude/claudeHookInstaller.js');
 const { CLAUDE_HOOK_EVENTS, SETTINGS_BACKUP_SUFFIX, SETTINGS_TMP_SUFFIX } =
   await import('../src/providers/hook/claude/constants.js');
+const { ASYNC_HOOK_EVENTS, findNodeOnPath, isUsableNodeVersion, nodeOnPath } =
+  await import('../src/providers/hook/claude/hookCommand.js');
 
 function settingsPathFor(): string {
   return path.join(tmpBase, '.claude', 'settings.json');
@@ -937,11 +939,15 @@ describe('claudeHookInstaller', () => {
         >,
       ).flatMap((entries) => entries.flatMap((e) => e.hooks));
 
+    const realPath = process.env.PATH;
     beforeEach(() => {
       process.env.OFICINA_HOOK_EXE = exe;
+      // A PC with only the desktop app: no `node` anywhere on PATH.
+      process.env.PATH = path.join(tmpBase, 'no-node-here');
     });
     afterEach(() => {
       delete process.env.OFICINA_HOOK_EXE;
+      process.env.PATH = realPath;
     });
 
     it('writes the app exe with the hook flag and the script, and counts it as ours', async () => {
@@ -972,6 +978,15 @@ describe('claudeHookInstaller', () => {
       expect(areHooksInstalled()).toBe(false);
     });
 
+    it('switches to node, without a duplicate, once the PC has a usable node', async () => {
+      await installHooks();
+      process.env.PATH = path.dirname(process.execPath);
+      await installHooks();
+      const hooks = allHooks();
+      expect(hooks.length).toBe(CLAUDE_HOOK_EVENTS.length);
+      expect(hooks.every((h) => h.command === ourCommand() && h.args === undefined)).toBe(true);
+    });
+
     it('leaves alone an exec-form hook that is not exactly ours', async () => {
       const foreign = { type: 'command', command: exe, args: ['--other', script()] };
       fs.writeFileSync(
@@ -981,6 +996,89 @@ describe('claudeHookInstaller', () => {
       expect(areHooksInstalled()).toBe(false);
       await uninstallHooks();
       expect(allHooks()).toEqual([foreign]);
+    });
+  });
+
+  describe('node first, listen-only events in the background', () => {
+    const exe = 'C:/Program Files/Oficina virtual/Oficina virtual.exe';
+    const realPath = process.env.PATH;
+    afterEach(() => {
+      delete process.env.OFICINA_HOOK_EXE;
+      process.env.PATH = realPath;
+    });
+
+    it('uses node even inside the desktop app when node is on PATH', async () => {
+      process.env.OFICINA_HOOK_EXE = exe;
+      process.env.PATH = path.dirname(process.execPath);
+      await installHooks();
+      expect(allCommands().every((c) => c === ourCommand())).toBe(true);
+    });
+
+    it('marks only the listen-only events async', async () => {
+      await installHooks();
+      const hooks = readSettings().hooks as Record<
+        string,
+        Array<{ hooks: Array<{ async?: boolean }> }>
+      >;
+      const asyncEvents = Object.keys(hooks).filter((e) => hooks[e][0].hooks[0].async === true);
+      expect(asyncEvents.sort()).toEqual([...ASYNC_HOOK_EVENTS].sort());
+      for (const sync of ['PermissionRequest', 'Stop', 'SessionStart', 'SessionEnd']) {
+        expect(hooks[sync][0].hooks[0].async).toBeUndefined();
+      }
+    });
+
+    it('adds async to an install that predates it', async () => {
+      const settingsPath = settingsPathFor();
+      const hooks: Record<string, unknown[]> = {};
+      for (const event of CLAUDE_HOOK_EVENTS) {
+        hooks[event] = [
+          { matcher: '', hooks: [{ type: 'command', command: ourCommand(), timeout: 5 }] },
+        ];
+      }
+      fs.writeFileSync(settingsPath, JSON.stringify({ hooks }));
+      await installHooks();
+      const after = readSettings().hooks as Record<
+        string,
+        Array<{ hooks: Array<{ async?: boolean }> }>
+      >;
+      expect(after['PreToolUse']).toHaveLength(1);
+      expect(after['PreToolUse'][0].hooks[0].async).toBe(true);
+      // Our own async entries are still "only ours": no backup of them.
+      await uninstallHooks();
+      expect(fs.existsSync(settingsPath + SETTINGS_BACKUP_SUFFIX)).toBe(false);
+    });
+  });
+
+  describe('finding node on PATH', () => {
+    it('finds node.exe on a Windows PATH, quoted dirs included', () => {
+      const has = (f: string) => f === 'C:\\Program Files\\nodejs\\node.exe';
+      expect(findNodeOnPath('C:\\bin;"C:\\Program Files\\nodejs";', 'win32', has)).toBe(
+        'C:\\Program Files\\nodejs\\node.exe',
+      );
+      expect(findNodeOnPath('C:\\bin', 'win32', has)).toBeUndefined();
+      expect(findNodeOnPath(undefined, 'win32', has)).toBeUndefined();
+    });
+
+    it('does not take a node.cmd shim on Windows', () => {
+      const has = (f: string) => f.endsWith('node.cmd');
+      expect(findNodeOnPath('C:\\shims', 'win32', has)).toBeUndefined();
+    });
+
+    it('finds node on a POSIX PATH', () => {
+      const has = (f: string) => f === '/usr/local/bin/node';
+      expect(findNodeOnPath('/usr/bin:/usr/local/bin', 'linux', has)).toBe('/usr/local/bin/node');
+    });
+
+    it('accepts node 18 and later only', () => {
+      expect(isUsableNodeVersion('v24.1.0\n')).toBe(true);
+      expect(isUsableNodeVersion('v18.0.0')).toBe(true);
+      expect(isUsableNodeVersion('v16.20.2')).toBe(false);
+      expect(isUsableNodeVersion('garbage')).toBe(false);
+    });
+
+    it('checks the node this test runs on as usable', () => {
+      expect(nodeOnPath({ PATH: path.dirname(process.execPath) })).toBe(true);
+      expect(nodeOnPath({ PATH: path.join(tmpBase, 'nothing') })).toBe(false);
     });
   });
 

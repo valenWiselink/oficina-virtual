@@ -2,11 +2,12 @@ import * as path from 'path';
 
 import type { AgentEvent, HookProvider } from '../../core/src/provider.js';
 import type { AgentStateStore } from './agentStateStore.js';
+import { markAgentWaiting } from './agentWaiting.js';
 import { SESSION_END_GRACE_MS } from './constants.js';
+import { HookEventOrder } from './hookEventOrder.js';
 import type { SessionRouter } from './sessionRouter.js';
-import { getInlineTeammates, hasInlineTeammates, hasPromotedBackgroundAgent } from './teamUtils.js';
+import { getInlineTeammates, hasInlineTeammates } from './teamUtils.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
-import { notifyBackgroundAgentCompleted } from './transcriptParser.js';
 import type { AgentState } from './types.js';
 
 const debug = process.env.PIXEL_AGENTS_DEBUG !== '0';
@@ -58,6 +59,9 @@ interface SessionLifecycleCallbacks {
 
 export class HookEventHandler {
   private lifecycleCallbacks: SessionLifecycleCallbacks = {};
+  /** Background hooks arrive out of order: this drops the ones newer events
+   *  already contradicted (hookEventOrder.ts). */
+  private readonly order = new HookEventOrder();
 
   /** Highest HookProvider.protocolVersion this handler understands. */
   private static readonly SUPPORTED_PROTOCOL_VERSION = 1;
@@ -120,6 +124,8 @@ export class HookEventHandler {
 
   /** Remove an agent's session mapping (called on agent removal/terminal close). */
   unregisterAgent(sessionId: string): void {
+    const agentId = this.sessionRouter.resolve(sessionId);
+    if (agentId !== undefined) this.order.forget(agentId);
     this.sessionRouter.unregister(sessionId);
   }
 
@@ -316,6 +322,10 @@ export class HookEventHandler {
     if (!agent) return;
 
     agent.hookDelivered = true;
+    if (!this.order.admit(agentId, event)) {
+      if (debug) console.log(`[Pixel Agents] Hook: Agent ${agentId} - stale ${eventName} dropped`);
+      return;
+    }
     if (debug)
       console.log(
         `[Pixel Agents] Hook: Agent ${agentId} - ${eventName} (session=${event.session_id.slice(0, 8)}...)`,
@@ -328,12 +338,17 @@ export class HookEventHandler {
       case 'sessionEnd':
         return this.handleSessionEnd(normEvent, agent, agentId);
       case 'toolStart':
-        return this.handlePreToolUse(normEvent, agent, agentId);
+        return this.handlePreToolUse(
+          normEvent,
+          agent,
+          agentId,
+          agent.permissionSent && this.order.startedBeforePermission(agentId, event),
+        );
       case 'toolEnd':
         // Both PostToolUse and PostToolUseFailure normalize to toolEnd. Distinguishing
         // them inside handlers would require extra info; the existing behavior was
         // identical for both (agentToolDone + clear currentHookToolId), so one branch suffices.
-        return this.handlePostToolUse(agent, agentId);
+        return this.handlePostToolUse(agent, agentId, normEvent.toolId);
       case 'subagentStart':
         return this.provider.team ? this.handleSubagentStart(event, agent, agentId) : undefined;
       case 'subagentEnd':
@@ -412,11 +427,14 @@ export class HookEventHandler {
     normEvent: Extract<AgentEvent, { kind: 'toolStart' }>,
     agent: AgentState,
     agentId: number,
+    /** This call is the one the pending permission asks about (its start
+     *  arrived late): the request still stands. */
+    keepsPermission = false,
   ): void {
     const toolName = normEvent.toolName;
     const toolInput = (normEvent.input as Record<string, unknown> | undefined) ?? {};
     const status = this.provider.formatToolStatus(toolName, toolInput);
-    const hookToolId = `hook-${Date.now()}`;
+    const hookToolId = normEvent.toolId;
 
     // Track for PostToolUse/SubagentStart correlation (always, even if suppressed below).
     // currentHookIsTeammateSpawn is the authoritative teammate-vs-subagent discriminator.
@@ -434,7 +452,7 @@ export class HookEventHandler {
     // Cancel waiting, mark active
     cancelWaitingTimer(agentId, this.waitingTimers);
     agent.isWaiting = false;
-    agent.permissionSent = false;
+    agent.permissionSent = keepsPermission;
     agent.hadToolsInTurn = true;
 
     // Send tool start + active state to webview (instant, no 500ms JSONL delay).
@@ -449,6 +467,7 @@ export class HookEventHandler {
         toolId: hookToolId,
         status,
         toolName,
+        ...(keepsPermission ? { permissionActive: true } : {}),
       });
     }
     this.agents.broadcast({
@@ -463,16 +482,16 @@ export class HookEventHandler {
    * Stop hook handles the idle transition. This is here for completeness and
    * to serve as a confirmation event for pending external sessions.
    */
-  private handlePostToolUse(agent: AgentState, agentId: number): void {
-    if (agent.currentHookToolId) {
-      // Suppress tool display when lead has inline teammates (see handlePreToolUse)
-      if (!hasInlineTeammates(agentId, this.agents)) {
-        this.agents.broadcast({
-          type: 'agentToolDone',
-          id: agentId,
-          toolId: agent.currentHookToolId,
-        });
-      }
+  private handlePostToolUse(agent: AgentState, agentId: number, toolId: string): void {
+    // The call's own id when the payload names it ('current' otherwise): with
+    // parallel calls and background hooks, the latest start is not this one.
+    const doneId = toolId !== 'current' ? toolId : agent.currentHookToolId;
+    if (!doneId) return;
+    // Suppress tool display when lead has inline teammates (see handlePreToolUse)
+    if (!hasInlineTeammates(agentId, this.agents)) {
+      this.agents.broadcast({ type: 'agentToolDone', id: agentId, toolId: doneId });
+    }
+    if (agent.currentHookToolId === doneId) {
       agent.currentHookToolId = undefined;
       agent.currentHookToolName = undefined;
     }
@@ -609,20 +628,26 @@ export class HookEventHandler {
     // When lead has inline teammates, route permission to the teammates instead.
     // The hook fires on the lead's session_id but the permission is for a teammate.
     const inlineTeammates = getInlineTeammates(agentId, this.agents);
+    // `since`: how long it has waited, also once the office stops holding it.
+    const ask = (a: AgentState) => {
+      a.permissionSince = (a.permissionSent && a.permissionSince) || Date.now();
+      a.permissionSent = true;
+    };
     if (inlineTeammates.length > 0) {
       for (const [id, a] of inlineTeammates) {
         cancelPermissionTimer(id, this.permissionTimers);
-        a.permissionSent = true;
-        this.agents.broadcast({ type: 'agentToolPermission', id });
+        ask(a);
+        this.agents.broadcast({ type: 'agentToolPermission', id, since: a.permissionSince });
       }
       return;
     }
 
     cancelPermissionTimer(agentId, this.permissionTimers);
-    agent.permissionSent = true;
+    ask(agent);
     this.agents.broadcast({
       type: 'agentToolPermission',
       id: agentId,
+      since: agent.permissionSince,
     });
     // Also notify any sub-agents with active tools
     for (const parentToolId of agent.activeSubagentToolNames.keys()) {
@@ -713,66 +738,19 @@ export class HookEventHandler {
     }
   }
 
-  /**
-   * Transition agent to waiting state. Clears foreground tools (preserves background
-   * agents), cancels timers, and notifies the webview. Same logic as the turn_duration
-   * handler in transcriptParser.ts.
-   */
+  /** Transition agent to waiting state (agentWaiting.ts). */
   private markAgentWaiting(agent: AgentState, agentId: number, awaitingInput = false): void {
-    cancelWaitingTimer(agentId, this.waitingTimers);
-    cancelPermissionTimer(agentId, this.permissionTimers);
-
-    // Clear foreground tools, preserve background agents (same logic as turn_duration handler).
-    // ALWAYS send agentToolsClear at turn end -- even when activeToolIds is empty by now
-    // (because tool_results already processed and removed them). Without this, stale
-    // sub-agent characters and permission bubbles from the turn would never clear.
-    const parentTools = this.getSubagentToolSet();
-    for (const toolId of [...agent.activeToolIds]) {
-      if (agent.backgroundAgentToolIds.has(toolId)) continue;
-      agent.activeToolIds.delete(toolId);
-      agent.activeToolStatuses.delete(toolId);
-      const toolName = agent.activeToolNames.get(toolId);
-      agent.activeToolNames.delete(toolId);
-      if (toolName && parentTools.has(toolName)) {
-        agent.activeSubagentToolIds.delete(toolId);
-        agent.activeSubagentToolNames.delete(toolId);
-        // A foreground spawn dropped at Stop without a tool_result: stop its
-        // shadow watch too, or it lingers until sessionEnd.
-        notifyBackgroundAgentCompleted(agentId, toolId);
-      }
-    }
-    this.agents.broadcast({ type: 'agentToolsClear', id: agentId });
-    // Re-send background agent tools to restore them after the clear.
-    // toolName + runInBackground are REQUIRED: without them the webview can't
-    // recognize the re-sent tool as a subagent spawn and never recreates the
-    // Subtask sub-character (extractToolName("Subtask: ...") is not a tool).
-    // Skip tools whose background agent was promoted to its own character.
-    for (const toolId of agent.backgroundAgentToolIds) {
-      if (hasPromotedBackgroundAgent(agentId, toolId, this.agents)) continue;
-      const status = agent.activeToolStatuses.get(toolId);
-      if (status) {
-        this.agents.broadcast({
-          type: 'agentToolStart',
-          id: agentId,
-          toolId,
-          status,
-          toolName: agent.activeToolNames.get(toolId),
-          runInBackground: true,
-          isTeammateSpawn: agent.teammateSpawnToolIds?.has(toolId) || undefined,
-        });
-      }
-    }
-
-    agent.isWaiting = true;
-    agent.permissionSent = false;
-    agent.hadToolsInTurn = false;
-    agent.currentHookToolId = undefined;
-    this.agents.broadcast({
-      type: 'agentStatus',
-      id: agentId,
-      status: 'waiting',
+    markAgentWaiting(
+      {
+        agents: this.agents,
+        waitingTimers: this.waitingTimers,
+        permissionTimers: this.permissionTimers,
+        subagentTools: this.getSubagentToolSet(),
+      },
+      agent,
+      agentId,
       awaitingInput,
-    });
+    );
   }
 
   /** Clean up timers and maps. Called when the extension disposes. */

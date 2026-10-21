@@ -1,9 +1,17 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /** What a terminal slot shows: the conversation as a chat, or the raw terminal. */
 export type PaneMode = 'chat' | 'terminal';
 
 const KEY = 'oficina.vistaTerminal';
+const SHOW_TERMINAL_EVENT = 'oficina:mostrar-terminal';
+
+/** Show this agent's raw terminal rather than its chat — where a prompt the
+ *  office cannot answer (a permission it no longer holds) is answered. A
+ *  one-off: the remembered default stays as it was. */
+export function showTerminalOf(agentId: number): void {
+  window.dispatchEvent(new CustomEvent<number>(SHOW_TERMINAL_EVENT, { detail: agentId }));
+}
 
 function recallDefault(): PaneMode {
   try {
@@ -25,6 +33,16 @@ export function usePaneModes(): [
 ] {
   const [byAgent, setByAgent] = useState<Record<number, PaneMode>>({});
   const [fallback, setFallback] = useState<PaneMode>(recallDefault);
+  useEffect(() => {
+    const onShow = (e: Event) => {
+      const agentId = (e as CustomEvent<number>).detail;
+      setByAgent((prev) =>
+        prev[agentId] === 'terminal' ? prev : { ...prev, [agentId]: 'terminal' },
+      );
+    };
+    window.addEventListener(SHOW_TERMINAL_EVENT, onShow);
+    return () => window.removeEventListener(SHOW_TERMINAL_EVENT, onShow);
+  }, []);
   const modeOf = useCallback(
     (agentId: number, fresh = false) => byAgent[agentId] ?? (fresh ? 'terminal' : fallback),
     [byAgent, fallback],

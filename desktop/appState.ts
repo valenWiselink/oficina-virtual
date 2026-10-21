@@ -2,12 +2,20 @@ import { app, type BrowserWindow, type Rectangle, screen } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import type { ReleaseNote, WhatsNew } from './updateNotes.js';
+
 /** Small things the app remembers between runs (%APPDATA%\Oficina virtual). */
 interface AppState {
   bounds?: Rectangle;
   maximized?: boolean;
   /** The "it keeps running in the tray" balloon was shown once. */
   trayHintShown?: boolean;
+  /** The version that ran last (what's new after an update). */
+  lastVersion?: string;
+  /** The downloaded update's notes, kept for the first start after it. */
+  pendingUpdate?: { version: string; notes: ReleaseNote[] };
+  /** What's new, until the page says it was shown and closed. */
+  whatsNew?: WhatsNew;
 }
 
 const file = () => path.join(app.getPath('userData'), 'estado.json');

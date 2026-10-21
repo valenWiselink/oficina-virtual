@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 
 import { useEditAgent } from './agents/useEditAgent.js';
 import { useSupervisionSync } from './agents/useSupervisionSync.js';
+import { showTerminalOf } from './chat/chatMode.js';
 import { BroadcastDialog } from './command/BroadcastDialog.js';
 import { CommandPalette } from './command/CommandPalette.js';
 import { useCommandPaletteShortcut } from './command/usePaletteShortcut.js';
@@ -11,6 +12,7 @@ import { CloseAgentConfirm } from './components/CloseAgentConfirm.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
 import { DirectoryModal } from './components/DirectoryModal.js';
+import { HookHealthNotice } from './components/HookHealthNotice.js';
 import { LaunchFailedNotice } from './components/LaunchFailedNotice.js';
 import { LoadingScreen } from './components/LoadingScreen.js';
 import { SettingsModal } from './components/SettingsModal.js';
@@ -43,6 +45,7 @@ import { PermissionCards } from './permissions/PermissionCards.js';
 import { usePermissionCards } from './permissions/usePermissionCards.js';
 import { isBrowserRuntime } from './runtime.js';
 import { transport } from './transport/index.js';
+import { UpdateCorner } from './updates/UpdateCorner.js';
 import type { AgentKind } from './views/agentViews.js';
 import type { BoardActions } from './views/BoardCard.js';
 import { BoardView } from './views/BoardView.js';
@@ -348,6 +351,10 @@ function App() {
         onHandOff: requestHandOff,
         onClose: handleCloseAgent,
         onEdit: requestEdit,
+        onOpenTerminal: (id) => {
+          showTerminalOf(id);
+          handleClick(id);
+        },
         onYourTurnDone: (turnId) => {
           markYourTurnDone(turnId);
           const done = agentViews.find((v) => v.yourTurnId === turnId);
@@ -398,6 +405,8 @@ function App() {
       )}
       {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
       {!isMobile && <FocusBanner />}
+      {/* The desktop app's updates (nothing in a browser). */}
+      {!isMobile && <UpdateCorner views={agentViews} permissions={permissionCards.cards} />}
 
       {officeReadOnly && (
         <div className="absolute mobile-safe-top left-1/2 -translate-x-1/2 z-10 text-sm text-text-muted pointer-events-none select-none whitespace-nowrap">
@@ -442,6 +451,14 @@ function App() {
       )}
 
       <ConnectionIndicator />
+      {/* Claude Code's hooks failing to reach us: say so, offer to reinstall. */}
+      <HookHealthNotice
+        onReinstall={
+          officeReadOnly || !('claude' in hooksInstalled)
+            ? undefined
+            : () => transport.send({ type: 'setHooksEnabled', providerId: 'claude', enabled: true })
+        }
+      />
     </div>
   );
 

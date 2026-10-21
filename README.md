@@ -55,9 +55,13 @@ entrá una vez con `claude` para iniciar sesión.
 
 El programa busca versiones nuevas en los
 [Releases de este repo](https://github.com/valenWiselink/oficina-virtual/releases)
-al abrirse y desde la bandeja (**Buscar actualizaciones**). Si hay una, la baja
-sola y te ofrece instalarla; tus agentes se retoman solos. Para eso el repo
-tiene que ser público.
+al abrirse, cada 20 minutos y cuando tocás **Buscar actualizaciones** (en
+Ajustes → Ayuda o en la bandeja). Si hay una, la baja sola y te avisa dentro de
+la oficina, arriba a la derecha, con lo que trae: **Instalar ahora** o **Cuando
+nadie esté trabajando**. La primera vez que abre la versión nueva te cuenta qué
+trae. Tus agentes se retoman solos. Para eso el repo tiene que ser público, y
+las notas de cada Release son lo que ve quien la usa: escribilas para esa
+persona.
 
 Para publicar una versión nueva:
 

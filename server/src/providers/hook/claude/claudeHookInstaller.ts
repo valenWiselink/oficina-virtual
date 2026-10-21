@@ -3,11 +3,10 @@ import * as os from 'os';
 import * as path from 'path';
 import { isDeepStrictEqual } from 'util';
 
-import { HOOK_SCRIPTS_DIR, PERMISSION_HOOK_TIMEOUT_SEC } from '../../../constants.js';
+import { HOOK_SCRIPTS_DIR } from '../../../constants.js';
 import {
   CLAUDE_HOOK_EVENTS,
   CLAUDE_HOOK_SCRIPT_NAME,
-  HOOK_EXE_ENV,
   HOOK_EXEC_FLAG,
   LEGACY_HOOK_SCRIPT_NAME,
   SETTINGS_BACKUP_SUFFIX,
@@ -16,18 +15,7 @@ import {
   SETTINGS_MUTATE_RETRY_DELAY_MS,
   SETTINGS_TMP_SUFFIX,
 } from './constants.js';
-
-/** A single hook entry in Claude Code's ~/.claude/settings.json hooks config. */
-interface ClaudeHookEntry {
-  matcher: string;
-  hooks: Array<{
-    type: string;
-    command: string;
-    /** Exec form (no shell): `command` is spawned directly with these. */
-    args?: string[];
-    timeout?: number;
-  }>;
-}
+import { type ClaudeHookEntry, getHookScriptPath, makeHookEntry } from './hookCommand.js';
 
 /** Partial shape of ~/.claude/settings.json (only the hooks field is relevant). */
 export interface ClaudeSettings {
@@ -38,11 +26,6 @@ export interface ClaudeSettings {
 /** Returns the absolute path to ~/.claude/settings.json. */
 function getClaudeSettingsPath(): string {
   return path.join(os.homedir(), '.claude', 'settings.json');
-}
-
-/** Returns the destination path for the hook script (~/.pixel-agents/hooks/claude-hook.js). */
-function getHookScriptPath(): string {
-  return path.join(os.homedir(), HOOK_SCRIPTS_DIR, CLAUDE_HOOK_SCRIPT_NAME);
 }
 
 /** Surfaced to the user when settings.json exists but cannot be parsed. The
@@ -455,11 +438,12 @@ function isOurExecHook(args: unknown): boolean {
  *  second hand-written description of it. A hand-rolled twin drifts: the next
  *  field added to the entries we write would make this predicate read our own
  *  fresh output as user content, silently reviving the backup-of-our-own-file
- *  bug for every install after it. Two fields are exempt from the comparison
- *  because PAST installs legitimately differ in them: `command` (the script
- *  path moves between homes and versions — identity is isOurHook, the same
- *  suffix rule used everywhere else) and `timeout`. Deviation in anything
- *  else, present or added later, reads as the user's. */
+ *  bug for every install after it. Some fields are exempt from the comparison
+ *  because PAST installs or events legitimately differ in them: `command` and
+ *  `args` (the runtime and script path move between homes and versions —
+ *  identity is isOurHook, the same suffix rule used everywhere else),
+ *  `timeout` and `async`. Deviation in anything else, present or added later,
+ *  reads as the user's. */
 function settingsHoldOnlyOurHooks(settings: ClaudeSettings): boolean {
   if (Object.keys(settings).some((key) => key !== 'hooks')) return false;
   if (!('hooks' in settings)) return true;
@@ -494,8 +478,8 @@ function settingsHoldOnlyOurHooks(settings: ClaudeSettings): boolean {
         if (!isOurHook(hook)) return false;
         for (const [key, value] of Object.entries(hook)) {
           // command/args: the runtime (node or the desktop app) and the script
-          // path vary across installs; timeout too.
-          if (key === 'command' || key === 'args' || key === 'timeout') continue;
+          // path vary across installs; timeout and async vary by event.
+          if (['command', 'args', 'timeout', 'async'].includes(key)) continue;
           if (!matchesWriter(referenceHookFields, key, value)) return false;
         }
       }
@@ -542,38 +526,6 @@ function withoutOurEntries(entries: ClaudeHookEntry[]): ClaudeHookEntry[] | null
   // Length alone misses a slimmed shared entry (entry kept, our command removed
   // from inside it) — compare content.
   return JSON.stringify(filtered) === JSON.stringify(entries) ? null : filtered;
-}
-
-/**
- * How Claude Code runs the hook script. From the CLI or a browser office:
- * `node "<script>"` through Claude Code's shell. From the desktop app
- * (HOOK_EXE_ENV set to its exe): exec form, no shell and no Node needed —
- * the app runs the script with its own runtime when given HOOK_EXEC_FLAG.
- * A PC with only the desktop app installed has no `node` to call.
- */
-export function makeHookCommand(hookExe: string | undefined = process.env[HOOK_EXE_ENV]): {
-  command: string;
-  args?: string[];
-} {
-  const scriptPath = getHookScriptPath();
-  if (hookExe) return { command: hookExe, args: [HOOK_EXEC_FLAG, scriptPath] };
-  return { command: `node "${scriptPath}"` };
-}
-
-/** Create a hook entry object for Claude's settings.json. Matcher is empty (catch-all).
- *  PermissionRequest gets a long timeout: its hook waits for a decision from the
- *  office while the terminal prompt stays answerable in parallel. */
-function makeHookEntry(event?: string): ClaudeHookEntry {
-  return {
-    matcher: '',
-    hooks: [
-      {
-        type: 'command',
-        ...makeHookCommand(),
-        timeout: event === 'PermissionRequest' ? PERMISSION_HOOK_TIMEOUT_SEC : 5,
-      },
-    ],
-  };
 }
 
 /**

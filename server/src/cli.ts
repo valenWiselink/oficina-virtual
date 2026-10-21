@@ -33,8 +33,8 @@ import {
 } from './constants.js';
 import { DayLog } from './dayLog.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
-import { PermissionBroker } from './permissionBroker.js';
-import { pendingPermissionMessage, resolvedPermissionMessages } from './permissionMessages.js';
+import { HookHealth, setCurrentHookHealth } from './hookHealth.js';
+import { createPermissionBroker } from './permissionWiring.js';
 import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/claudeHookInstaller.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { watchAgentPrs } from './prWatchWiring.js';
@@ -47,6 +47,7 @@ import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
 import { setStateGuessingAllowed } from './timerManager.js';
 import { setRecapCallback } from './transcriptParser.js';
+import { setRecordTap } from './transcriptTaps.js';
 import { uninstallStatusLine } from './usageLimits/statusLineInstaller.js';
 import { UsageLimitsWatch } from './usageLimits/usageLimitsWatch.js';
 import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
@@ -309,16 +310,13 @@ async function main(): Promise<void> {
 
     // Approval cards: PermissionRequest hooks wait here for a decision from the
     // office while the terminal prompt stays answerable in parallel.
-    const permissionBroker = new PermissionBroker({
-      onPending: (request) => store.broadcast(pendingPermissionMessage(request, store)),
-      // Runs after the request left the broker, so pending() is what remains.
-      onResolved: (request, outcome) => {
-        const remaining = permissionBroker.pending();
-        for (const message of resolvedPermissionMessages(request, outcome, store, remaining)) {
-          store.broadcast(message);
-        }
-      },
-    });
+    const { broker: permissionBroker, asks: terminalAsks } = createPermissionBroker(store);
+
+    // Whether Claude Code's hooks reach us: the transcripts list every one of
+    // ours it cut or saw fail; past a threshold the office says so.
+    const hookHealth = new HookHealth((status) => store.broadcast({ ...status }));
+    setCurrentHookHealth(hookHealth);
+    setRecordTap((_agentId, record) => hookHealth.observe(record));
 
     // onSetHooksEnabled side effect: install/uninstall the named provider's
     // hooks when the user toggles in the UI (or answers the consent ask).
@@ -515,8 +513,10 @@ async function main(): Promise<void> {
       // Kill child terminals before the runtime tears their agents down, and
       // wait for them: exiting now would cancel the SIGKILL escalation and
       // leave a child that ignores SIGHUP orphaned on a dead server.
-      // The terminals die here, their sessions do not: keep them resumable.
+      // The terminals die here, their sessions do not: keep them resumable,
+      // and keep what the surviving ones still ask in their terminal.
       runtime.resumableSessions?.freeze();
+      terminalAsks.freeze();
       await ptyManager.disposeAll();
       permissionBroker.dispose();
       runtime.dispose();

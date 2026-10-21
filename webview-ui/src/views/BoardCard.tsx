@@ -47,6 +47,9 @@ export interface BoardActions {
   onEdit?: (id: number) => void;
   /** You handled what its finished turn left you ("te toca"). */
   onYourTurnDone?: (turnId: string) => void;
+  /** Show its terminal (not its chat): where a permission the office no
+   *  longer holds is answered. */
+  onOpenTerminal?: (id: number) => void;
 }
 
 /** First line of what a held permission would run, for the inline request. */
@@ -89,12 +92,14 @@ export function BoardCard({
   const color = clawdColor(view.palette, view.hueShift);
   const tellMerged = useTellMerged(view.mergedPr, writable);
   const unread = isUnread(view, seenAt(view.key));
+  const opensTerminal = !!view.asksInTerminal && view.hasTerminal && !!actions.onOpenTerminal;
   const hasActions =
     (!!view.yourTurnId && !!actions.onYourTurnDone) ||
     !!view.prUrl ||
     !!view.replyLink ||
     tellMerged ||
     (!view.hasTerminal && !view.inClaudeApp && !!actions.onAdopt) ||
+    opensTerminal ||
     compact;
   return (
     <article
@@ -250,6 +255,16 @@ export function BoardCard({
       )}
       {hasActions && (
         <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+          {opensTerminal && (
+            <Button
+              size="sm"
+              variant="accent"
+              title="La oficina ya no puede contestarlo: contestale en su terminal"
+              onClick={() => actions.onOpenTerminal!(view.id)}
+            >
+              Abrir terminal
+            </Button>
+          )}
           {view.yourTurnId && actions.onYourTurnDone && (
             <Button
               size="sm"
