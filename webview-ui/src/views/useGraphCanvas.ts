@@ -97,5 +97,7 @@ export function useGraphCanvas(
     panBy: (dx, dy) => api.current?.panBy(dx, dy),
     screenOf: (id, member) => api.current?.screenOf(id, member) ?? null,
     pillOf: (id) => api.current?.pillOf(id) ?? null,
+    focusOn: (id, member) => api.current?.focusOn(id, member),
+    follow: (id) => api.current?.follow(id),
   };
 }

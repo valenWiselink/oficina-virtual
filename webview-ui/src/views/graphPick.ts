@@ -36,3 +36,15 @@ export function stepIn(
 export function pillActs(view: AgentView | undefined): view is AgentView {
   return !!view && view.kind === 'needs' && (!!view.permission || !!view.yourTurnId);
 }
+
+/** What opening an agent selects on the graph: the agent itself, or, for a
+ *  meeting member (a teammate with a tab of its own), its lead with the
+ *  member marked. */
+export function selectionOf(
+  views: readonly AgentView[],
+  agentId: number,
+): { id: number; member?: number } {
+  if (views.some((v) => v.id === agentId)) return { id: agentId };
+  const lead = views.find((v) => v.subagents.some((s) => s.id === agentId));
+  return lead ? { id: lead.id, member: agentId } : { id: agentId };
+}

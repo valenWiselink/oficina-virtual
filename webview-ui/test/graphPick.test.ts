@@ -4,7 +4,7 @@ import type { AgentView } from '../src/views/agentViews.js';
 import { ClawdLife } from '../src/views/clawdLife.js';
 import { TRICK_CLICKS } from '../src/views/clawdTricks.js';
 import { poseFor } from '../src/views/graphDraw.js';
-import { mostUrgent, pillActs, stepIn, tabOrder } from '../src/views/graphPick.js';
+import { mostUrgent, pillActs, selectionOf, stepIn, tabOrder } from '../src/views/graphPick.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
   id,
@@ -104,5 +104,15 @@ describe('pillActs', () => {
     expect(pillActs(view(1, { kind: 'needs', asksInTerminal: true }))).toBe(false);
     expect(pillActs(view(1, { kind: 'work', permission }))).toBe(false);
     expect(pillActs(undefined)).toBe(false);
+  });
+});
+
+describe('selectionOf (opened elsewhere)', () => {
+  it('the agent itself, or a member inside its lead', () => {
+    const member = { id: 9, label: 'Revisor', kind: 'work' as const, statusText: '' };
+    const views = [view(1, { subagents: [member] }), view(2)];
+    expect(selectionOf(views, 2)).toEqual({ id: 2 });
+    expect(selectionOf(views, 9)).toEqual({ id: 1, member: 9 });
+    expect(selectionOf(views, 42)).toEqual({ id: 42 });
   });
 });

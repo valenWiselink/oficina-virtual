@@ -40,6 +40,8 @@ const TOOLBAR_CLEARANCE_PX = 64;
 /** A double click comes this close (at least). */
 const DOUBLE_CLICK_ZOOM = 1.8;
 const VOS_ZOOM = 1.5;
+/** How long focusOn waits for an agent that is not drawn yet. */
+const FOCUS_WAIT_MS = 2000;
 
 /** An agent picked on the graph, or one member of its meeting. */
 export interface GraphSelection {
@@ -70,6 +72,8 @@ export interface GraphInputs {
   /** The mouse came onto an agent's request pill, or a click hit it: it
    *  grows into its actions. */
   onPill?: (id: number, how: 'hover' | 'click') => void;
+  /** The camera started (id) or stopped (null) going along with an agent. */
+  onFollow?: (id: number | null) => void;
 }
 
 /** What the page can ask of the graph (buttons, keys, overlays). */
@@ -82,6 +86,12 @@ export interface GraphControls {
   screenOf: (id: number, member?: number) => { x: number; y: number; r: number } | null;
   /** Where an agent's request pill (on its line to "Vos") is on screen. */
   pillOf: (id: number) => Box | null;
+  /** Bring an agent (or member) into view if it is out of frame; one that is
+   *  not drawn yet (a workspace switching) is waited for a moment. */
+  focusOn: (id: number, member?: number) => void;
+  /** Go along with an agent ("Seguir"); null stops. Moving the view by hand
+   *  stops it too. */
+  follow: (id: number | null) => void;
 }
 
 /** Each workspace's zoom and position, kept while the office is open (also
@@ -96,7 +106,7 @@ const nodeKey = (g: Grab) => (g.member !== undefined ? `s${g.member}` : `a${g.id
  * lifetime and feeds it DOM events.
  */
 export class GraphStage implements PointerHost {
-  readonly rig = new CameraRig();
+  readonly rig = new CameraRig((id) => this.inputs().onFollow?.(id));
   readonly pointers = new PointerTracker(this);
   private readonly wheelStream = new WheelStream();
   private readonly nodes = new Map<string, SimNode>();
@@ -120,6 +130,8 @@ export class GraphStage implements PointerHost {
   private readonly dwell = new HoverDwell();
   private hover: HoverTarget | null = null;
   private pillHover: number | null = null;
+  /** focusOn's node, until it is drawn (or the wait runs out). */
+  private pendingFocus: { key: string; until: number } | null = null;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -203,6 +215,7 @@ export class GraphStage implements PointerHost {
     this.sync(inp);
     layout(this.nodes, inp.views);
     if (this.held) this.holdNode(this.held);
+    this.focusPending(now);
     // What you hold pulls nobody: dragging a member leaves its lead in place.
     const held = this.held?.node;
     const edges = edgesOf(inp.views).filter((e) => e.a !== held && e.b !== held);
@@ -241,6 +254,14 @@ export class GraphStage implements PointerHost {
     );
     if (this.minimap) this.lastMinimap = this.minimap;
     inp.onFrame?.();
+  }
+
+  private focusPending(now: number): void {
+    const want = this.pendingFocus;
+    if (!want) return;
+    const n = this.nodes.get(want.key);
+    if (n) this.rig.reveal(n, n.r * this.rig.cam.zoom);
+    if (n || now > want.until) this.pendingFocus = null;
   }
 
   /** The mouse moved over the canvas without a button (null: it left). */
@@ -371,6 +392,13 @@ export class GraphStage implements PointerHost {
       zoomBy: (factor) => this.rig.zoomBy(factor),
       fitAll: () => this.rig.fit(),
       panBy: (dx, dy) => this.pan(dx, dy),
+      focusOn: (id, member) => {
+        // Opening someone else ends going along with another.
+        if (this.rig.following !== id) this.rig.follow(null);
+        const key = member !== undefined ? `s${member}` : `a${id}`;
+        this.pendingFocus = { key, until: performance.now() + FOCUS_WAIT_MS };
+      },
+      follow: (id) => this.rig.follow(id),
       pillOf: (id) => {
         const box = this.out?.pills.find((x) => x.id === id)?.box;
         if (!box) return null;
