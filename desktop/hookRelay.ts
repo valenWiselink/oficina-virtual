@@ -4,6 +4,11 @@ import { spawn } from 'child_process';
  *  settings (server/src/providers/hook/claude/constants.ts HOOK_EXEC_FLAG). */
 export const HOOK_EXEC_FLAG = '--oficina-hook';
 
+/** Tells the script when Claude Code started this exe (server/src/constants.ts
+ *  HOOK_SPAWNED_AT_ENV): the script itself only starts after a second runtime
+ *  start, which is where the delay is. */
+const HOOK_SPAWNED_AT_ENV = 'OFICINA_HOOK_SPAWNED_AT';
+
 /**
  * Hook mode: Claude Code runs `<this exe> --oficina-hook <claude-hook.js>`
  * for each event (a PC with only the desktop app has no `node`). Run the
@@ -16,8 +21,9 @@ export function runHookIfAsked(argv: readonly string[]): boolean {
   if (at < 0) return false;
   const script = argv[at + 1];
   if (!script) process.exit(0);
+  const spawnedAt = String(Math.round(Date.now() - process.uptime() * 1000));
   const child = spawn(process.execPath, [script], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', [HOOK_SPAWNED_AT_ENV]: spawnedAt },
     stdio: 'inherit',
     windowsHide: true,
   });

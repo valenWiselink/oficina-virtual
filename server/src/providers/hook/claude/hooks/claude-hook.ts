@@ -5,6 +5,8 @@ import * as path from 'path';
 
 import {
   HOOK_API_PREFIX,
+  HOOK_SPAWNED_AT_ENV,
+  HOOK_SPAWNED_AT_FIELD,
   PERMISSION_HOOK_HTTP_TIMEOUT_MS,
   SERVER_JSON_DIR,
   SERVER_JSON_NAME,
@@ -15,6 +17,13 @@ import { isServerConfig, isServerTarget } from '../../../../serverConfig.js';
 
 /** Fire-and-forget events: the server answers 'ok' immediately. */
 const HOOK_POST_TIMEOUT_MS = 2000;
+
+/** When Claude Code started this hook, close to when the event happened.
+ *  Background (async) hooks can reach the server out of order, and it orders
+ *  them by this. The desktop app's relay passes its own start; otherwise it is
+ *  this process's start (before Node itself loaded). */
+const SPAWNED_AT =
+  Number(process.env[HOOK_SPAWNED_AT_ENV]) || Math.round(Date.now() - process.uptime() * 1000);
 
 const SERVER_JSON = path.join(os.homedir(), SERVER_JSON_DIR, SERVER_JSON_NAME);
 const SERVERS_REGISTRY_DIR = path.join(os.homedir(), SERVER_JSON_DIR, SERVERS_DIR);
@@ -257,7 +266,7 @@ async function main(): Promise<void> {
     if (withDebugLog?.debugLog) debugLogPath = withDebugLog.debugLog;
   }
 
-  const body = JSON.stringify(data);
+  const body = JSON.stringify({ ...data, [HOOK_SPAWNED_AT_FIELD]: SPAWNED_AT });
   if (eventName === 'PermissionRequest') {
     await deliverPermissionRequest(servers, body, sid);
     return;

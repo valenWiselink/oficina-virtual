@@ -47,11 +47,15 @@ npm run pack:win       # unpacked app only: release/win-unpacked/
   user's `~/.pixel-agents/standalone-token`. Closing the window hides it to
   the tray; "Apagar la oficina" sends `oficina:shutdown` over IPC (on Windows
   a signal from the parent is a hard kill that would skip the teardown).
-- Hooks without Node: the server it starts gets `OFICINA_HOOK_EXE`, and the
-  installer writes exec-form hooks (`command` = the exe, `args` =
-  `["--oficina-hook", <script>]`, no shell). `hookRelay.ts` runs the script
-  with `ELECTRON_RUN_AS_NODE` and `stdio: 'inherit'` (Electron's main process
-  itself reads an EMPTY stdin — measured — so it must not read it).
+- Hooks: whenever a usable `node` (18+) is on PATH the installer writes
+  `node "<script>"`, as every office version does (`hookCommand.ts`): the exe
+  starts Electron twice per event (3-18 s with several agents, measured, past
+  the 5 s timeout). Only a PC without Node gets the exec form: the server the
+  app starts has `OFICINA_HOOK_EXE`, and the hooks are `command` = the exe,
+  `args` = `["--oficina-hook", <script>]`, no shell. `hookRelay.ts` runs the
+  script with `ELECTRON_RUN_AS_NODE` and `stdio: 'inherit'` (Electron's main
+  process itself reads an EMPTY stdin — measured — so it must not read it) and
+  passes its own start time (`OFICINA_HOOK_SPAWNED_AT`).
 - The uninstaller runs the exe with `--oficina-uninstall-hooks`
   (`dist/cli.js --uninstall-hooks`).
 - Updates (`updates.ts`): checked at start and every 20 min, downloaded on

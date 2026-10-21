@@ -147,10 +147,19 @@ function getAllSessionRoots(): string[] {
 // read HERE and HERE ONLY. Downstream (hookEventHandler.ts) sees only the normalized
 // AgentEvent union.
 //
-// Sentinel 'current' toolIds are returned for PostToolUse/SubagentStop because the
-// raw hook payload doesn't carry the id; the handler correlates using its own
-// currentHookToolId state. Synthetic hook-* ids are returned for PreToolUse because
-// the real tool id arrives later via JSONL polling.
+// Pre/PostToolUse carry the call's own id (`tool_use_id`): both map it to the
+// same `hook-<id>`, so a start and its end pair up whatever order the background
+// hooks arrive in (the JSONL row keeps the bare id). Without it (older Claude
+// Code), PreToolUse gets a synthetic hook-<time> id and PostToolUse the sentinel
+// 'current', which the handler resolves with its currentHookToolId state, as
+// SubagentStop always does.
+
+/** `hook-<tool_use_id>`, or undefined when the payload has no id. */
+function hookToolIdOf(raw: Record<string, unknown>): string | undefined {
+  return typeof raw.tool_use_id === 'string' && raw.tool_use_id
+    ? `hook-${raw.tool_use_id}`
+    : undefined;
+}
 
 function normalizeHookEvent(
   raw: Record<string, unknown>,
@@ -170,7 +179,7 @@ function normalizeHookEvent(
         sessionId,
         event: {
           kind: 'toolStart',
-          toolId: `hook-${Date.now()}`,
+          toolId: hookToolIdOf(raw) ?? `hook-${Date.now()}`,
           toolName,
           input: toolInput,
           runInBackground: toolInput.run_in_background === true,
@@ -180,7 +189,7 @@ function normalizeHookEvent(
 
     case 'PostToolUse':
     case 'PostToolUseFailure':
-      return { sessionId, event: { kind: 'toolEnd', toolId: 'current' } };
+      return { sessionId, event: { kind: 'toolEnd', toolId: hookToolIdOf(raw) ?? 'current' } };
 
     case 'Stop':
       return { sessionId, event: { kind: 'turnEnd' } };

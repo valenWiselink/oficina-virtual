@@ -123,6 +123,22 @@ describe('claude-hook.js integration', () => {
     expect(JSON.parse(received[0]).session_id).toBe('abc');
   });
 
+  // 1b. Background hooks arrive out of order: each event carries when its
+  //     hook started (the relay's start when the desktop app passes one).
+  itBuilt('stamps each event with when the hook started', async () => {
+    const server = await startRecordingServer();
+    writeServerJson(server.port, 'test-token');
+    const event = JSON.stringify({ session_id: 'abc', hook_event_name: 'PreToolUse' });
+    const before = Date.now();
+    await runHookScript(event);
+    await runHookScript(event, { OFICINA_HOOK_SPAWNED_AT: '1234' });
+    server.close();
+    const [own, relayed] = server.received.map((b) => JSON.parse(b) as Record<string, unknown>);
+    expect(own.oficina_hook_at).toBeGreaterThanOrEqual(before - 1000);
+    expect(own.oficina_hook_at).toBeLessThanOrEqual(Date.now());
+    expect(relayed.oficina_hook_at).toBe(1234);
+  });
+
   // 2. Script exits 0 on missing server.json
   itBuilt('exits 0 when server.json is missing', async () => {
     // Don't write server.json
