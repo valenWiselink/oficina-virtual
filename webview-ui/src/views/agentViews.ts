@@ -39,6 +39,8 @@ export interface SubagentView {
   label: string;
   kind: AgentKind;
   statusText: string;
+  /** Its latest tools, newest first (the graph's quick card). */
+  recent?: string[];
 }
 
 export interface AgentView {
@@ -271,11 +273,25 @@ function memberView(input: ViewInputs, id: number): SubagentView {
         : kind === 'think'
           ? 'Pensando…'
           : 'Esperando la junta',
+    recent: recentTools(input.agentTools[id]),
   };
 }
 
 function liveTool(rows: ToolRow[] | undefined): ToolRow | undefined {
   return rows ? [...rows].reverse().find((t) => !t.done) : undefined;
+}
+
+/** How many of a member's latest tools its quick card lists. */
+const RECENT_TOOLS = 3;
+
+/** Its latest finished tools as the office words them, newest first (the
+ *  running one is already its status). */
+export function recentTools(rows: ToolRow[] | undefined): string[] {
+  return (rows ?? [])
+    .filter((t) => t.done)
+    .slice(-RECENT_TOOLS)
+    .reverse()
+    .map((t) => statusText(t.status));
 }
 
 /**
@@ -300,7 +316,8 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
     const subs = input.subagents
       .filter((s) => s.parentAgentId === id)
       .map((s): SubagentView => {
-        const tool = liveTool(input.subagentTools[id]?.[s.parentToolId]);
+        const rows = input.subagentTools[id]?.[s.parentToolId];
+        const tool = liveTool(rows);
         const kind: AgentKind = tool?.permissionWait
           ? 'needs'
           : input.researching(s.id)
@@ -313,6 +330,7 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
           label: s.label || 'Subagente',
           kind,
           statusText: statusText(tool?.status ?? 'Thinking'),
+          recent: recentTools(rows),
         };
       })
       .concat(members);

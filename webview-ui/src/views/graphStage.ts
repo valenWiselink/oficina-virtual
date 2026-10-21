@@ -1,3 +1,4 @@
+import { liveFileLinks } from '../office/behaviors/fileLinksStore.js';
 import type { AgentView } from './agentViews.js';
 import type { ClawdLife } from './clawdLife.js';
 import {
@@ -7,6 +8,7 @@ import {
   isVisible,
   panBy,
   type Pt,
+  toScreen,
   toWorld,
 } from './graphCamera.js';
 import { type GraphTheme, readTheme } from './graphDraw.js';
@@ -19,6 +21,7 @@ import {
   WheelStream,
 } from './graphGestures.js';
 import { type Box, type GraphTarget, hitTest } from './graphHit.js';
+import { focusOf, HoverDwell, type HoverTarget } from './graphHover.js';
 import { mostUrgent } from './graphPick.js';
 import { setPin } from './graphPins.js';
 import { type Grab, type PointerHost, PointerTracker } from './graphPointers.js';
@@ -60,6 +63,10 @@ export interface GraphInputs {
   onSlow: () => void;
   /** Whose camera this is (the workspace on screen): each keeps its own. */
   cameraKey: string;
+  /** The mouse rested on an agent or a member (null: it left). */
+  onHover?: (target: HoverTarget | null) => void;
+  /** After each frame: what follows the graph on screen (cards) moves. */
+  onFrame?: () => void;
 }
 
 /** What the page can ask of the graph (buttons, keys, overlays). */
@@ -67,6 +74,9 @@ export interface GraphControls {
   zoomBy: (factor: number) => void;
   fitAll: () => void;
   panBy: (dx: number, dy: number) => void;
+  /** Where an agent (or one of its members) is on screen: centre and radius
+   *  in CSS px, or null when it is not on the graph. */
+  screenOf: (id: number, member?: number) => { x: number; y: number; r: number } | null;
 }
 
 /** Each workspace's zoom and position, kept while the office is open (also
@@ -100,6 +110,10 @@ export class GraphStage implements PointerHost {
   private last = performance.now();
   private slow = false;
   private readonly frameTimes: number[] = [];
+  /** The mouse over the canvas (no button), for the hover card. */
+  private mouse: Pt | null = null;
+  private readonly dwell = new HoverDwell();
+  private hover: HoverTarget | null = null;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -204,7 +218,11 @@ export class GraphStage implements PointerHost {
       detail: this.detail,
       stage: this.stageColor,
     };
-    const marks = { selectedId: inp.selected?.id ?? null, selectedMember: inp.selected?.member };
+    const marks = {
+      selectedId: inp.selected?.id ?? null,
+      selectedMember: inp.selected?.member,
+      focus: this.updateHover(inp, now),
+    };
     this.out = drawScene(this.ctx, this.th, scene, inp.views, this.nodes, marks, inp.life);
     this.minimap = drawMinimapIfNeeded(
       this.ctx,
@@ -216,6 +234,26 @@ export class GraphStage implements PointerHost {
       this.nodes,
     );
     if (this.minimap) this.lastMinimap = this.minimap;
+    inp.onFrame?.();
+  }
+
+  /** The mouse moved over the canvas without a button (null: it left). */
+  pointAt(p: Pt | null): void {
+    this.mouse = p;
+  }
+
+  /** Who the mouse rests on (after the dwell) and what stays crisp then. */
+  private updateHover(inp: GraphInputs, now: number): ReadonlySet<string> | null {
+    const t = this.mouse && !this.pointers.busy ? this.targetAt(this.mouse) : null;
+    const next = this.dwell.update(
+      t?.type === 'agent' ? { id: t.id, member: t.member } : null,
+      now,
+    );
+    if (next !== this.hover) {
+      this.hover = next;
+      inp.onHover?.(next);
+    }
+    return next ? focusOf(inp.views, next, liveFileLinks()) : null;
   }
 
   private holdNode(h: { node: string; at: Pt }): void {
@@ -319,6 +357,12 @@ export class GraphStage implements PointerHost {
       zoomBy: (factor) => this.rig.zoomBy(factor),
       fitAll: () => this.rig.fit(),
       panBy: (dx, dy) => this.pan(dx, dy),
+      screenOf: (id, member) => {
+        const n = this.nodes.get(member !== undefined ? `s${member}` : `a${id}`);
+        if (!n) return null;
+        const at = toScreen(this.rig.cam, n);
+        return { x: at.x, y: at.y, r: n.r * this.rig.cam.zoom };
+      },
     };
   }
 }

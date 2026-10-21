@@ -4,13 +4,35 @@ import { Button } from '../components/ui/Button.js';
 import { useAppTheme } from '../effects/appTheme.js';
 import { useCalmMode } from '../effects/calmMode.js';
 import { useDayTint } from '../effects/dayTint.js';
+import { useNow } from '../hooks/useNow.js';
 import { useWorkspaces } from '../workspaces/workspaceStore.js';
 import type { AgentView } from './agentViews.js';
 import { type BoardActions, BoardCard } from './BoardCard.js';
 import { onCelebration } from './celebrate.js';
 import { ClawdLife } from './clawdLife.js';
+import { cardSpot, hoverFacts, type HoverTarget } from './graphHover.js';
+import { GraphHoverCard } from './GraphHoverCard.js';
 import { clearPins, useHasPins } from './graphPins.js';
-import { type GraphSelection, useGraphCanvas } from './useGraphCanvas.js';
+import { type GraphControls, type GraphSelection, useGraphCanvas } from './useGraphCanvas.js';
+
+/** Keep the quick card beside its agent (every frame: it moves). */
+function placeCard(
+  card: HTMLDivElement | null,
+  hover: HoverTarget | null,
+  controls: GraphControls,
+  view: HTMLElement | null,
+) {
+  if (!card || !hover || !view) return;
+  const node = controls.screenOf(hover.id, hover.member);
+  if (!node) return;
+  const spot = cardSpot(
+    node,
+    { w: card.offsetWidth, h: card.offsetHeight },
+    { w: view.clientWidth, h: view.clientHeight },
+  );
+  card.style.transform = `translate(${Math.round(spot.left)}px, ${Math.round(spot.top)}px)`;
+  card.style.visibility = 'visible';
+}
 
 /**
  * Agents float freely: collaborators attract (a lead and its subagents, two
@@ -21,7 +43,8 @@ import { type GraphSelection, useGraphCanvas } from './useGraphCanvas.js';
  * an agent to put it somewhere (it stays there; "Ordenar solo" lets them all
  * settle by themselves again). Clicking an agent opens its panel (same
  * actions as the board) and its terminal; clicking a member of a meeting
- * opens its lead's panel with that member marked.
+ * opens its lead's panel with that member marked. Resting the mouse on one
+ * shows its quick card and fades everyone but its team.
  */
 export function GraphView({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,6 +58,12 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
   const { current: workspace } = useWorkspaces();
   const [slow, setSlow] = useState(false);
   const hasPins = useHasPins();
+  const [hover, setHover] = useState<HoverTarget | null>(null);
+  const hoverRef = useRef(hover);
+  hoverRef.current = hover;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const now = useNow();
+  const facts = hover ? hoverFacts(views, hover, now) : null;
 
   const controls = useGraphCanvas(canvasRef, {
     views,
@@ -59,6 +88,8 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
       if (views.find((v) => v.id === pick.id)?.hasTerminal) actions.onSelect(pick.id);
     },
     onSlow: () => setSlow(true),
+    onHover: setHover,
+    onFrame: () => placeCard(cardRef.current, hoverRef.current, controls, rootRef.current),
   });
 
   useEffect(() => onCelebration((id) => lifeRef.current.celebrate(id)), []);
@@ -106,6 +137,7 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
           </Button>
         )}
       </div>
+      {facts && <GraphHoverCard facts={facts} cardRef={cardRef} />}
       {slow && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-80 z-10 soft-panel px-10 py-4 text-xs text-text-muted">
           Efectos reducidos: la PC va lenta

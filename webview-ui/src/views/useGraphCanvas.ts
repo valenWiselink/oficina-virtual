@@ -25,6 +25,8 @@ function attachInput(canvas: HTMLCanvasElement, stage: GraphStage): () => void {
   const onMove = (e: PointerEvent) => {
     const p = local(e);
     if (!stage.pointers.busy) {
+      // A finger has no hover: only a mouse or a pen rests on something.
+      if (e.pointerType !== 'touch') stage.pointAt(p);
       canvas.style.cursor = cursorFor(stage.targetAt(p));
       return;
     }
@@ -36,11 +38,13 @@ function attachInput(canvas: HTMLCanvasElement, stage: GraphStage): () => void {
     canvas.style.cursor = 'grab';
   };
   const onCancel = (e: PointerEvent) => stage.pointers.cancel(e.pointerId);
+  const onLeave = () => stage.pointAt(null);
   const listeners: Array<[string, (e: never) => void]> = [
     ['pointerdown', onDown],
     ['pointermove', onMove],
     ['pointerup', onUp],
     ['pointercancel', onCancel],
+    ['pointerleave', onLeave],
   ];
   canvas.addEventListener('wheel', onWheel, { passive: false });
   for (const [type, fn] of listeners) canvas.addEventListener(type, fn as EventListener);
@@ -91,5 +95,6 @@ export function useGraphCanvas(
     zoomBy: (factor) => api.current?.zoomBy(factor),
     fitAll: () => api.current?.fitAll(),
     panBy: (dx, dy) => api.current?.panBy(dx, dy),
+    screenOf: (id, member) => api.current?.screenOf(id, member) ?? null,
   };
 }

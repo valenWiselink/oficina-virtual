@@ -52,6 +52,7 @@ import {
 } from './graphExtras.js';
 import { floatOffset } from './graphFloat.js';
 import type { Box, Hit, HitScene, Passive } from './graphHit.js';
+import { DIM_ALPHA } from './graphHover.js';
 import { placeLabel, type Side } from './graphLabels.js';
 import {
   keepsMeetingEdge,
@@ -89,6 +90,9 @@ export interface SceneMarks {
   selectedId: number | null;
   /** A member picked in the selected lead's meeting: the ring goes on it. */
   selectedMember?: number | null;
+  /** While you hover an agent, what stays crisp (graphHover.ts focusOf);
+   *  everything else fades. null: everything crisp. */
+  focus?: ReadonlySet<string> | null;
 }
 
 /** What is clickable (graphHit.ts reads it) and what was drawn. */
@@ -257,6 +261,24 @@ interface Pen {
   f: SceneFrame;
   nodes: Map<string, SimNode>;
   passive: Passive;
+  fade: Fade;
+}
+
+type Fade = <T>(keys: readonly string[], draw: () => T) => T;
+
+/** Draws a part at full strength when all its nodes (`a3`, `s-7`, 'vos',
+ *  'library') are in focus or nothing is hovered; faded otherwise. */
+function fader(ctx: CanvasRenderingContext2D, focus: ReadonlySet<string> | null | undefined): Fade {
+  return (keys, draw) => {
+    if (!focus || keys.every((k) => focus.has(k))) return draw();
+    ctx.save();
+    ctx.globalAlpha *= DIM_ALPHA;
+    try {
+      return draw();
+    } finally {
+      ctx.restore();
+    }
+  };
 }
 
 interface LineStyle {
@@ -269,9 +291,17 @@ interface LineStyle {
   dotted?: boolean;
 }
 
-/** One straight link between two nodes (or a node and the library). */
-function strokeLink(pen: Pen, a: Pt, b: Pt, style: LineStyle) {
-  const { ctx } = pen;
+/** One straight link between two nodes (or a node and the library), named
+ *  by `keys` (it stays crisp when both are in focus). */
+function strokeLink(pen: Pen, a: Pt, b: Pt, style: LineStyle, keys: [string, string]) {
+  pen.fade(keys, () => strokePath(pen.ctx, a, b, style));
+  pen.passive.segments.push([
+    { x: a.x, y: a.y },
+    { x: b.x, y: b.y },
+  ]);
+}
+
+function strokePath(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, style: LineStyle) {
   ctx.save();
   ctx.strokeStyle = style.color;
   ctx.globalAlpha *= style.alpha ?? (style.dotted ? 0.5 : 1);
@@ -287,10 +317,6 @@ function strokeLink(pen: Pen, a: Pt, b: Pt, style: LineStyle) {
   ctx.lineTo(b.x, b.y);
   ctx.stroke();
   ctx.restore();
-  pen.passive.segments.push([
-    { x: a.x, y: a.y },
-    { x: b.x, y: b.y },
-  ]);
 }
 
 function drawLinks(pen: Pen, list: AgentView[]) {
@@ -301,7 +327,8 @@ function drawLinks(pen: Pen, list: AgentView[]) {
     for (const bossId of v.supervisedBy) {
       const a = pen.nodes.get(`a${bossId}`);
       if (!a || !b) continue;
-      strokeLink(pen, a, b, { color: CLAWD_BOSS_COLORS.link, dash: [5, 6] });
+      const style = { color: CLAWD_BOSS_COLORS.link, dash: [5, 6] };
+      strokeLink(pen, a, b, style, [`a${bossId}`, `a${v.id}`]);
     }
   }
   for (const link of liveFileLinks()) {
@@ -311,7 +338,11 @@ function drawLinks(pen: Pen, list: AgentView[]) {
     const file = `${clip(link.lastFile, 22)}${link.count > 1 ? ` ×${link.count}` : ''}`;
     // Calm mode: the dashes stay still.
     const t = pen.f.calm ? 0 : pen.f.t;
-    pen.passive.boxes.push(drawFilePass(pen.ctx, pen.th, a, b, file, FILE_LINK_COLOR, t));
+    const keys = [`s${link.fromId}`, `s${link.toId}`];
+    const chip = pen.fade(keys, () =>
+      drawFilePass(pen.ctx, pen.th, a, b, file, FILE_LINK_COLOR, t),
+    );
+    pen.passive.boxes.push(chip);
     pen.passive.segments.push([
       { x: a.x, y: a.y },
       { x: b.x, y: b.y },
@@ -332,7 +363,7 @@ function drawMeetingLinks(pen: Pen, list: AgentView[]) {
       const d = Math.hypot(library.x - a.x, library.y - a.y) || 1;
       const k = Math.max(0, d - libraryR) / d;
       const edge = { x: a.x + (library.x - a.x) * k, y: a.y + (library.y - a.y) * k };
-      strokeLink(pen, a, edge, { color: pen.th.research, dotted: true });
+      strokeLink(pen, a, edge, { color: pen.th.research, dotted: true }, [`a${v.id}`, 'library']);
     }
     for (const s of v.subagents) {
       const b = pen.nodes.get(`s${s.id}`);
@@ -345,6 +376,7 @@ function drawMeetingLinks(pen: Pen, list: AgentView[]) {
         s.kind === 'research'
           ? { color: colorOf(v), dotted: true }
           : { color: colorOf(v), alpha: 0.45, width: 1.6 },
+        [`a${v.id}`, `s${s.id}`],
       );
     }
   }
@@ -370,7 +402,14 @@ export function drawScene(
   life: ClawdLife,
 ): SceneOut {
   const nodes = floating(simNodes, f);
-  const pen: Pen = { ctx, th, f, nodes, passive: { boxes: [], circles: [], segments: [] } };
+  const pen: Pen = {
+    ctx,
+    th,
+    f,
+    nodes,
+    passive: { boxes: [], circles: [], segments: [] },
+    fade: fader(ctx, marks.focus),
+  };
   background(ctx, th, f);
   worldTransform(ctx, f);
   const content = drawLibraryArea(pen, list);
@@ -384,7 +423,9 @@ export function drawScene(
   obstacles.push({ x: VOS.x - 34, y: VOS.y - 18, w: 68, h: 36 });
   const pills = drawRequests(pen, list, obstacles);
   const hits = drawBodies(pen, list, marks, life, { obstacles, content, pulsing });
-  drawVos(ctx, th, VOS.x, VOS.y, needing.length > 0, f.t, pulsing.size > 0);
+  pen.fade(['vos'], () =>
+    drawVos(ctx, th, VOS.x, VOS.y, needing.length > 0, f.t, pulsing.size > 0),
+  );
   ctx.textAlign = 'left';
   ctx.setTransform(f.dpr, 0, 0, f.dpr, 0, 0);
   const arrows = drawOffscreenWaits(ctx, th, f, needing, nodes);
@@ -420,7 +461,7 @@ function drawLibraryArea(pen: Pen, list: AgentView[]): Bounds {
   const r = libraryRadius(visitors);
   // Who is there: the members inside and the agents reading from outside.
   const reading = visitors + list.filter((v) => v.kind === 'research').length;
-  drawLibrary(pen.ctx, pen.th, x, y, r, reading);
+  pen.fade(['library'], () => drawLibrary(pen.ctx, pen.th, x, y, r, reading));
   pen.passive.circles.push({ x, y, r });
   grow(content, { x: x - r, y: y - r - 18, w: r * 2, h: r * 2 + 18 });
   return content;
@@ -442,7 +483,8 @@ function drawRequests(
     const boss = v.askingSupervisor ? pen.nodes.get(`a${v.askingSupervisor.id}`) : undefined;
     const to = v.kind === 'needs' ? VOS : boss ? { x: boss.x, y: boss.y + boss.r * 0.6 } : null;
     if (!n || !to) continue;
-    const pill = drawRequestLine(pen.ctx, pen.th, n, to, t, askOf(v));
+    const keys = [`a${v.id}`, v.kind === 'needs' ? 'vos' : `a${v.askingSupervisor?.id}`];
+    const pill = pen.fade(keys, () => drawRequestLine(pen.ctx, pen.th, n, to, t, askOf(v)));
     pen.passive.segments.push([
       { x: n.x, y: n.y },
       { x: to.x, y: to.y },
@@ -479,7 +521,7 @@ function drawBodies(
     // A member picked in its meeting takes the ring.
     const selected = v.id === marks.selectedId && marks.selectedMember == null;
     const state = { selected, pulsing: at.pulsing.has(v.id), index };
-    drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life);
+    pen.fade([`a${v.id}`], () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life));
     grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
   });
   const order = [...list].sort(
@@ -488,7 +530,9 @@ function drawBodies(
   for (const v of order) {
     const n = pen.nodes.get(`a${v.id}`);
     if (!n) continue;
-    const label = drawAgentLabel(pen.ctx, pen.th, pen.f, v, n, at.obstacles);
+    const label = pen.fade([`a${v.id}`], () =>
+      drawAgentLabel(pen.ctx, pen.th, pen.f, v, n, at.obstacles),
+    );
     grow(at.content, label);
     hits.push({ id: v.id, disc: n, label });
   }
@@ -498,27 +542,37 @@ function drawBodies(
 /** A meeting's members around their lead: disc, Clawd and name chip. Each
  *  hit names the member and its lead (whose panel it opens). */
 function drawMembers(pen: Pen, v: AgentView, marks: SceneMarks, at: Placing, hits: Hit[]) {
-  const { ctx, th, f, nodes } = pen;
-  const lead = nodes.get(`a${v.id}`);
-  const subColor = lighten(colorOf(v), 0.3);
+  const lead = pen.nodes.get(`a${v.id}`);
   for (const s of v.subagents) {
-    const n = nodes.get(`s${s.id}`);
+    const n = pen.nodes.get(`s${s.id}`);
     if (!n) continue;
     const selected = v.id === marks.selectedId && marks.selectedMember === s.id;
-    const rim = { shape: 'single' as const, spin: 0, still: f.calm };
-    drawNodeDisc(ctx, th, n.x, n.y, n.r, subColor, s.kind, f.t, selected, false, rim);
-    const scale = n.r / 16;
-    const pose = poseFor(s.kind, s.id, f.t, f.calm);
-    clawdAt(ctx, f, n.x, n.y + clawdHeight(scale, f.dpr) / 2, scale, subColor, pose);
-    worldTransform(ctx, f);
     // One line, on the side away from the lead, so chips never cover it.
     const above = !!lead && n.y < lead.y - 4;
-    const top = above ? n.y - n.r - 26 : n.y + n.r + 6;
-    const chip = drawChip(ctx, th, n.x, top, clip(s.label, NAME_CHARS), subColor, s.kind);
+    const chip = pen.fade([`s${s.id}`], () => drawMember(pen, v, s, n, { selected, above }));
     at.obstacles.push(chip);
     grow(at.content, chip);
     hits.push({ id: v.id, member: s.id, disc: n, label: chip });
   }
+}
+
+function drawMember(
+  pen: Pen,
+  v: AgentView,
+  s: AgentView['subagents'][number],
+  n: SimNode,
+  at: { selected: boolean; above: boolean },
+): Box {
+  const { ctx, th, f } = pen;
+  const subColor = lighten(colorOf(v), 0.3);
+  const rim = { shape: 'single' as const, spin: 0, still: f.calm };
+  drawNodeDisc(ctx, th, n.x, n.y, n.r, subColor, s.kind, f.t, at.selected, false, rim);
+  const scale = n.r / 16;
+  const pose = poseFor(s.kind, s.id, f.t, f.calm);
+  clawdAt(ctx, f, n.x, n.y + clawdHeight(scale, f.dpr) / 2, scale, subColor, pose);
+  worldTransform(ctx, f);
+  const top = at.above ? n.y - n.r - 26 : n.y + n.r + 6;
+  return drawChip(ctx, th, n.x, top, clip(s.label, NAME_CHARS), subColor, s.kind);
 }
 
 /** How Clawd stands right now: his state's pose plus the little life on top
