@@ -1,0 +1,132 @@
+import {
+  type Bounds,
+  type Camera,
+  centerOn,
+  fitCamera,
+  isVisible,
+  type Pt,
+  type ViewSize,
+  zoomAt,
+} from './graphCamera.js';
+
+/** How much of the way the camera goes each frame: fitting, following, the rest. */
+const FIT_EASE = 0.08;
+const FOLLOW_EASE = 0.12;
+const MOVE_EASE = 0.18;
+const FIT_PADDING = 60;
+
+/** Ease the camera toward a target, a little each frame. */
+function approach(cam: Camera, target: Camera, k: number): Camera {
+  return {
+    x: cam.x + (target.x - cam.x) * k,
+    y: cam.y + (target.y - cam.y) * k,
+    zoom: cam.zoom + (target.zoom - cam.zoom) * k,
+  };
+}
+
+/**
+ * Where the graph's camera is and where it is going: fitting everyone,
+ * gliding to a spot, or going along with one agent ("Seguir"). In calm mode
+ * it jumps instead of gliding. Moving it by hand (drag, wheel, pinch, arrows,
+ * the minimap) ends fitting and following. No canvas here: tested on its own.
+ */
+export class CameraRig {
+  cam: Camera = { x: 0, y: 0, zoom: 1 };
+  target: Camera | null = null;
+  autoFit = true;
+  /** The agent the camera goes along with. */
+  following: number | null = null;
+  view: ViewSize = { w: 0, h: 0 };
+  calm = false;
+  /** The zoom asked for while following (the buttons, + and −). */
+  private followZoom: number | null = null;
+
+  private readonly onFollow: (id: number | null) => void;
+
+  constructor(onFollow: (id: number | null) => void = () => {}) {
+    this.onFollow = onFollow;
+  }
+
+  /** Glide (or, in calm mode, jump) to `target`; fitting stops. */
+  go(target: Camera): void {
+    this.autoFit = false;
+    if (this.calm) {
+      this.cam = target;
+      this.target = null;
+    } else {
+      this.target = target;
+    }
+  }
+
+  /** Moved by hand: it stays where you put it. */
+  moveTo(next: Camera): void {
+    this.autoFit = false;
+    this.target = null;
+    this.cam = next;
+    this.follow(null);
+  }
+
+  fit(): void {
+    this.follow(null);
+    this.autoFit = true;
+  }
+
+  /** Zoom around the middle of the view (still following, when it was). */
+  zoomBy(factor: number): void {
+    const goal = zoomAt(
+      this.target ?? this.cam,
+      { x: this.view.w / 2, y: this.view.h / 2 },
+      factor,
+    );
+    if (this.following !== null) this.followZoom = goal.zoom;
+    else this.go(goal);
+  }
+
+  /** Centre a world point, at `zoom` (default: as it is). */
+  centerOn(p: Pt, zoom = this.cam.zoom): void {
+    this.go(centerOn(this.cam, p, this.view, zoom));
+  }
+
+  /** Bring a point into view only when it is out of frame (`margin`: how
+   *  far inside the border still counts as out, screen px). */
+  reveal(p: Pt, margin = 0): void {
+    if (!isVisible(this.cam, this.view, p, -margin)) this.centerOn(p);
+  }
+
+  follow(id: number | null): void {
+    if (this.following === id) return;
+    this.following = id;
+    this.followZoom = null;
+    if (id !== null) this.autoFit = false;
+    this.onFollow(id);
+  }
+
+  /** One frame: aim (everyone, or the followed agent at `followed`; gone =
+   *  stop following) and take a step there. */
+  step(content: Bounds | null, fitView: ViewSize, followed: Pt | undefined): void {
+    if (this.following !== null && !followed) this.follow(null);
+    if (this.following !== null && followed) {
+      this.target = centerOn(this.cam, followed, this.view, this.followZoom ?? this.cam.zoom);
+    } else if (this.autoFit && content) {
+      this.target = fitCamera(content, fitView, FIT_PADDING);
+    }
+    const target = this.target;
+    if (!target) return;
+    const k = this.calm
+      ? 1
+      : this.following !== null
+        ? FOLLOW_EASE
+        : this.autoFit
+          ? FIT_EASE
+          : MOVE_EASE;
+    this.cam = approach(this.cam, target, k);
+    const arrived =
+      Math.abs(this.cam.zoom - target.zoom) < 0.001 &&
+      Math.abs(this.cam.x - target.x) < 0.5 &&
+      Math.abs(this.cam.y - target.y) < 0.5;
+    if (arrived) {
+      this.cam = target;
+      if (!this.autoFit && this.following === null) this.target = null;
+    }
+  }
+}

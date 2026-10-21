@@ -80,9 +80,10 @@ export class ClawdLife {
     this.queued.add(id);
   }
 
-  /** A click on it: a hop, and the fifth quick one starts a trick. */
-  greet(id: number, now: number): void {
-    this.hops.set(id, now);
+  /** A click on it: a hop, and the fifth quick one starts a trick. The
+   *  second click of a double click (`hop` false) only counts toward it. */
+  greet(id: number, now: number, hop = true): void {
+    if (hop) this.hops.set(id, now);
     const times = recentClicks(this.clicks.get(id) ?? [], now);
     if (times.length < TRICK_CLICKS) {
       this.clicks.set(id, times);

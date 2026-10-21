@@ -10,22 +10,24 @@ import { type BoardActions, BoardCard } from './BoardCard.js';
 import { onCelebration } from './celebrate.js';
 import { ClawdLife } from './clawdLife.js';
 import { clearPins, useHasPins } from './graphPins.js';
-import { useGraphCanvas } from './useGraphCanvas.js';
+import { type GraphSelection, useGraphCanvas } from './useGraphCanvas.js';
 
 /**
  * Agents float freely: collaborators attract (a lead and its subagents, two
  * subagents that passed a file), whoever needs you drifts toward "Vos" with
- * an arrow, and research pulls toward the library. Wheel zooms toward the
- * mouse, dragging the background pans, a double click centres an agent, and
- * "Encuadrar" shows everyone again. Drag an agent to put it somewhere (it
- * stays there; "Ordenar solo" lets them all settle by themselves again).
- * Clicking an agent opens its panel (same actions as the board) and its
- * terminal.
+ * an arrow, and research pulls toward the library. The wheel zooms toward the
+ * mouse (a touchpad scrolls and pinches), dragging the background pans, a
+ * double click centres an agent, and "Encuadrar" shows everyone again. Drag
+ * an agent to put it somewhere (it stays there; "Ordenar solo" lets them all
+ * settle by themselves again). Clicking an agent opens its panel (same
+ * actions as the board) and its terminal; clicking a member of a meeting
+ * opens its lead's panel with that member marked.
  */
 export function GraphView({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const selected = views.find((v) => v.id === selectedId);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [selection, setSelection] = useState<GraphSelection | null>(null);
+  const selected = views.find((v) => v.id === selection?.id);
   const calm = useCalmMode();
   const tint = useDayTint();
   const theme = useAppTheme();
@@ -36,37 +38,50 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
 
   const controls = useGraphCanvas(canvasRef, {
     views,
-    selectedId: selected ? selected.id : null,
+    selected: selected && selection ? selection : null,
     calm,
     tint,
     theme,
     life: lifeRef.current,
     cameraKey: workspace,
-    onSelect: (id) => {
-      setSelectedId(id);
-      if (id === null) return;
-      lifeRef.current.greet(id, Date.now());
+    onSelect: (pick, repeat) => {
+      if (!pick) {
+        setSelection(null);
+        return;
+      }
+      // A member's click hops nobody (its lead stays put).
+      if (pick.member === undefined) lifeRef.current.greet(pick.id, Date.now(), !repeat);
+      // The second click of a double click only centres.
+      if (repeat) return;
+      setSelection(pick);
       // Its terminal follows the selection, like a click on the board. An
       // outside agent only gets the panel (its "Traer" is right there).
-      if (views.find((v) => v.id === id)?.hasTerminal) actions.onSelect(id);
+      if (views.find((v) => v.id === pick.id)?.hasTerminal) actions.onSelect(pick.id);
     },
     onSlow: () => setSlow(true),
   });
 
   useEffect(() => onCelebration((id) => lifeRef.current.celebrate(id)), []);
   useEffect(() => {
+    // Only an Esc meant for the graph closes its panel: not one typed in the
+    // terminal, the chat or a dialog.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedId(null);
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const where = e.target as Node | null;
+      if (where === document.body || (where && rootRef.current?.contains(where))) {
+        setSelection(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   return (
-    <>
+    <div ref={rootRef} className="absolute inset-0">
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full touch-none"
+        tabIndex={0}
+        className="absolute inset-0 w-full h-full touch-none outline-none focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
         role="img"
         aria-label={`Grafo de agentes: ${views.map((v) => `${v.name}, ${v.statusText}`).join('; ')}`}
       />
@@ -108,16 +123,16 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => setSelectedId(null)}
+              onClick={() => setSelection(null)}
               title="Cerrar (Esc)"
               aria-label="Cerrar panel"
             >
               ×
             </Button>
           </div>
-          <BoardCard view={selected} actions={actions} />
+          <BoardCard view={selected} actions={actions} highlightMember={selection?.member} />
         </aside>
       )}
-    </>
+    </div>
   );
 }

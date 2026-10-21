@@ -145,8 +145,11 @@ export interface Pose {
   anim?: number;
 }
 
-export function poseFor(kind: AgentKind, seed: number, t: number): Pose {
-  const blink = (t * 0.9 + seed * 1.37) % 3.7 < 0.13;
+/** His state's pose at time t. `still` (calm mode): the same pose every
+ *  frame — no typing, bobbing, waving or blinking. */
+export function poseFor(kind: AgentKind, seed: number, t: number, still = false): Pose {
+  if (still) t = 0;
+  const blink = !still && (t * 0.9 + seed * 1.37) % 3.7 < 0.13;
   switch (kind) {
     case 'work':
     case 'meet':
@@ -272,7 +275,9 @@ export function isPulsing(waitedMs: number): boolean {
 }
 
 /** The node disc: tinted fill in the agent's colour, outline colour by state
- *  and outline shape by model (`rim`, turning with `spin`). */
+ *  and outline shape by model (`rim`, turning with `spin`). A busy disc
+ *  breathes unless `still` (calm mode); the amber rings of a wait beat either
+ *  way (they are information). */
 export function drawNodeDisc(
   ctx: CanvasRenderingContext2D,
   th: GraphTheme,
@@ -284,7 +289,7 @@ export function drawNodeDisc(
   t: number,
   selected: boolean,
   pulsing = false,
-  rim: { shape: BubbleRim; spin: number } = { shape: 'single', spin: 0 },
+  rim: { shape: BubbleRim; spin: number; still?: boolean } = { shape: 'single', spin: 0 },
 ) {
   if (kind === 'needs' && pulsing) {
     for (let j = 0; j < 3; j++) {
@@ -302,7 +307,7 @@ export function drawNodeDisc(
     ctx.stroke();
   }
   const busy = kind === 'work' || kind === 'meet' || kind === 'research';
-  const breathe = busy ? 1 + 0.03 * Math.sin(t * 2.2 + x) : 1;
+  const breathe = busy && !rim.still ? 1 + 0.03 * Math.sin(t * 2.2 + x) : 1;
   traceBubble(ctx, x, y, r * breathe, rim.shape, rim.spin);
   ctx.fillStyle = rgba(kind === 'research' ? th.research : color, 0.13);
   ctx.fill();
@@ -485,47 +490,6 @@ export function drawLabelAt(
   ctx.fillText(status, box.x + 21, sy);
 }
 
-/** Name + status card under a node, with the agent's colour dot. Returns its box. */
-export function drawLabel(
-  ctx: CanvasRenderingContext2D,
-  th: GraphTheme,
-  x: number,
-  top: number,
-  name: string,
-  status: string,
-  kind: AgentKind,
-  color: string,
-  small: boolean,
-  align: 'center' | 'left' = 'center',
-): { x: number; y: number; w: number; h: number } {
-  setFont(ctx, 600, small ? 11 : 12);
-  const nw = ctx.measureText(name).width;
-  setFont(ctx, 500, small ? 10.5 : 11);
-  const sw = ctx.measureText(status).width;
-  const w = Math.ceil(Math.max(nw, sw) + 30);
-  const h = small ? 32 : 37;
-  const bx = align === 'left' ? x : x - w / 2;
-  ctx.beginPath();
-  ctx.roundRect(bx, top, w, h, 7);
-  ctx.fillStyle = rgba(th.surface, 0.95);
-  ctx.fill();
-  ctx.lineWidth = kind === 'needs' ? 1.5 : 1;
-  ctx.strokeStyle = kind === 'needs' ? th.amber : kind === 'done' ? rgba(th.green, 0.6) : th.line;
-  ctx.stroke();
-  const ny = top + (small ? 14 : 15);
-  ctx.fillStyle = color;
-  circle(ctx, bx + 11.5, ny - 4, 3.4);
-  ctx.fill();
-  ctx.textAlign = 'left';
-  setFont(ctx, 600, small ? 11 : 12);
-  ctx.fillStyle = th.ink;
-  ctx.fillText(name, bx + 20, ny);
-  setFont(ctx, 500, small ? 10.5 : 11);
-  ctx.fillStyle = kind === 'needs' ? th.amberInk : kind === 'done' ? th.green : th.ink2;
-  ctx.fillText(status, bx + 20, ny + (small ? 13 : 16));
-  return { x: bx, y: top, w, h };
-}
-
 /** A one-line name chip (a meeting's subagent), centred on x. */
 export function drawChip(
   ctx: CanvasRenderingContext2D,
@@ -675,7 +639,8 @@ export function drawRequestLine(
   return { x: px, y: py, w, h };
 }
 
-/** A file passed between two agents: dashed line plus a chip with its name. */
+/** A file passed between two agents: dashed line plus a chip with its name.
+ *  Returns the chip. */
 export function drawFilePass(
   ctx: CanvasRenderingContext2D,
   th: GraphTheme,
@@ -684,7 +649,7 @@ export function drawFilePass(
   file: string,
   color: string,
   t: number,
-) {
+): { x: number; y: number; w: number; h: number } {
   ctx.strokeStyle = rgba(color, 0.7);
   ctx.lineWidth = 2.5;
   ctx.setLineDash([6, 4]);
@@ -708,6 +673,7 @@ export function drawFilePass(
   ctx.fillStyle = th.ink;
   ctx.textAlign = 'left';
   ctx.fillText(file, cx + 8, cy + 14);
+  return { x: cx, y: cy, w, h: 20 };
 }
 
 /** The library: a soft circle with a shelf of books, and how many are in. */
@@ -745,7 +711,8 @@ function drawShelf(
   const books = Math.max(5, Math.floor(width / 7));
   const w = width / books;
   const left = cx - width / 2;
-  ctx.globalAlpha = 0.6;
+  ctx.save();
+  ctx.globalAlpha *= 0.6;
   for (let i = 0; i < books; i++) {
     const h = 8 + ((i * 7) % 5);
     ctx.fillStyle = GRAPH_LIBRARY_BOOK_COLORS[i % GRAPH_LIBRARY_BOOK_COLORS.length];
@@ -753,19 +720,7 @@ function drawShelf(
   }
   ctx.fillStyle = rgba(th.research, 0.8);
   ctx.fillRect(left - 2, board, width + 4, 2);
-  ctx.globalAlpha = 1;
-}
-
-export function drawBackground(
-  ctx: CanvasRenderingContext2D,
-  th: GraphTheme,
-  w: number,
-  h: number,
-) {
-  ctx.fillStyle = th.stage;
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = rgba(th.line2, 0.6);
-  for (let x = 13; x < w; x += 26) for (let y = 13; y < h; y += 26) ctx.fillRect(x, y, 1, 1);
+  ctx.restore();
 }
 
 /** The flame around a bubble at maximum effort: a warm glow that flickers. */
