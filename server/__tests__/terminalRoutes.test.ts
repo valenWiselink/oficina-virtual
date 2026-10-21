@@ -19,8 +19,10 @@ import { WebSocket } from 'ws';
 import {
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_NO_SESSION,
+  WS_CLOSE_STALE_PAGE,
   WS_CLOSE_UNAUTHORIZED,
 } from '../src/constants.js';
+import { SERVER_BOOT_ID } from '../src/serverBoot.js';
 import type { IPty, PtyModule } from '../src/terminal/ptyModule.js';
 import { PtySessionManager } from '../src/terminal/ptySessionManager.js';
 
@@ -251,5 +253,42 @@ describe('terminal WebSocket auth', () => {
     expect(frames[0].cols).toBeTypeOf('number');
     expect(frames[0].rows).toBeTypeOf('number');
     expect(frames[1]).toEqual({ type: 'output', data: 'after-attach' });
+  });
+
+  it('refuses a page from another run of the server (its ids name other agents now)', async () => {
+    const result = await new Promise<Attempt>((resolve, reject) => {
+      const ws = new WebSocket(`${terminalUrl(port, 1, token)}&boot=an-old-run`);
+      let opened = false;
+      ws.on('open', () => {
+        opened = true;
+        // Held input flushed on reconnect: it must never reach the PTY.
+        ws.send(JSON.stringify({ type: 'input', data: 'cerrá todo\r' }));
+      });
+      ws.on('close', (code: number) => resolve({ code, opened }));
+      ws.on('error', () => {
+        /* settled by close */
+      });
+      setTimeout(() => reject(new Error('terminal socket timed out')), 5_000);
+    });
+    expect(result.code).toBe(WS_CLOSE_STALE_PAGE);
+    expect(lastPty.written).toEqual([]);
+  });
+
+  it('attaches a page of this run, and one that names no run (an older page)', async () => {
+    for (const url of [
+      `${terminalUrl(port, 1, token)}&boot=${encodeURIComponent(SERVER_BOOT_ID)}`,
+      terminalUrl(port, 1, token),
+    ]) {
+      const ws = new WebSocket(url);
+      const first = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        ws.on('message', (raw: Buffer | string) =>
+          resolve(JSON.parse(raw.toString()) as Record<string, unknown>),
+        );
+        ws.on('close', (code: number) => reject(new Error(`closed with ${String(code)}`)));
+        setTimeout(() => reject(new Error('no replay')), 5_000);
+      });
+      expect(first.type).toBe('replay');
+      ws.close();
+    }
   });
 });
