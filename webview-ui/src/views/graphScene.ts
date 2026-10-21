@@ -51,17 +51,23 @@ import {
 } from './graphExtras.js';
 import { floatOffset } from './graphFloat.js';
 import { placeLabel, type Side } from './graphLabels.js';
+import {
+  keepsMeetingEdge,
+  libraryCenter,
+  libraryOpen,
+  libraryRadius,
+  librarySpot,
+  libraryVisitors,
+} from './graphLibrary.js';
 import { pinOf } from './graphPins.js';
 import type { SimEdge, SimNode } from './graphSim.js';
 
 /** The world the nodes live in (the camera shows part or all of it). */
 export const WORLD: ViewSize = { w: 1400, h: 880 };
 export const VOS = { x: 80, y: 56 };
-export const LIBRARY = { x: 110, y: WORLD.h - 110 };
 const SUB_R = 22;
 const NAME_CHARS = 20;
 const STATUS_CHARS = 26;
-const LIBRARY_R = 52;
 
 type Box = { x: number; y: number; w: number; h: number };
 export type Hit = { id: number; disc: { x: number; y: number; r: number }; label?: Box };
@@ -94,11 +100,13 @@ export function layout(nodes: Map<string, SimNode>, list: AgentView[]) {
   const cy = WORLD.h / 2;
   const ring = Math.min(WORLD.w, WORLD.h) * 0.34;
   const live = new Set<string>();
+  const visitors = libraryVisitors(list);
+  const library = libraryCenter(visitors.length, WORLD.h);
   list.forEach((v, i) => {
     const ang = (i / Math.max(1, list.length)) * Math.PI * 2 - Math.PI / 2;
     let ax = cx + Math.cos(ang) * ring;
     let ay = cy + Math.sin(ang) * ring * 0.8;
-    const target = v.kind === 'needs' ? VOS : v.kind === 'research' ? LIBRARY : null;
+    const target = v.kind === 'needs' ? VOS : v.kind === 'research' ? library : null;
     // Waiting on its supervisor: it leans toward the supervisor, not toward you.
     const boss = v.askingSupervisor ? nodes.get(`a${v.askingSupervisor.id}`) : undefined;
     if (target) {
@@ -130,7 +138,15 @@ export function layout(nodes: Map<string, SimNode>, list: AgentView[]) {
       const sa = meetingAngle(j, v.subagents.length);
       const sid = `s${s.id}`;
       live.add(sid);
-      upsert(nodes, sid, parent.x + Math.cos(sa) * radius, parent.y + Math.sin(sa) * radius, SUB_R);
+      // Researching: it walks to its seat in the library (its own stays free).
+      const spot = librarySpot(visitors, v.id, s.id, WORLD.h);
+      upsert(
+        nodes,
+        sid,
+        spot ? spot.x : parent.x + Math.cos(sa) * radius,
+        spot ? spot.y : parent.y + Math.sin(sa) * radius,
+        SUB_R,
+      );
       nodes.get(sid)!.group = id;
     });
   });
@@ -157,7 +173,10 @@ export function edgesOf(list: AgentView[]): SimEdge[] {
   const edges: SimEdge[] = [];
   for (const v of list) {
     const length = meetingRadius(v.subagents.length);
-    for (const s of v.subagents) edges.push({ a: `a${v.id}`, b: `s${s.id}`, length, strength: 2 });
+    for (const s of v.subagents) {
+      if (keepsMeetingEdge(s.kind))
+        edges.push({ a: `a${v.id}`, b: `s${s.id}`, length, strength: 2 });
+    }
   }
   for (const v of list) {
     for (const bossId of v.supervisedBy)
@@ -227,6 +246,28 @@ function worldTransform(ctx: CanvasRenderingContext2D, f: SceneFrame) {
   ctx.setTransform(z, 0, 0, z, -f.cam.x * z, -f.cam.y * z);
 }
 
+/** A soft dotted line (to the library, or to a member that went there):
+ *  dots, not the supervisor's dashes. */
+function dottedLine(
+  ctx: CanvasRenderingContext2D,
+  color: string,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+) {
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.setLineDash([0.1, 6]);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineCap = 'butt';
+  ctx.globalAlpha = 1;
+}
+
 function drawLinks(
   ctx: CanvasRenderingContext2D,
   th: GraphTheme,
@@ -234,11 +275,28 @@ function drawLinks(
   list: AgentView[],
   nodes: Map<string, SimNode>,
 ) {
+  const visitors = libraryVisitors(list).length;
+  const library = libraryCenter(visitors, WORLD.h);
+  const libraryR = libraryRadius(visitors);
   for (const v of list) {
     const a = nodes.get(`a${v.id}`);
+    // A researching agent too big to walk in: a dotted line to the library.
+    if (a && v.kind === 'research') {
+      const d = Math.hypot(library.x - a.x, library.y - a.y) || 1;
+      const k = Math.max(0, d - libraryR) / d;
+      dottedLine(ctx, th.research, a, {
+        x: a.x + (library.x - a.x) * k,
+        y: a.y + (library.y - a.y) * k,
+      });
+    }
     for (const s of v.subagents) {
       const b = nodes.get(`s${s.id}`);
       if (!a || !b) continue;
+      // Gone to the library: still tied to its lead, by a dotted line.
+      if (s.kind === 'research') {
+        dottedLine(ctx, colorOf(v), a, b);
+        continue;
+      }
       ctx.strokeStyle = colorOf(v);
       ctx.globalAlpha = 0.45;
       ctx.lineWidth = 1.6;
@@ -296,9 +354,12 @@ export function drawScene(
   const nodes = floating(simNodes, f);
   background(ctx, th, f);
   worldTransform(ctx, f);
-  if (list.some((v) => v.kind === 'research' || v.subagents.some((s) => s.kind === 'research'))) {
-    drawLibrary(ctx, th, LIBRARY.x, LIBRARY.y, LIBRARY_R);
-  }
+  const visitors = libraryVisitors(list).length;
+  const library = libraryCenter(visitors, WORLD.h);
+  const libraryR = libraryRadius(visitors);
+  // Who is there: the members inside and the agents reading from outside.
+  const reading = visitors + list.filter((v) => v.kind === 'research').length;
+  if (libraryOpen(list)) drawLibrary(ctx, th, library.x, library.y, libraryR, reading);
   drawLinks(ctx, th, f, list, nodes);
 
   const needing = list.filter((v) => v.kind === 'needs');
@@ -341,6 +402,15 @@ export function drawScene(
     content.maxX = Math.max(content.maxX, b.x + b.w);
     content.maxY = Math.max(content.maxY, b.y + b.h);
   };
+  // "Encuadrar" keeps the library in view while it is open.
+  if (libraryOpen(list)) {
+    grow({
+      x: library.x - libraryR,
+      y: library.y - libraryR - 18,
+      w: libraryR * 2,
+      h: libraryR * 2 + 18,
+    });
+  }
   const hits: Hit[] = [];
   list.forEach((v, index) => {
     const lead = nodes.get(`a${v.id}`);

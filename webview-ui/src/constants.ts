@@ -855,6 +855,8 @@ export const CLAWD_BODY_COLORS = ['#d97757', '#5b8def', '#4fae6b', '#9a6ad6', '#
 /** Graph view: the "Vos" landmark (where requests for you point) and the library. */
 export const GRAPH_VOS_COLOR = '#2a2521';
 export const GRAPH_LIBRARY_COLOR = '#5f8aa6';
+/** The library's shelf: soft book spines, behind whoever sits there. */
+export const GRAPH_LIBRARY_BOOK_COLORS = ['#c98a6b', '#6f9bbf', '#d3b25e', '#86b07f', '#a891c4'];
 /** Clawd's eyes. */
 export const CLAWD_EYE_COLOR = '#231f1c';
 /** Clawd's accessory per repository kind (graph): a white hard hat for

@@ -1,4 +1,9 @@
-import { BADGE_GLYPH_COLOR, CLAWD_BOSS_COLORS, CLAWD_EFFORT_COLORS } from '../constants.js';
+import {
+  BADGE_GLYPH_COLOR,
+  CLAWD_BOSS_COLORS,
+  CLAWD_EFFORT_COLORS,
+  GRAPH_LIBRARY_BOOK_COLORS,
+} from '../constants.js';
 import type { Outfit } from '../identity/clawdOutfit.js';
 import type { AgentKind } from './agentViews.js';
 import {
@@ -705,12 +710,14 @@ export function drawFilePass(
   ctx.fillText(file, cx + 8, cy + 14);
 }
 
+/** The library: a soft circle with a shelf of books, and how many are in. */
 export function drawLibrary(
   ctx: CanvasRenderingContext2D,
   th: GraphTheme,
   x: number,
   y: number,
   r: number,
+  visitors = 0,
 ) {
   ctx.setLineDash([3, 4]);
   ctx.strokeStyle = rgba(th.research, 0.7);
@@ -720,10 +727,33 @@ export function drawLibrary(
   ctx.setLineDash([]);
   ctx.fillStyle = rgba(th.research, 0.06);
   ctx.fill();
+  drawShelf(ctx, th, x, y - r * 0.55, r * 1.1);
   setFont(ctx, 600, 11);
   ctx.fillStyle = th.research;
   ctx.textAlign = 'center';
-  ctx.fillText('Biblioteca', x, y - r - 6);
+  ctx.fillText(visitors > 0 ? `Biblioteca · ${visitors} investigando` : 'Biblioteca', x, y - r - 6);
+}
+
+/** A row of book spines of a few heights on a board, centred on (cx, board). */
+function drawShelf(
+  ctx: CanvasRenderingContext2D,
+  th: GraphTheme,
+  cx: number,
+  board: number,
+  width: number,
+) {
+  const books = Math.max(5, Math.floor(width / 7));
+  const w = width / books;
+  const left = cx - width / 2;
+  ctx.globalAlpha = 0.6;
+  for (let i = 0; i < books; i++) {
+    const h = 8 + ((i * 7) % 5);
+    ctx.fillStyle = GRAPH_LIBRARY_BOOK_COLORS[i % GRAPH_LIBRARY_BOOK_COLORS.length];
+    ctx.fillRect(left + i * w + 0.5, board - h, w - 1, h);
+  }
+  ctx.fillStyle = rgba(th.research, 0.8);
+  ctx.fillRect(left - 2, board, width + 4, 2);
+  ctx.globalAlpha = 1;
 }
 
 export function drawBackground(
