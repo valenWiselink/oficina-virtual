@@ -1,0 +1,120 @@
+import { type RefObject, useEffect, useRef, useState } from 'react';
+
+import { useAppTheme } from '../effects/appTheme.js';
+import { useCalmMode } from '../effects/calmMode.js';
+import { useDayTint } from '../effects/dayTint.js';
+import { useWorkspaces } from '../workspaces/workspaceStore.js';
+import type { AgentView } from './agentViews.js';
+import type { BoardActions } from './BoardCard.js';
+import { onCelebration } from './celebrate.js';
+import { ClawdLife } from './clawdLife.js';
+import { onRevealOnGraph } from './graphReveal.js';
+import { type GraphControls, useGraphCanvas } from './useGraphCanvas.js';
+import { useGraphHover } from './useGraphHover.js';
+import { useGraphKeys } from './useGraphKeys.js';
+import { useGraphPill } from './useGraphPill.js';
+import { useGraphSelection } from './useGraphSelection.js';
+
+/**
+ * Everything the graph view holds: the canvas loop and the state around it
+ * (selection, quick card, grown pill, who the camera follows, keys).
+ */
+export function useGraphView(
+  views: AgentView[],
+  actions: BoardActions,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  rootRef: RefObject<HTMLDivElement | null>,
+) {
+  const lifeRef = useRef(new ClawdLife());
+  const sel = useGraphSelection(views, actions, lifeRef.current);
+  const hover = useGraphHover(views);
+  const pill = useGraphPill(views);
+  const [followId, setFollowId] = useState<number | null>(null);
+  const [slow, setSlow] = useState(false);
+  const controls = useGraphCanvas(canvasRef, {
+    views,
+    selected: sel.marked,
+    calm: useCalmMode(),
+    tint: useDayTint(),
+    theme: useAppTheme(),
+    life: lifeRef.current,
+    cameraKey: useWorkspaces().current,
+    onSelect: (picked, repeat) => {
+      pill.close();
+      sel.clicked(picked, repeat);
+    },
+    onPill: pill.onPill,
+    onFollow: setFollowId,
+    onSlow: () => setSlow(true),
+    onHover: hover.setHover,
+    onFrame: () => {
+      hover.place(controls, rootRef.current);
+      pill.place(controls, rootRef.current);
+    },
+  });
+  const release = releaser(followId, controls, pill, sel);
+  useGraphEvents({ rootRef, controls, release, opened: sel.opened, life: lifeRef.current });
+  const { selected, selection, select } = sel;
+  const keys = useGraphKeys({
+    views,
+    actions,
+    controls,
+    release,
+    following: followId,
+    selected,
+    selection,
+    select,
+  });
+  return { sel, hover, pill, followId, slow, controls, keys };
+}
+
+/** Esc, from the graph: stop following, then shrink the pill, then let go
+ *  of the selection. */
+function releaser(
+  followId: number | null,
+  controls: GraphControls,
+  pill: { isOpen: () => boolean; close: () => void },
+  sel: { clear: () => void },
+): () => void {
+  return () => {
+    if (followId !== null) controls.follow(null);
+    else if (pill.isOpen()) pill.close();
+    else sel.clear();
+  };
+}
+
+/** What reaches the graph from outside: an agent opened elsewhere, an Esc,
+ *  a celebration. */
+function useGraphEvents(input: {
+  rootRef: RefObject<HTMLDivElement | null>;
+  controls: GraphControls;
+  release: () => void;
+  opened: (agentId: number) => { id: number; member?: number };
+  life: ClawdLife;
+}) {
+  const latest = useRef(input);
+  latest.current = input;
+  useEffect(() => onCelebration((id) => latest.current.life.celebrate(id)), []);
+  // Alt+N, Alt+1…9, Ctrl+K or a terminal tab: select it and bring it into view.
+  useEffect(
+    () =>
+      onRevealOnGraph((agentId) => {
+        const picked = latest.current.opened(agentId);
+        latest.current.controls.focusOn(picked.id, picked.member);
+      }),
+    [],
+  );
+  useEffect(() => {
+    // Only an Esc meant for the graph: not one typed in the terminal, the
+    // chat or a dialog.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const where = e.target as Node | null;
+      const root = latest.current.rootRef.current;
+      if (where !== document.body && !(where && root?.contains(where))) return;
+      latest.current.release();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+}

@@ -1,13 +1,7 @@
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 
-import { useAppTheme } from '../effects/appTheme.js';
-import { useCalmMode } from '../effects/calmMode.js';
-import { useDayTint } from '../effects/dayTint.js';
-import { useWorkspaces } from '../workspaces/workspaceStore.js';
 import type { AgentView } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
-import { onCelebration } from './celebrate.js';
-import { ClawdLife } from './clawdLife.js';
 import {
   FollowBanner,
   GraphHint,
@@ -18,12 +12,9 @@ import {
 } from './GraphChrome.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
 import { GraphPillActions } from './GraphPillActions.js';
-import { onRevealOnGraph } from './graphReveal.js';
-import { type GraphControls, useGraphCanvas } from './useGraphCanvas.js';
-import { useGraphHover } from './useGraphHover.js';
-import { useGraphKeys } from './useGraphKeys.js';
-import { useGraphPill } from './useGraphPill.js';
-import { useGraphSelection } from './useGraphSelection.js';
+import { useGraphView } from './useGraphView.js';
+
+type GraphState = ReturnType<typeof useGraphView>;
 
 /**
  * Agents float freely: collaborators attract (a lead and its subagents, two
@@ -44,62 +35,13 @@ import { useGraphSelection } from './useGraphSelection.js';
 export function GraphView({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const lifeRef = useRef(new ClawdLife());
-  const sel = useGraphSelection(views, actions, lifeRef.current);
-  const hover = useGraphHover(views);
-  const pill = useGraphPill(views);
-  const [followId, setFollowId] = useState<number | null>(null);
-  const followed = views.find((v) => v.id === followId);
-  const [slow, setSlow] = useState(false);
-  const { current: workspace } = useWorkspaces();
-
-  const controls = useGraphCanvas(canvasRef, {
-    views,
-    selected: sel.marked,
-    calm: useCalmMode(),
-    tint: useDayTint(),
-    theme: useAppTheme(),
-    life: lifeRef.current,
-    cameraKey: workspace,
-    onSelect: (picked, repeat) => {
-      pill.close();
-      sel.clicked(picked, repeat);
-    },
-    onPill: pill.onPill,
-    onFollow: setFollowId,
-    onSlow: () => setSlow(true),
-    onHover: hover.setHover,
-    onFrame: () => {
-      hover.place(controls, rootRef.current);
-      pill.place(controls, rootRef.current);
-    },
-  });
-
-  /** Esc, from the graph: stop following, then shrink the pill, then let go
-   *  of the selection. */
-  const release = () => {
-    if (followId !== null) controls.follow(null);
-    else if (pill.isOpen()) pill.close();
-    else sel.clear();
-  };
-  useGraphEvents({ rootRef, controls, release, opened: sel.opened, life: lifeRef.current });
-  const keys = useGraphKeys({
-    views,
-    actions,
-    controls,
-    selected: sel.selected,
-    selection: sel.selection,
-    select: sel.select,
-    following: followId,
-    release,
-  });
-
+  const g = useGraphView(views, actions, canvasRef, rootRef);
   return (
     <div
       ref={rootRef}
       className="absolute inset-0"
-      onPointerMove={pill.trackMouse}
-      onPointerLeave={pill.forgetMouse}
+      onPointerMove={g.pill.trackMouse}
+      onPointerLeave={g.pill.forgetMouse}
     >
       <canvas
         ref={canvasRef}
@@ -108,12 +50,31 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
         role="application"
         aria-roledescription="grafo"
         aria-label={`Grafo de agentes (apretá ? para ver los atajos): ${views.map((v) => `${v.name}, ${v.statusText}`).join('; ')}`}
-        onKeyDown={keys.onKeyDown}
-        onFocus={keys.onFocus}
+        onKeyDown={g.keys.onKeyDown}
+        onFocus={g.keys.onFocus}
       />
+      <GraphOverlays g={g} views={views} actions={actions} />
+    </div>
+  );
+}
+
+/** Everything drawn over the canvas: buttons, cards, the panel. */
+function GraphOverlays({
+  g,
+  views,
+  actions,
+}: {
+  g: GraphState;
+  views: AgentView[];
+  actions: BoardActions;
+}) {
+  const { sel, pill, controls, keys } = g;
+  const followed = views.find((v) => v.id === g.followId);
+  return (
+    <>
       {followed && <FollowBanner view={followed} onStop={() => controls.follow(null)} />}
       <GraphToolbar controls={controls} />
-      {hover.facts && <GraphHoverCard facts={hover.facts} cardRef={hover.cardRef} />}
+      {g.hover.facts && <GraphHoverCard facts={g.hover.facts} cardRef={g.hover.cardRef} />}
       {pill.view && (
         <GraphPillActions
           view={pill.view}
@@ -126,7 +87,7 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
           onClose={pill.done}
         />
       )}
-      {slow && <SlowNotice />}
+      {g.slow && <SlowNotice />}
       {keys.hint && <GraphHint text={keys.hint} />}
       {keys.help && <GraphKeysHelp onClose={keys.closeHelp} />}
       {sel.selected && (
@@ -134,47 +95,11 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
           view={sel.selected}
           member={sel.selection?.member}
           actions={actions}
-          following={followId === sel.selected.id}
+          following={g.followId === sel.selected.id}
           onFollow={(on) => controls.follow(on ? sel.selected!.id : null)}
           onClose={sel.clear}
         />
       )}
-    </div>
+    </>
   );
-}
-
-/** What reaches the graph from outside: an agent opened elsewhere, an Esc,
- *  a celebration. */
-function useGraphEvents(input: {
-  rootRef: RefObject<HTMLDivElement | null>;
-  controls: GraphControls;
-  release: () => void;
-  opened: (agentId: number) => { id: number; member?: number };
-  life: ClawdLife;
-}) {
-  const latest = useRef(input);
-  latest.current = input;
-  useEffect(() => onCelebration((id) => latest.current.life.celebrate(id)), []);
-  // Alt+N, Alt+1…9, Ctrl+K or a terminal tab: select it and bring it into view.
-  useEffect(
-    () =>
-      onRevealOnGraph((agentId) => {
-        const picked = latest.current.opened(agentId);
-        latest.current.controls.focusOn(picked.id, picked.member);
-      }),
-    [],
-  );
-  useEffect(() => {
-    // Only an Esc meant for the graph: not one typed in the terminal, the
-    // chat or a dialog.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      const where = e.target as Node | null;
-      const root = latest.current.rootRef.current;
-      if (where !== document.body && !(where && root?.contains(where))) return;
-      latest.current.release();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 }
