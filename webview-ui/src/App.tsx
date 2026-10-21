@@ -11,6 +11,7 @@ import { CloseAgentConfirm } from './components/CloseAgentConfirm.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
 import { DirectoryModal } from './components/DirectoryModal.js';
+import { HookHealthNotice } from './components/HookHealthNotice.js';
 import { LaunchFailedNotice } from './components/LaunchFailedNotice.js';
 import { LoadingScreen } from './components/LoadingScreen.js';
 import { SettingsModal } from './components/SettingsModal.js';
@@ -429,6 +430,14 @@ function App() {
       )}
 
       <ConnectionIndicator />
+      {/* Claude Code's hooks failing to reach us: say so, offer to reinstall. */}
+      <HookHealthNotice
+        onReinstall={
+          officeReadOnly || !('claude' in hooksInstalled)
+            ? undefined
+            : () => transport.send({ type: 'setHooksEnabled', providerId: 'claude', enabled: true })
+        }
+      />
     </div>
   );
 

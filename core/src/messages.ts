@@ -41,6 +41,7 @@ export type ServerMessage =
   | BypassPermissionsUpdated
   | BackgroundAgentsUpdated
   | HooksStatus
+  | HookHealth
   | HooksConsentRequest
   | ClaudeStatus
   | FolderPicked
@@ -192,6 +193,7 @@ export interface AgentToolsClear {
 export interface AgentToolPermission {
   type: 'agentToolPermission';
   id: number;
+  since?: number;
 }
 
 export interface AgentToolPermissionClear {
@@ -305,12 +307,12 @@ export interface AgentIdentity {
 }
 
 export interface SupervisionScope {
-  kind: AnonymousSchema_106;
+  kind: AnonymousSchema_107;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_106 = 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_107 = 'workspace' | 'agents' | 'all';
 
 export type RepoArea = 'backend' | 'webapp' | 'flutter' | 'otros';
 
@@ -434,6 +436,15 @@ export interface HooksStatus {
   type: 'hooksStatus';
   providerId: string;
   installed: boolean;
+}
+
+export interface HookHealth {
+  type: 'hookHealth';
+  failing: boolean;
+  failures: number;
+  timedOut: number;
+  slowestMs?: number;
+  lastError?: string;
 }
 
 export interface HooksConsentRequest {
@@ -673,19 +684,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_347;
-  supervision?: AnonymousSchema_348;
+  effort?: AnonymousSchema_354;
+  supervision?: AnonymousSchema_355;
 }
 
-export type AnonymousSchema_347 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_354 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_348 {
-  kind: AnonymousSchema_349;
+export interface AnonymousSchema_355 {
+  kind: AnonymousSchema_356;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_349 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_356 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -734,16 +745,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_374;
+  scope: AnonymousSchema_381;
 }
 
-export interface AnonymousSchema_374 {
-  kind: AnonymousSchema_375;
+export interface AnonymousSchema_381 {
+  kind: AnonymousSchema_382;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_375 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_382 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

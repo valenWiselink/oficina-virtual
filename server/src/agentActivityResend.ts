@@ -1,6 +1,7 @@
 import { identityMessage } from './agentIdentity.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import { contextUsageMessage } from './contextUsage.js';
+import { hookHealthForNewClient } from './hookHealth.js';
 import { hasPromotedBackgroundAgent } from './teamUtils.js';
 
 /**
@@ -18,6 +19,9 @@ export function resendAgentActivity(
   send: (message: Record<string, unknown>) => void,
   store: AgentStateStore,
 ): void {
+  // Whether what follows can be trusted: hooks failing means stale states.
+  const health = hookHealthForNewClient();
+  if (health) send({ ...health });
   for (const [id, agent] of store) {
     // 1. Team metadata first — webview uses this to route tool messages correctly.
     // Derived teams (named background spawns) have a name and a lead link but NO

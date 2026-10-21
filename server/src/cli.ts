@@ -33,6 +33,7 @@ import {
 } from './constants.js';
 import { DayLog } from './dayLog.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
+import { HookHealth, setCurrentHookHealth } from './hookHealth.js';
 import { PermissionBroker } from './permissionBroker.js';
 import { pendingPermissionMessage, resolvedPermissionMessages } from './permissionMessages.js';
 import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/claudeHookInstaller.js';
@@ -47,6 +48,7 @@ import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
 import { setStateGuessingAllowed } from './timerManager.js';
 import { setRecapCallback } from './transcriptParser.js';
+import { setRecordTap } from './transcriptTaps.js';
 import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
 
 // ── Argument parsing ──────────────────────────────────────────
@@ -308,6 +310,12 @@ async function main(): Promise<void> {
         }
       },
     });
+
+    // Whether Claude Code's hooks reach us: the transcripts list every one of
+    // ours it cut or saw fail; past a threshold the office says so.
+    const hookHealth = new HookHealth((status) => store.broadcast({ ...status }));
+    setCurrentHookHealth(hookHealth);
+    setRecordTap((_agentId, record) => hookHealth.observe(record));
 
     // onSetHooksEnabled side effect: install/uninstall the named provider's
     // hooks when the user toggles in the UI (or answers the consent ask).

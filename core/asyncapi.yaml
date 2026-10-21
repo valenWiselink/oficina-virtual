@@ -121,6 +121,7 @@ components:
         - $ref: '#/components/schemas/BypassPermissionsUpdated'
         - $ref: '#/components/schemas/BackgroundAgentsUpdated'
         - $ref: '#/components/schemas/HooksStatus'
+        - $ref: '#/components/schemas/HookHealth'
         - $ref: '#/components/schemas/HooksConsentRequest'
         - $ref: '#/components/schemas/ClaudeStatus'
         - $ref: '#/components/schemas/FolderPicked'
@@ -387,7 +388,10 @@ components:
           type: integer
 
     AgentToolPermission:
-      description: Permission prompt detected for the agent's current tool.
+      description: |
+        Permission prompt detected for the agent's current tool. It stands until
+        agentToolPermissionClear (or the turn ends), including after the office
+        stops holding the request: the terminal still asks it.
       type: object
       additionalProperties: false
       required: [type, id]
@@ -396,6 +400,11 @@ components:
           const: agentToolPermission
         id:
           type: integer
+        since:
+          type: integer
+          description: >-
+            When it started asking (server clock, ms). Repeated on reconnect,
+            so "te espera hace N min" survives a reload and an office restart.
 
     AgentToolPermissionClear:
       description: Permission prompt resolved.
@@ -1051,6 +1060,36 @@ components:
             verdict in particular reads only the provider it asked about.
         installed:
           type: boolean
+
+    HookHealth:
+      description: |
+        Whether Claude Code's hooks are reaching the office. Claude Code writes
+        every hook it cut for taking too long (hook_cancelled) or that failed
+        (hook_non_blocking_error) into the transcript; the office counts the
+        ones of its own hook over the last 10 minutes. Sent after the connect
+        handshake and whenever that count changes while failing, or the
+        verdict flips.
+      type: object
+      additionalProperties: false
+      required: [type, failing, failures, timedOut]
+      properties:
+        type:
+          const: hookHealth
+        failing:
+          type: boolean
+          description: The failures in the window reached the threshold.
+        failures:
+          type: integer
+          description: Failures of the office's hook in the window.
+        timedOut:
+          type: integer
+          description: How many of them Claude Code cut for taking too long.
+        slowestMs:
+          type: integer
+          description: The longest one cut, in ms.
+        lastError:
+          type: string
+          description: First line of the latest failure's error, when it had one.
 
     HooksConsentRequest:
       description: |
