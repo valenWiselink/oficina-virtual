@@ -54,6 +54,12 @@ npm run pack:win       # unpacked app only: release/win-unpacked/
   itself reads an EMPTY stdin — measured — so it must not read it).
 - The uninstaller runs the exe with `--oficina-uninstall-hooks`
   (`dist/cli.js --uninstall-hooks`).
+- Updates (`updates.ts`): checked at start and every 20 min, downloaded on
+  their own, shown INSIDE the page (`webview-ui/src/updates/`, over the
+  preload's `oficinaDesktop.updates`) with the Release notes
+  (`fullChangelog`). What's new after an update stays in `estado.json` until
+  the page closes it. A page that never asks for the update state (an older
+  office the app attached to) gets the native dialog instead (`updateDialogs.ts`).
 - electron-builder's dependency walk drops `@lydell/node-pty`: it is copied by
   an explicit file set in `electron-builder.yml`. Test runs set
   USERPROFILE/HOME/APPDATA/LOCALAPPDATA to a fake home (the app, its data

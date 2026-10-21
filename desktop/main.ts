@@ -13,7 +13,7 @@ import { PAPER } from './colors.js';
 import { runHookIfAsked, runUninstallIfAsked } from './hookRelay.js';
 import { type Office, openOffice, redactToken, stopServer } from './office.js';
 import { errorPage, startingPage } from './pages.js';
-import { checkForUpdates, setUpUpdates, updatesEnabled } from './updates.js';
+import { Updates, updatesEnabled } from './updates.js';
 
 const APP_ID = 'com.oficina.virtual';
 const appRoot = app.getAppPath();
@@ -41,6 +41,7 @@ function startApp(): void {
   let win: BrowserWindow | null = null;
   let tray: Tray | null = null;
   let office: Office | null = null;
+  let updates: Updates | null = null;
   let quitting = false;
   let restarts = 0;
 
@@ -94,6 +95,8 @@ function startApp(): void {
     if (state.maximized) win.maximize();
     trackBounds(win);
     win.once('ready-to-show', () => win?.show());
+    // A new page may be an office too old to show updates (updateDialogs.ts).
+    win.webContents.on('did-start-loading', () => updates?.pageLoading());
     // Links to anything but the office open in the default browser.
     win.webContents.setWindowOpenHandler(({ url }) => {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
@@ -136,7 +139,16 @@ function startApp(): void {
     const items: Electron.MenuItemConstructorOptions[] = [
       { label: 'Abrir la oficina', click: show },
       ...(updatesEnabled()
-        ? [{ label: 'Buscar actualizaciones', click: () => void checkForUpdates(log, true) }]
+        ? [
+            {
+              label: 'Buscar actualizaciones',
+              // The answer shows inside the office, so bring it up.
+              click: () => {
+                show();
+                void updates?.check(true);
+              },
+            },
+          ]
         : []),
       { type: 'separator' },
       { label: 'Apagar la oficina', click: () => void quit() },
@@ -205,9 +217,13 @@ function startApp(): void {
   void app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
     log(`[app] Oficina virtual ${app.getVersion()} (Electron ${process.versions.electron})`);
+    // Before the window: it records the version that runs (what's new).
+    updates = new Updates(log, (state) => {
+      if (win && !win.isDestroyed()) win.webContents.send('oficina:update-changed', state);
+    });
+    updates.start();
     buildTray();
     createWindow();
     void open();
-    setUpUpdates(log);
   });
 }

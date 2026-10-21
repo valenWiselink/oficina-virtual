@@ -7,6 +7,8 @@ import { setCalm, useCalmMode } from '../effects/calmMode.js';
 import { TERMINAL_DOCKS, type TerminalDock } from '../hooks/useTerminalDock.js';
 import { isSoundEnabled, setSoundEnabled } from '../notificationSound.js';
 import { transport } from '../transport/index.js';
+import { hasDesktopUpdates } from '../updates/desktopUpdates.js';
+import { UpdateHelpRows } from '../updates/UpdateHelpRows.js';
 import { setOperatorName, useOperatorName } from '../views/officeMemory.js';
 import { TerminalSchemePicker } from './TerminalSchemePicker.js';
 import { Button } from './ui/Button.js';
@@ -170,34 +172,66 @@ export function SettingsModal({
           onChange={onToggleDebugMode}
         />
       </Section>
-      {onShowGuide && (
-        <Section title="Ayuda">
-          <div className="flex items-center justify-between gap-8 py-7 px-8">
-            <span className="flex flex-col gap-1">
-              <span className="text-sm text-text">Guía</span>
-              <span className="text-xs text-text-muted">Un recorrido rápido por la oficina</span>
-            </span>
-            <Button size="sm" onClick={onShowGuide}>
-              Ver la guía
-            </Button>
-          </div>
-          {onShowIntro && (
-            <div className="flex items-center justify-between gap-8 py-7 px-8">
-              <span className="flex flex-col gap-1">
-                <span className="text-sm text-text">Presentación</span>
-                <span className="text-xs text-text-muted">
-                  De qué se trata la oficina, en menos de un minuto
-                </span>
-              </span>
-              <Button size="sm" onClick={onShowIntro}>
-                Ver la presentación
-              </Button>
-            </div>
-          )}
-        </Section>
-      )}
+      <HelpSection onShowGuide={onShowGuide} onShowIntro={onShowIntro} />
       {onShutdown && <ShutdownRow onShutdown={onShutdown} />}
     </Modal>
+  );
+}
+
+/** Ayuda: the guide and the presentation (desktop layout), and inside the
+ *  desktop app the version installed and "Buscar actualizaciones". */
+function HelpSection({
+  onShowGuide,
+  onShowIntro,
+}: {
+  onShowGuide?: () => void;
+  onShowIntro?: () => void;
+}) {
+  if (!onShowGuide && !hasDesktopUpdates()) return null;
+  return (
+    <Section title="Ayuda">
+      {onShowGuide && (
+        <ActionRow
+          label="Guía"
+          description="Un recorrido rápido por la oficina"
+          action="Ver la guía"
+          onClick={onShowGuide}
+        />
+      )}
+      {onShowGuide && onShowIntro && (
+        <ActionRow
+          label="Presentación"
+          description="De qué se trata la oficina, en menos de un minuto"
+          action="Ver la presentación"
+          onClick={onShowIntro}
+        />
+      )}
+      <UpdateHelpRows />
+    </Section>
+  );
+}
+
+function ActionRow({
+  label,
+  description,
+  action,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  action: string;
+  onClick: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-8 py-7 px-8">
+      <span className="flex flex-col gap-1">
+        <span className="text-sm text-text">{label}</span>
+        <span className="text-xs text-text-muted">{description}</span>
+      </span>
+      <Button size="sm" onClick={onClick}>
+        {action}
+      </Button>
+    </div>
   );
 }
 

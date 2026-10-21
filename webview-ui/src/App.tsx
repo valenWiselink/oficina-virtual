@@ -42,6 +42,7 @@ import { PermissionCards } from './permissions/PermissionCards.js';
 import { usePermissionCards } from './permissions/usePermissionCards.js';
 import { isBrowserRuntime } from './runtime.js';
 import { transport } from './transport/index.js';
+import { UpdateCorner } from './updates/UpdateCorner.js';
 import type { AgentKind } from './views/agentViews.js';
 import type { BoardActions } from './views/BoardCard.js';
 import { BoardView } from './views/BoardView.js';
@@ -383,6 +384,8 @@ function App() {
       )}
       {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
       {!isMobile && <FocusBanner />}
+      {/* The desktop app's updates (nothing in a browser). */}
+      {!isMobile && <UpdateCorner views={agentViews} permissions={permissionCards.cards} />}
 
       {officeReadOnly && (
         <div className="absolute mobile-safe-top left-1/2 -translate-x-1/2 z-10 text-sm text-text-muted pointer-events-none select-none whitespace-nowrap">
