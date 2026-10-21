@@ -8,6 +8,7 @@ import { AgentRuntime } from '../src/agentRuntime.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
 import { JSONL_POLL_INTERVAL_MS } from '../src/constants.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
+import { setSpanishTerminal, spinnerSettingsPath } from '../src/spinnerSettings.js';
 import type { IPty, PtyModule, PtySpawnOptions } from '../src/terminal/ptyModule.js';
 import { PtySessionManager } from '../src/terminal/ptySessionManager.js';
 import { launchStandaloneAgent } from '../src/terminal/standaloneAgentLauncher.js';
@@ -134,10 +135,13 @@ describe('launchStandaloneAgent', () => {
     // On Windows the bare name is resolved to its full path (node-pty does not
     // search PATH there); elsewhere it is spawned as is.
     expect(path.parse(harness.spawnArgs[0].file).name).toBe('claude');
-    // With the "Te toca" rule, since this user's CLAUDE.md does not have it.
+    // Claude Code in Spanish (on by default), and the "Te toca" rule, since
+    // this user's CLAUDE.md does not have it.
     expect(harness.spawnArgs[0].args).toEqual([
       '--session-id',
       agent?.sessionId,
+      '--settings',
+      spinnerSettingsPath(),
       '--append-system-prompt-file',
       ruleFilePath(),
     ]);
@@ -179,6 +183,19 @@ describe('launchStandaloneAgent', () => {
     const harness = workingPtyManager();
     launch(harness, { directoryPath: tempDir });
     expect(harness.spawnArgs[0].args).not.toContain('--append-system-prompt-file');
+  });
+
+  // The file itself (emptied, never deleted) is spinnerSettings.test.ts's:
+  // here it sits in the shared home that parallel test files also launch in.
+  it('leaves --settings out while the Spanish terminal is off', () => {
+    setSpanishTerminal(false);
+    try {
+      const harness = workingPtyManager();
+      launch(harness, { directoryPath: tempDir });
+      expect(harness.spawnArgs[0].args).not.toContain('--settings');
+    } finally {
+      setSpanishTerminal(true);
+    }
   });
 
   it('passes bypassPermissions through to the launch command', () => {

@@ -25,6 +25,7 @@ import { directoryNameForLaunch } from '../directories.js';
 import { startFileWatching } from '../fileWatcher.js';
 import { directoryNameFor, hostDirectory } from '../hostDirectory.js';
 import { assignPaletteIfNeeded } from '../paletteAssigner.js';
+import { spinnerLaunchArgs } from '../spinnerSettings.js';
 import { type SupervisionScope, supervisors } from '../supervisors/supervision.js';
 import { ruleLaunchArgs } from '../teTocaRule.js';
 import type { AgentState } from '../types.js';
@@ -96,12 +97,14 @@ function supervisorArgs(sessionId: string, scope: SupervisionScope | undefined):
   }
 }
 
-/** Every launch's extra flags: a supervisor's files, or else the "Te toca"
- *  rule (teTocaRule.ts) — at most one --append-system-prompt-file, which is
- *  all Claude Code reads. Built anew on every launch, resume and relaunch. */
+/** Every launch's extra flags: Claude Code in Spanish (spinnerSettings.ts;
+ *  first, so a supervisor's variadic --allowedTools still ends the list),
+ *  then a supervisor's files, or else the "Te toca" rule (teTocaRule.ts) — at
+ *  most one --append-system-prompt-file, which is all Claude Code reads.
+ *  Built anew on every launch, resume and relaunch. */
 function launchExtras(filesId: string | undefined, scope: SupervisionScope | undefined): string[] {
   const supervisor = filesId ? supervisorArgs(filesId, scope) : [];
-  return supervisor.length > 0 ? supervisor : ruleLaunchArgs();
+  return [...spinnerLaunchArgs(), ...(supervisor.length > 0 ? supervisor : ruleLaunchArgs())];
 }
 
 /**

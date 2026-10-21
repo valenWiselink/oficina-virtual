@@ -39,6 +39,7 @@ import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { watchAgentPrs } from './prWatchWiring.js';
 import { PixelAgentsServer } from './server.js';
+import { setSpanishTerminal } from './spinnerSettings.js';
 import { supervisors } from './supervisors/supervision.js';
 import { SupervisorRelay } from './supervisors/supervisorRelay.js';
 import { setBackgroundAgents } from './terminal/backgroundSessions.js';
@@ -471,6 +472,9 @@ async function main(): Promise<void> {
     // Background sessions (on by default): agents outlive the office, which
     // only attaches to them (terminal/backgroundSessions.ts).
     setBackgroundAgents(adapter.getSetting('pixel-agents.backgroundAgents', true));
+    // Claude Code in Spanish (on by default): the --settings file follows the
+    // switch now, so a background session waking later reads the same.
+    setSpanishTerminal(adapter.getSetting('pixel-agents.spanishTerminal', true));
     void resumeOfficeSessions(
       { store, runtime, ptyManager, provider: claudeProvider },
       adapter.getSetting('pixel-agents.bypassPermissions', false),

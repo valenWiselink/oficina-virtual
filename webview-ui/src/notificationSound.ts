@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
 import {
+  BONK_SOUND,
   CHEER_NOTES,
   CHEER_VOLUME,
   DONE_NOTES,
@@ -180,4 +181,11 @@ export function unlockAudio(): void {
   } catch {
     // ignore
   }
+}
+
+/** Something you sent did not reach the agent's terminal: the "bonk" beside
+ *  the text that says so. It answers your own action, so it is information:
+ *  it plays in focus and calm mode, and with "Sólo cuando te necesitan". */
+export function playBonkSound(): Promise<void> {
+  return play((ctx) => scheduleWood(ctx, ctx.destination, BONK_SOUND), true);
 }

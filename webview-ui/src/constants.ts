@@ -242,6 +242,16 @@ export const TETOCA_SOUND: WoodSound = {
   overtoneLevel: 0.25,
   clickLevel: 0.15,
 };
+/** Something you sent did not reach the agent: one plain tap on the same
+ *  wood (G3), softer than the door. */
+export const BONK_SOUND: WoodSound = {
+  ...WOOD,
+  hits: [{ hz: 196, at: 0, ring: 0.22 }],
+  volume: 0.2,
+  thud: 1.15,
+  overtoneLevel: 0.5,
+  clickLevel: 0.3,
+};
 /** "Hecho" pressed or a PR merged: a short sparkle up (G5 B5 D6 G6, an
  *  octave below where it used to shrill), quieter than the rest. */
 export const CHEER_NOTES: readonly SoundNote[] = [

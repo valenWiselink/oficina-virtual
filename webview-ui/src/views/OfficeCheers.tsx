@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CharacterMugShot } from '../components/CharacterMugShot.js';
 import { Button } from '../components/ui/Button.js';
 import { useCalmMode } from '../effects/calmMode.js';
+import { isFocused, noteWhileFocused } from '../focus/focusMode.js';
 import { useDayLog } from '../history/dayLogStore.js';
 import { daySummary, summaryLine } from '../history/dayLogView.js';
 import { shortPr } from '../history/prRows.js';
@@ -15,30 +16,38 @@ import type { AgentView } from './agentViews.js';
 import { localDay } from './boardMood.js';
 import { TellMergedButton } from './CardExtras.js';
 import { requestCelebration } from './celebrate.js';
-import { allFinished, isBusy } from './officeMoments.js';
+import { allDoneText, mergeMoment, mergeTitle, moreThanBefore, SUMMARY_HOUR } from './cheerText.js';
+import { dayRecord } from './officeMemory.js';
+import { allFinished, isBusy, noteAllDone } from './officeMoments.js';
+import { useWeekCheer } from './useWeekCheer.js';
+import { DAY_INITIALS } from './weekText.js';
+import { dayLabel, lastWorkedDay } from './workdays.js';
 
-/** The evening summary shows once a day, from this hour. */
-const SUMMARY_HOUR = 18;
+/** The evening summary shows once a day, from SUMMARY_HOUR. */
 const SUMMARY_KEY = 'oficina.resumen';
 /** "Terminaron todos" at most this often. */
 const ALL_DONE_EVERY_MS = 10 * 60_000;
 const ALL_DONE_SHOWN_MS = 8000;
 
 interface Cheer {
-  id: 'todos' | 'resumen' | 'pr';
+  id: 'todos' | 'resumen' | 'semana' | 'pr';
   title: string;
   text: string;
   palette: number;
   hueShift: number;
   /** The agent it is about (a merged PR's), for "Avisarle". */
   agentId?: number;
+  /** The week's days, Monday to Friday, as shares of the busiest. */
+  bars?: number[];
 }
 
 /**
  * The office's little moments, as a note above the toolbar: when every
- * agent has finished ("Terminaron todos"), and once a day from 18 h a summary
- * of what got done; when one of their PRs gets merged, its agent celebrates
- * too. Never in calm mode.
+ * agent has finished ("Terminaron todos", worded for the hour), and once a
+ * day from 18 h a summary of what got done; when one of their PRs gets
+ * merged, a title that keeps count ("¡Otro adentro! · van 3 hoy") and its
+ * agent celebrates too (cheerText.ts). Never in calm mode; in focus mode the
+ * merge and "Terminaron todos" keep quiet and go to the focus summary.
  */
 export function OfficeCheers({
   views,
@@ -58,6 +67,10 @@ export function OfficeCheers({
   viewsRef.current = views;
   const calmRef = useRef(calm);
   calmRef.current = calm;
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  // The last line of each kind, so the next one is never the same.
+  const lastLine = useRef<{ pr?: string; todos?: string }>({});
   useEffect(
     () =>
       onPrMerged((url) => {
@@ -65,9 +78,15 @@ export function OfficeCheers({
         if (agent) requestCelebration(agent.id);
         void playCheerSound();
         if (calmRef.current) return;
+        if (isFocused()) return noteWhileFocused('mergeado');
+        const title = mergeTitle(
+          mergeMoment(entriesRef.current, url, agent?.name),
+          lastLine.current.pr,
+        );
+        lastLine.current.pr = title;
         setCheer({
           id: 'pr',
-          title: '¡Se mergeó!',
+          title,
           text: `${prStatusOf(url)?.title ?? shortPr(url)}${agent ? ` · de ${agent.name}` : ''}`,
           palette: agent?.palette ?? 0,
           hueShift: agent?.hueShift ?? 0,
@@ -81,16 +100,16 @@ export function OfficeCheers({
   useEffect(() => {
     const before = wasBusy.current;
     wasBusy.current = busy;
-    if (calm || before === null || !allFinished(before, views)) return;
+    if (before === null || !allFinished(before, views)) return;
     if (Date.now() - lastAllDone.current < ALL_DONE_EVERY_MS) return;
     lastAllDone.current = Date.now();
-    setCheer({
-      id: 'todos',
-      title: 'Terminaron todos',
-      text: 'Nadie está trabajando ni te espera. Andá a estirar las piernas.',
-      palette: 0,
-      hueShift: 0,
-    });
+    // Counted even unseen: «Volviste» tells it if you were away.
+    noteAllDone(Date.now());
+    if (calm) return;
+    if (isFocused()) return noteWhileFocused('todos');
+    const text = allDoneText(new Date().getHours(), lastLine.current.todos);
+    lastLine.current.todos = text;
+    setCheer({ id: 'todos', title: 'Terminaron todos', text, palette: 0, hueShift: 0 });
   }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -99,19 +118,47 @@ export function OfficeCheers({
     return () => clearTimeout(timer);
   }, [cheer]);
 
+  const date = new Date(now);
+  const day = localDay(date);
+  const weekPending = useWeekCheer({
+    calm,
+    busy: cheer !== null,
+    now,
+    onShow: (week, friday) => {
+      // On Friday the week takes the place of the day's summary.
+      if (friday) writeSeen(String(day));
+      setCheer({
+        id: 'semana',
+        title: week.title,
+        text: `${week.text}. ${week.closing}`,
+        palette: 0,
+        hueShift: 0,
+        bars: week.bars,
+      });
+    },
+  });
+
   useEffect(() => {
-    const date = new Date(now);
     if (calm || cheer || date.getHours() < SUMMARY_HOUR) return;
-    const today = String(localDay(date));
+    // The week first (it may still be on its way).
+    if (weekPending) return;
+    const today = String(day);
     if (readSeen() === today) return;
     const summary = daySummary(entries);
     if (summary.tasks + summary.turns === 0) return;
     writeSeen(today);
     const star = views.find((v) => v.id === summary.star?.agentId);
+    const more = moreThanBefore(summary.tasks + summary.turns, workedBefore(day));
     setCheer({
       id: 'resumen',
       title: 'Así fue tu día',
-      text: `${summaryLine(summary)}.${summary.star ? ` El que más laburó: ${summary.star.agent}.` : ''}`,
+      text: [
+        `${summaryLine(summary)}.`,
+        summary.star && `El que más laburó: ${summary.star.agent}.`,
+        more,
+      ]
+        .filter(Boolean)
+        .join(' '),
       palette: star?.palette ?? 0,
       hueShift: star?.hueShift ?? 0,
     });
@@ -136,6 +183,7 @@ export function OfficeCheers({
           {told && ' · ya se enteró'}
         </span>
       </span>
+      {cheer.bars && <WeekBars bars={cheer.bars} />}
       {cheer.id === 'pr' && about && <TellFromCheer view={about} />}
       {cheer.id === 'resumen' && (
         <Button
@@ -161,10 +209,36 @@ export function OfficeCheers({
   );
 }
 
+/** Five small bars, Monday to Friday (the text says the numbers). */
+function WeekBars({ bars }: { bars: number[] }) {
+  return (
+    <span className="flex items-end gap-3 shrink-0" aria-hidden="true">
+      {bars.map((share, i) => (
+        <span key={i} className="flex flex-col items-center gap-1">
+          <span
+            className="w-6 rounded-sm bg-accent"
+            style={{ height: Math.max(2, Math.round(share * 18)) }}
+          />
+          <span className="text-2xs text-text-muted leading-none">{DAY_INITIALS[i]}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /** "Avisarle" in the merge celebration, when the card would offer it. */
 function TellFromCheer({ view }: { view: AgentView }) {
   const writable = useWritableAgents().has(view.id);
   return useTellMerged(view.mergedPr, writable) ? <TellMergedButton view={view} /> : null;
+}
+
+/** The last day this browser saw work on (Friday, on a Monday), as tasks
+ *  plus turns, and how to name it ("ayer", "el viernes"). */
+function workedBefore(day: number): { count: number; label: string } | undefined {
+  const before = lastWorkedDay(day, (d) => dayRecord(d) !== undefined);
+  const record = before === undefined ? undefined : dayRecord(before);
+  if (before === undefined || !record) return undefined;
+  return { count: record.tasks + record.turns, label: dayLabel(before, day) };
 }
 
 function readSeen(): string | null {

@@ -4,35 +4,35 @@ import { Button } from '../components/ui/Button.js';
 import { NOTE_MAX_CHARS, setNote, useNote } from '../identity/agentNotes.js';
 import { type Outfit, OUTFITS, setOutfit, useOutfit } from '../identity/clawdOutfit.js';
 import { markMergeTold, useMergeTold } from '../identity/mergeToldStore.js';
+import { playBonkSound } from '../notificationSound.js';
 import { sendToAgent } from '../terminal/agentInput.js';
 import type { AgentView } from './agentViews.js';
 import { choiceButtons, QUICK_REPLIES } from './cardRules.js';
+import { markReplySent, useSentReply } from './sentReplies.js';
 
 /** "Dale, seguí" and friends: one tap writes it to the agent. It counts as
- *  done (onSent) only once it reached the agent's terminal. */
+ *  done (onSent) only once it reached the agent's terminal; then its button
+ *  keeps a ✓ until the agent reads it (sentReplies.ts). */
 export function QuickReplies({ view, onSent }: { view: AgentView; onSent: () => void }) {
-  const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
-  const reply = (text: string) => {
-    setState('sending');
-    void sendToAgent(view.id, text).then((sent) => {
-      setState(sent ? 'idle' : 'failed');
-      if (sent) onSent();
-    });
-  };
+  const { state, tapped, send } = useAgentSend(view);
+  const marked = useSentReply(view.id, view.lastRecordAt);
   return (
     <div className="flex flex-wrap items-center gap-4" onClick={(e) => e.stopPropagation()}>
-      {QUICK_REPLIES.map((r) => (
-        <button
-          key={r.label}
-          type="button"
-          title={`Le escribe: «${r.text}»`}
-          disabled={state === 'sending'}
-          className="border border-border bg-bg-dark hover:bg-btn-hover text-text text-2xs font-medium rounded-full px-8 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-          onClick={() => reply(r.text)}
-        >
-          {r.label}
-        </button>
-      ))}
+      {QUICK_REPLIES.map((r) => {
+        const key = `q:${r.label}`;
+        return (
+          <ReplyButton
+            key={key}
+            look="quick"
+            label={r.label}
+            text={r.text}
+            sending={state === 'sending'}
+            tapped={tapped === key}
+            sent={marked === key}
+            onClick={() => send(r.text, onSent, key)}
+          />
+        );
+      })}
       {state === 'failed' && (
         <span className="text-2xs text-danger" role="status">
           No le llegó: su terminal no está conectada. Probá de nuevo.
@@ -42,22 +42,83 @@ export function QuickReplies({ view, onSent }: { view: AgentView; onSent: () => 
   );
 }
 
+const REPLY_LOOK = {
+  quick:
+    'border bg-bg-dark hover:bg-btn-hover text-text text-2xs font-medium rounded-full px-8 py-2 cursor-pointer disabled:cursor-wait',
+  choice:
+    'max-w-full overflow-hidden text-ellipsis whitespace-nowrap border bg-active-bg hover:bg-btn-hover text-text text-2xs font-semibold rounded-full px-8 py-2 cursor-pointer disabled:cursor-default',
+} as const;
+
+/** One reply button: while a reply goes out the others dim and the one you
+ *  tapped stays lit; once it reached the terminal it carries a ✓. */
+function ReplyButton({
+  look,
+  label,
+  text,
+  sending,
+  tapped,
+  sent,
+  onClick,
+}: {
+  look: keyof typeof REPLY_LOOK;
+  label: string;
+  text: string;
+  sending: boolean;
+  tapped: boolean;
+  sent: boolean;
+  onClick: () => void;
+}) {
+  const border = sent
+    ? 'border-status-success'
+    : look === 'choice'
+      ? 'border-accent/40'
+      : 'border-border';
+  return (
+    <button
+      type="button"
+      title={sent ? `Le llegó: «${text}»` : `Le escribe: «${text}»`}
+      aria-label={sent ? `${label}: le llegó` : undefined}
+      disabled={sending}
+      className={`${REPLY_LOOK[look]} ${border} ${tapped ? '' : 'disabled:opacity-60'}`}
+      onClick={onClick}
+    >
+      {sent && (
+        <span className="text-status-success" aria-hidden="true">
+          ✓{' '}
+        </span>
+      )}
+      {label}
+    </button>
+  );
+}
+
 /**
  * Write to an agent and learn whether it really went out: the answer can
  * take a while (its terminal may be reconnecting), so the buttons wait,
- * then run `onSent` — or say it did not arrive.
+ * then run `onSent` — or say it did not arrive, with a "bonk". A reply
+ * with a `key` is marked as sent (sentReplies.ts) before `onSent`, which
+ * may move the card.
  */
-function useAgentSend(agentId: number) {
+function useAgentSend(view: AgentView) {
   const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
-  const send = (text: string, onSent: () => void) => {
+  const [tapped, setTapped] = useState<string>();
+  const send = (text: string, onSent: () => void, key?: string) => {
     if (state === 'sending') return;
     setState('sending');
-    void sendToAgent(agentId, text).then((ok) => {
+    setTapped(key);
+    const recordAt = view.lastRecordAt;
+    void sendToAgent(view.id, text).then((ok) => {
       setState(ok ? 'idle' : 'failed');
-      if (ok) onSent();
+      setTapped(undefined);
+      if (!ok) {
+        void playBonkSound();
+        return;
+      }
+      if (key) markReplySent(view.id, key, recordAt);
+      onSent();
     });
   };
-  return { state, send };
+  return { state, tapped, send };
 }
 
 function NotArrived() {
@@ -74,7 +135,8 @@ export function ChoiceReplies({
   view: AgentView;
   onSent: (text: string) => void;
 }) {
-  const { state, send } = useAgentSend(view.id);
+  const { state, tapped, send } = useAgentSend(view);
+  const marked = useSentReply(view.id, view.lastRecordAt);
   const buttons = choiceButtons(view.choices);
   if (buttons.length === 0) return null;
   return (
@@ -84,18 +146,21 @@ export function ChoiceReplies({
       role="group"
       aria-label="Elegí una opción"
     >
-      {buttons.map((b) => (
-        <button
-          key={b.key}
-          type="button"
-          title={b.title}
-          disabled={state === 'sending'}
-          className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap border border-accent/40 bg-active-bg hover:bg-btn-hover text-text text-2xs font-semibold rounded-full px-8 py-2 cursor-pointer disabled:cursor-default disabled:opacity-60"
-          onClick={() => send(b.text, () => onSent(b.text))}
-        >
-          {b.label}
-        </button>
-      ))}
+      {buttons.map((b) => {
+        const key = `c:${b.key}`;
+        return (
+          <ReplyButton
+            key={key}
+            look="choice"
+            label={b.label}
+            text={b.text}
+            sending={state === 'sending'}
+            tapped={tapped === key}
+            sent={marked === key}
+            onClick={() => send(b.text, () => onSent(b.text), key)}
+          />
+        );
+      })}
       {state === 'failed' && <NotArrived />}
     </div>
   );
@@ -106,7 +171,7 @@ export function ChoiceReplies({
 export function TellMergedButton({ view }: { view: AgentView }) {
   const merged = view.mergedPr;
   const told = useMergeTold(merged?.turnId);
-  const { state, send } = useAgentSend(view.id);
+  const { state, send } = useAgentSend(view);
   if (!merged || merged.told || told) return null;
   const text = `Ya mergeé el PR #${merged.number}.`;
   return (

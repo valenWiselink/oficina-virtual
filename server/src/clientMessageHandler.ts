@@ -33,6 +33,7 @@ import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
 import { hooksConsentRequest } from './providers/hook/consentGate.js';
 import { claudeProvider, hookProviderById, hookProviders } from './providers/index.js';
+import { setSpanishTerminal } from './spinnerSettings.js';
 import { parseScope } from './supervisors/supervision.js';
 import { applySupervisionTeam, broadcastSupervision } from './supervisors/supervisionMessages.js';
 import { adoptIntoOffice } from './terminal/adoptSession.js';
@@ -41,6 +42,7 @@ import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { launchAgent } from './terminal/standaloneAgentLauncher.js';
 import { ruleStatus, setRuleInClaudeMd } from './teTocaRule.js';
+import { weekRecap } from './weekRecap.js';
 
 type WsSend = (message: Record<string, unknown>) => void;
 
@@ -102,6 +104,7 @@ const KEY_HOOKS_INFO_SHOWN = 'pixel-agents.hooksInfoShown';
 const KEY_SHOW_AREAS = 'pixel-agents.showAreas';
 const KEY_BYPASS_PERMISSIONS = 'pixel-agents.bypassPermissions';
 const KEY_BACKGROUND_AGENTS = 'pixel-agents.backgroundAgents';
+const KEY_SPANISH_TERMINAL = 'pixel-agents.spanishTerminal';
 const KEY_SHOW_HOST_DIRECTORIES = 'pixel-agents.showHostDirectories';
 
 /**
@@ -511,6 +514,15 @@ export function handleClientMessage(
       break;
     }
 
+    case 'setSpanishTerminal': {
+      if (typeof msg.enabled !== 'boolean' || !adapter) break;
+      adapter.setSetting(KEY_SPANISH_TERMINAL, msg.enabled);
+      const enabled = adapter.getSetting(KEY_SPANISH_TERMINAL, true);
+      setSpanishTerminal(enabled);
+      store.broadcast({ type: 'spanishTerminalUpdated', enabled });
+      break;
+    }
+
     case 'setUsageLimits': {
       // Installs or removes the office's status line in ~/.claude/settings.json.
       const limits = runtime?.usageLimits;
@@ -567,6 +579,15 @@ export function handleClientMessage(
         if (result.ok) store.broadcast({ ...result.summary });
         else send({ type: 'daySummaryFailed', reason: result.reason });
       });
+      break;
+    }
+
+    case 'requestWeekRecap': {
+      // The Friday summary (or the Monday that missed it): the week from the
+      // saved histories, to the office that asked.
+      const where = runtime?.dayLog?.storage();
+      const recap = where ? weekRecap(where.dir, msg.monday) : null;
+      if (recap) send({ ...recap });
       break;
     }
 
@@ -976,6 +997,7 @@ function settingsSnapshot(adapter: StateAdapter | undefined) {
     bypassPermissions: adapter?.getSetting(KEY_BYPASS_PERMISSIONS, false) ?? false,
     showHostDirectories: adapter?.getSetting(KEY_SHOW_HOST_DIRECTORIES, false) ?? false,
     backgroundAgents: adapter?.getSetting(KEY_BACKGROUND_AGENTS, true) ?? true,
+    spanishTerminal: adapter?.getSetting(KEY_SPANISH_TERMINAL, true) ?? true,
   } as const;
 }
 

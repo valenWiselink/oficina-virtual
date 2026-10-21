@@ -41,6 +41,7 @@ export type ServerMessage =
   | SettingsLoaded
   | BypassPermissionsUpdated
   | BackgroundAgentsUpdated
+  | SpanishTerminalUpdated
   | UsageLimits
   | HooksStatus
   | HookHealth
@@ -67,6 +68,7 @@ export type ServerMessage =
   | DayLogAppended
   | DaySummary
   | DaySummaryFailed
+  | WeekRecap
   | PrStatusChanged
   | PrStatuses
   | AgentChat
@@ -106,6 +108,7 @@ export type ClientMessage =
   | SetShowAreas
   | SetBypassPermissions
   | SetBackgroundAgents
+  | SetSpanishTerminal
   | SetUsageLimits
   | SetTeTocaRuleGlobal
   | SetShowHostDirectories
@@ -115,7 +118,8 @@ export type ClientMessage =
   | PickFolder
   | OpenPath
   | RequestDiagnostics
-  | WriteDaySummary;
+  | WriteDaySummary
+  | RequestWeekRecap;
 
 export interface ProviderCapabilities {
   type: 'providerCapabilities';
@@ -449,6 +453,7 @@ export interface SettingsLoaded {
   bypassPermissions: boolean;
   showHostDirectories: boolean;
   backgroundAgents?: boolean;
+  spanishTerminal?: boolean;
 }
 
 export interface BypassPermissionsUpdated {
@@ -458,6 +463,11 @@ export interface BypassPermissionsUpdated {
 
 export interface BackgroundAgentsUpdated {
   type: 'backgroundAgentsUpdated';
+  enabled: boolean;
+}
+
+export interface SpanishTerminalUpdated {
+  type: 'spanishTerminalUpdated';
   enabled: boolean;
 }
 
@@ -668,6 +678,19 @@ export interface DaySummaryFailed {
   reason: string;
 }
 
+export interface WeekRecap {
+  type: 'weekRecap';
+  monday: string;
+  days: WeekRecapDay[];
+}
+
+export interface WeekRecapDay {
+  day: string;
+  tasks: number;
+  turns: number;
+  merged: number;
+}
+
 export interface PrStatusChanged {
   type: 'prStatus';
   url: string;
@@ -737,19 +760,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_371;
-  supervision?: AnonymousSchema_372;
+  effort?: AnonymousSchema_381;
+  supervision?: AnonymousSchema_382;
 }
 
-export type AnonymousSchema_371 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_381 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_372 {
-  kind: AnonymousSchema_373;
+export interface AnonymousSchema_382 {
+  kind: AnonymousSchema_383;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_373 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_383 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -798,16 +821,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_398;
+  scope: AnonymousSchema_408;
 }
 
-export interface AnonymousSchema_398 {
-  kind: AnonymousSchema_399;
+export interface AnonymousSchema_408 {
+  kind: AnonymousSchema_409;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_399 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_409 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';
@@ -916,6 +939,11 @@ export interface SetBackgroundAgents {
   enabled: boolean;
 }
 
+export interface SetSpanishTerminal {
+  type: 'setSpanishTerminal';
+  enabled: boolean;
+}
+
 export interface SetUsageLimits {
   type: 'setUsageLimits';
   enabled: boolean;
@@ -976,4 +1004,9 @@ export interface DayAchievements {
 export interface DayPr {
   title: string;
   state?: PrState;
+}
+
+export interface RequestWeekRecap {
+  type: 'requestWeekRecap';
+  monday: string;
 }
