@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentView } from '../src/views/agentViews.js';
-import { ClawdLife, isAsleep, SLEEP_AFTER_MS } from '../src/views/clawdLife.js';
+import { ClawdLife, GLANCE_MS, isAsleep, SLEEP_AFTER_MS } from '../src/views/clawdLife.js';
+import { dayKey, takeDailyWave } from '../src/views/officeLife.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
   id,
@@ -87,13 +88,24 @@ describe('isAsleep', () => {
 });
 
 describe('ClawdLife: hello, arrivals, tricks, coffee', () => {
-  it('everyone waves when the page opens, one after another', () => {
+  it('everyone waves when the graph opens for the day, one after another', () => {
     const life = new ClawdLife();
     life.observe([view(1), view(2)], 1000);
+    expect(life.waving(0, 1000)).toBe(false);
+    life.showGraph(1000, true);
     expect(life.waving(0, 1000)).toBe(true);
     expect(life.waving(1, 1000)).toBe(false);
     expect(life.waving(1, 1300)).toBe(true);
     expect(life.waving(0, 5000)).toBe(false);
+  });
+
+  it('coming back to the graph: no wave, just a blink all together', () => {
+    const life = new ClawdLife();
+    life.observe([view(1), view(2)], 0);
+    life.showGraph(1000, false);
+    expect(life.waving(0, 1000)).toBe(false);
+    expect(life.glancing(1010)).toBe(true);
+    expect(life.glancing(1000 + GLANCE_MS)).toBe(false);
   });
 
   it('only an agent that shows up later arrives', () => {
@@ -135,5 +147,37 @@ describe('ClawdLife: hello, arrivals, tricks, coffee', () => {
     life.celebrate(1);
     life.observe([view(1)], 0);
     expect(life.hop(1, 230)).toBeGreaterThan(5);
+  });
+});
+
+describe('the big wave, once a day', () => {
+  const store = () => {
+    const data = new Map<string, string>();
+    return {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+    };
+  };
+
+  it('the first time each day, never again that day', () => {
+    const s = store();
+    expect(takeDailyWave('2026-10-21', s)).toBe(true);
+    expect(takeDailyWave('2026-10-21', s)).toBe(false);
+    expect(takeDailyWave('2026-10-22', s)).toBe(true);
+  });
+
+  it('with storage blocked it waves, as it always did', () => {
+    expect(takeDailyWave('2026-10-21', null)).toBe(true);
+    const broken = {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {},
+    };
+    expect(takeDailyWave('2026-10-21', broken)).toBe(true);
+  });
+
+  it('the day by the local clock', () => {
+    expect(dayKey(new Date(2026, 9, 1, 23, 59))).toBe('2026-10-01');
   });
 });

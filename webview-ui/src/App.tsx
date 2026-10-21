@@ -54,6 +54,7 @@ import { DayKeeper } from './views/DayKeeper.js';
 import { revealOnGraph } from './views/graphReveal.js';
 import { GraphView } from './views/GraphView.js';
 import { OfficeCheers } from './views/OfficeCheers.js';
+import { useOfficeLife } from './views/officeLife.js';
 import { useReadMarks } from './views/unread.js';
 import { useAgentViews } from './views/useAgentViews.js';
 import { useNeedsYouSignals } from './views/useNeedsYouSignals.js';
@@ -238,6 +239,7 @@ function App() {
   const { requestEdit, editDialog } = useEditAgent(agentViews);
   useSupervisionSync(agentViews, workspaceState);
   useNeedsYouSignals(agentViews);
+  useOfficeLife(agentViews);
   // A chat or terminal on screen is read ("Terminó" loses its dot): the
   // drawer's panes on desktop, the terminal page on a phone.
   useReadMarks(

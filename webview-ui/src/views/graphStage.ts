@@ -224,7 +224,6 @@ export class GraphStage implements PointerHost {
     const edges = edgesOf(inp.views).filter((e) => e.a !== held && e.b !== held);
     stepGraph(this.nodes, edges, dt, { w: WORLD.w, h: WORLD.h, margin: 48 });
     const wall = Date.now();
-    inp.life.observe(inp.views, wall);
     // Fit above the toolbar, which floats over the bottom of the canvas.
     const { w, h } = this.rig.view;
     const followed =

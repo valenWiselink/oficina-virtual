@@ -6,9 +6,9 @@ import { useDayTint } from '../effects/dayTint.js';
 import { useWorkspaces } from '../workspaces/workspaceStore.js';
 import type { AgentView } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
-import { onCelebration } from './celebrate.js';
-import { ClawdLife } from './clawdLife.js';
+import type { ClawdLife } from './clawdLife.js';
 import { onRevealOnGraph } from './graphReveal.js';
+import { dayKey, officeLife, takeDailyWave } from './officeLife.js';
 import { type GraphControls, useGraphCanvas } from './useGraphCanvas.js';
 import { useGraphHover } from './useGraphHover.js';
 import { useGraphKeys } from './useGraphKeys.js';
@@ -25,7 +25,7 @@ export function useGraphView(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   rootRef: RefObject<HTMLDivElement | null>,
 ) {
-  const lifeRef = useRef(new ClawdLife());
+  const lifeRef = useRef(officeLife);
   const sel = useGraphSelection(views, actions, lifeRef.current);
   const hover = useGraphHover(views);
   const pill = useGraphPill(views);
@@ -94,7 +94,8 @@ function useGraphEvents(input: {
 }) {
   const latest = useRef(input);
   latest.current = input;
-  useEffect(() => onCelebration((id) => latest.current.life.celebrate(id)), []);
+  // On screen: the big wave once a day, else a blink all together.
+  useEffect(() => latest.current.life.showGraph(Date.now(), takeDailyWave(dayKey(new Date()))), []);
   // Alt+N, Alt+1…9, Ctrl+K or a terminal tab: select it and bring it into view.
   useEffect(
     () =>

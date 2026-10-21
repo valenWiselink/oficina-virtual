@@ -18,6 +18,8 @@ const PARTY_EVERY_MS = 2 * 60_000;
 export const BURST_MS = 1400;
 export const CHECK_MS = 1500;
 export const HOP_MS = 360;
+/** Coming back to the graph: everyone blinks together, this long. */
+export const GLANCE_MS = 320;
 
 /**
  * Clawd's little life on the graph — every bit of it tied to something true:
@@ -28,7 +30,8 @@ export const HOP_MS = 360;
  *   anyone waits on you (it is kept for when "Te necesita" empties);
  * - a small ✓ when one task completes, a hop when you click it, a trick
  *   after five quick clicks;
- * - everyone waves when the page opens; an agent that shows up later pops in;
+ * - everyone waves the first time you open the graph in the day; coming back
+ *   to it later they only blink together; an agent that shows up later pops in;
  * - how long each has been working without a break (for its coffee);
  * - the first state seen (page load, reconnect) is never an event.
  */
@@ -43,13 +46,16 @@ export class ClawdLife {
   private readonly tricks = new Map<number, { trick: Trick; at: number }>();
   private readonly arrivals = new Map<number, number>();
   private readonly workingSince = new Map<number, number>();
-  private openedAt: number | null = null;
+  /** When it first saw anyone (what exists then is not news). */
+  private firstSeenAt: number | null = null;
+  private waveAt: number | null = null;
+  private glanceAt: number | null = null;
   private nextTrick = 0;
 
   /** Compare with the last frame: completed tasks are news, first sight is not. */
   observe(views: AgentView[], now: number): void {
-    const firstSight = this.openedAt === null;
-    if (firstSight && views.length > 0) this.openedAt = now;
+    const firstSight = this.firstSeenAt === null;
+    if (firstSight && views.length > 0) this.firstSeenAt = now;
     for (const v of views) {
       const completed = v.tasks.filter((t) => t.status === 'completed').length;
       const allDone = v.tasks.length > 0 && completed === v.tasks.length;
@@ -134,11 +140,24 @@ export class ClawdLife {
     return running && p !== null ? { trick: running.trick, p } : null;
   }
 
-  /** Waving hello on page open (the index-th agent starts a little later). */
+  /** The graph came on screen: the big wave (once a day, `wave`) or, coming
+   *  back to it, a blink all together. */
+  showGraph(now: number, wave: boolean): void {
+    if (wave) this.waveAt = now;
+    else this.glanceAt = now;
+  }
+
+  /** Waving hello (the index-th agent starts a little later). */
   waving(index: number, now: number): boolean {
-    if (this.openedAt === null) return false;
-    const start = this.openedAt + index * WAVE_STAGGER_MS;
+    if (this.waveAt === null) return false;
+    const start = this.waveAt + index * WAVE_STAGGER_MS;
     return now >= start && now - start < WAVE_MS;
+  }
+
+  /** Blinking together as you come back to the graph (a double blink). */
+  glancing(now: number): boolean {
+    const p = progress(this.glanceAt ?? undefined, now, GLANCE_MS);
+    return p !== null && (p < 0.35 || (p > 0.6 && p < 0.95));
   }
 
   /** 0..1 progress of a new agent's arrival, or null. */

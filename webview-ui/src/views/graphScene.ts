@@ -601,6 +601,7 @@ function livePose(
   if (isAsleep(v, f.now)) Object.assign(pose, { sleep: true, blink: false });
   if (life.blinking(v.id, f.now)) pose.blink = true;
   if (f.calm) return { pose, lift: 0 };
+  if (life.glancing(f.now) && !pose.sleep) pose.blink = true;
   const fidget = v.kind === 'needs' ? impatience(f.now - waitStart(v), f.t, v.id) : null;
   if (fidget) {
     // Tapping and checking the time replaces the wave: still visible, calmer.
