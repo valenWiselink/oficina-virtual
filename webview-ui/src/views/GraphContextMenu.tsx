@@ -102,12 +102,18 @@ export function GraphContextMenu({
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>('[role="menuitem"], input')?.focus();
   }, [menu.mode, menu.at]);
+  // A click elsewhere closes it, and so does moving or zooming the view
+  // (it would point at something that moved).
   useEffect(() => {
-    const outside = (e: PointerEvent) => {
+    const outside = (e: Event) => {
       if (!ref.current?.contains(e.target as Node)) closeRef.current();
     };
     window.addEventListener('pointerdown', outside, true);
-    return () => window.removeEventListener('pointerdown', outside, true);
+    window.addEventListener('wheel', outside, true);
+    return () => {
+      window.removeEventListener('pointerdown', outside, true);
+      window.removeEventListener('wheel', outside, true);
+    };
   }, []);
   const h = ref.current?.offsetHeight ?? 260;
   const left = Math.max(8, Math.min(menu.at.x, bounds.w - MENU_W - 8));
