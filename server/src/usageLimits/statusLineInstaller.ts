@@ -9,6 +9,7 @@ import {
   readClaudeSettings,
 } from '../providers/hook/claude/claudeHookInstaller.js';
 import { HOOK_EXE_ENV } from '../providers/hook/claude/constants.js';
+import { findNodeOnPath, nodeOnPath } from '../providers/hook/claude/hookCommand.js';
 
 /**
  * The office's status line in ~/.claude/settings.json: the documented way to
@@ -18,9 +19,10 @@ import { HOOK_EXE_ENV } from '../providers/hook/claude/constants.js';
  *
  * Claude Code runs the command through Git Bash or PowerShell, so it points
  * at a small wrapper both can run, by `~` path (no spaces to quote): a .cmd
- * on Windows, a .sh elsewhere. The wrapper runs the script with the runtime
- * the office itself runs on — Node, or the desktop app's exe as Node, ONE
- * process (the hook relay starts Electron twice).
+ * on Windows, a .sh elsewhere. The wrapper runs the script with Node: the
+ * `node` on the PATH when there is one (as the hooks do, hookCommand.ts),
+ * else the runtime the office runs on — the desktop app's exe as Node, one
+ * process, which starts far slower than Node after every response.
  */
 export const STATUS_LINE_SCRIPT_NAME = 'statusline.js';
 
@@ -86,10 +88,12 @@ export async function uninstallStatusLine(): Promise<void> {
   });
 }
 
-/** The runtime the wrapper starts: the desktop app's exe when the office runs
- *  inside it (as Node, via ELECTRON_RUN_AS_NODE), else this Node. */
+/** The runtime the wrapper starts: a usable `node` on the PATH, else the
+ *  desktop app's exe when the office runs inside it (as Node, via
+ *  ELECTRON_RUN_AS_NODE), else this Node. */
 function runtimePath(): string {
-  return process.env[HOOK_EXE_ENV] || process.execPath;
+  const node = nodeOnPath() ? findNodeOnPath(process.env.PATH ?? process.env.Path) : undefined;
+  return node || process.env[HOOK_EXE_ENV] || process.execPath;
 }
 
 /** The wrapper's text. Batch needs `%` doubled; sh gets single quotes. */
