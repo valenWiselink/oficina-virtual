@@ -144,3 +144,17 @@ export function cardSpot(
   const clamp = (v: number, max: number) => Math.max(CARD_MARGIN, Math.min(v, max - CARD_MARGIN));
   return { left: clamp(left, view.w - card.w), top: clamp(top, view.h - card.h) };
 }
+
+/** Where an overlay centred on a box goes (a request pill growing into its
+ *  actions), kept inside the view. */
+export function overSpot(
+  box: { x: number; y: number; w: number; h: number },
+  overlay: { w: number; h: number },
+  view: { w: number; h: number },
+): { left: number; top: number } {
+  const clamp = (v: number, max: number) => Math.max(CARD_MARGIN, Math.min(v, max - CARD_MARGIN));
+  return {
+    left: clamp(box.x + box.w / 2 - overlay.w / 2, view.w - overlay.w),
+    top: clamp(box.y + box.h / 2 - overlay.h / 2, view.h - overlay.h),
+  };
+}

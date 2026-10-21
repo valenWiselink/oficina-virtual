@@ -67,6 +67,9 @@ export interface GraphInputs {
   onHover?: (target: HoverTarget | null) => void;
   /** After each frame: what follows the graph on screen (cards) moves. */
   onFrame?: () => void;
+  /** The mouse came onto an agent's request pill, or a click hit it: it
+   *  grows into its actions. */
+  onPill?: (id: number, how: 'hover' | 'click') => void;
 }
 
 /** What the page can ask of the graph (buttons, keys, overlays). */
@@ -77,6 +80,8 @@ export interface GraphControls {
   /** Where an agent (or one of its members) is on screen: centre and radius
    *  in CSS px, or null when it is not on the graph. */
   screenOf: (id: number, member?: number) => { x: number; y: number; r: number } | null;
+  /** Where an agent's request pill (on its line to "Vos") is on screen. */
+  pillOf: (id: number) => Box | null;
 }
 
 /** Each workspace's zoom and position, kept while the office is open (also
@@ -114,6 +119,7 @@ export class GraphStage implements PointerHost {
   private mouse: Pt | null = null;
   private readonly dwell = new HoverDwell();
   private hover: HoverTarget | null = null;
+  private pillHover: number | null = null;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -253,6 +259,12 @@ export class GraphStage implements PointerHost {
       this.hover = next;
       inp.onHover?.(next);
     }
+    // A pill grows at once: it is a target you aim at, not a place you rest.
+    const pill = t?.type === 'pill' ? t.id : null;
+    if (pill !== this.pillHover) {
+      this.pillHover = pill;
+      if (pill !== null) inp.onPill?.(pill, 'hover');
+    }
     return next ? focusOf(inp.views, next, liveFileLinks()) : null;
   }
 
@@ -326,6 +338,8 @@ export class GraphStage implements PointerHost {
           this.rig.centerOn(minimapToWorld(this.minimap, this.out.content, p.x, p.y));
         return;
       case 'pill':
+        this.inputs().onPill?.(target.id, 'click');
+        return;
       case 'passive':
         // Drawn things are not the background: the panel stays.
         return;
@@ -357,6 +371,13 @@ export class GraphStage implements PointerHost {
       zoomBy: (factor) => this.rig.zoomBy(factor),
       fitAll: () => this.rig.fit(),
       panBy: (dx, dy) => this.pan(dx, dy),
+      pillOf: (id) => {
+        const box = this.out?.pills.find((x) => x.id === id)?.box;
+        if (!box) return null;
+        const at = toScreen(this.rig.cam, box);
+        const z = this.rig.cam.zoom;
+        return { x: at.x, y: at.y, w: box.w * z, h: box.h * z };
+      },
       screenOf: (id, member) => {
         const n = this.nodes.get(member !== undefined ? `s${member}` : `a${id}`);
         if (!n) return null;

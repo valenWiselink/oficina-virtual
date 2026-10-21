@@ -12,8 +12,10 @@ import { onCelebration } from './celebrate.js';
 import { ClawdLife } from './clawdLife.js';
 import { cardSpot, hoverFacts, type HoverTarget } from './graphHover.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
+import { GraphPillActions } from './GraphPillActions.js';
 import { clearPins, useHasPins } from './graphPins.js';
 import { type GraphControls, type GraphSelection, useGraphCanvas } from './useGraphCanvas.js';
+import { useGraphPill } from './useGraphPill.js';
 
 /** Keep the quick card beside its agent (every frame: it moves). */
 function placeCard(
@@ -44,7 +46,8 @@ function placeCard(
  * settle by themselves again). Clicking an agent opens its panel (same
  * actions as the board) and its terminal; clicking a member of a meeting
  * opens its lead's panel with that member marked. Resting the mouse on one
- * shows its quick card and fades everyone but its team.
+ * shows its quick card and fades everyone but its team; the amber pill of
+ * what it asks grows into «Aprobar · Rechazar · Ver» (or «Hecho · Abrir PR»).
  */
 export function GraphView({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -64,6 +67,15 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
   const cardRef = useRef<HTMLDivElement>(null);
   const now = useNow();
   const facts = hover ? hoverFacts(views, hover, now) : null;
+  const pill = useGraphPill(views);
+  const pillRef = useRef(pill);
+  pillRef.current = pill;
+  /** Pick an agent (or member): its panel, and its terminal like a click on
+   *  the board. An outside agent only gets the panel ("Traer" is there). */
+  const pick = (sel: GraphSelection) => {
+    setSelection(sel);
+    if (views.find((v) => v.id === sel.id)?.hasTerminal) actions.onSelect(sel.id);
+  };
 
   const controls = useGraphCanvas(canvasRef, {
     views,
@@ -73,23 +85,24 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
     theme,
     life: lifeRef.current,
     cameraKey: workspace,
-    onSelect: (pick, repeat) => {
-      if (!pick) {
+    onSelect: (sel, repeat) => {
+      pill.close();
+      if (!sel) {
         setSelection(null);
         return;
       }
       // A member's click hops nobody (its lead stays put).
-      if (pick.member === undefined) lifeRef.current.greet(pick.id, Date.now(), !repeat);
+      if (sel.member === undefined) lifeRef.current.greet(sel.id, Date.now(), !repeat);
       // The second click of a double click only centres.
-      if (repeat) return;
-      setSelection(pick);
-      // Its terminal follows the selection, like a click on the board. An
-      // outside agent only gets the panel (its "Traer" is right there).
-      if (views.find((v) => v.id === pick.id)?.hasTerminal) actions.onSelect(pick.id);
+      if (!repeat) pick(sel);
     },
+    onPill: pill.onPill,
     onSlow: () => setSlow(true),
     onHover: setHover,
-    onFrame: () => placeCard(cardRef.current, hoverRef.current, controls, rootRef.current),
+    onFrame: () => {
+      placeCard(cardRef.current, hoverRef.current, controls, rootRef.current);
+      pill.place(controls, rootRef.current);
+    },
   });
 
   useEffect(() => onCelebration((id) => lifeRef.current.celebrate(id)), []);
@@ -99,16 +112,22 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       const where = e.target as Node | null;
-      if (where === document.body || (where && rootRef.current?.contains(where))) {
-        setSelection(null);
-      }
+      if (where !== document.body && !(where && rootRef.current?.contains(where))) return;
+      // First the grown pill, then the panel.
+      if (pillRef.current.isOpen()) pillRef.current.close();
+      else setSelection(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   return (
-    <div ref={rootRef} className="absolute inset-0">
+    <div
+      ref={rootRef}
+      className="absolute inset-0"
+      onPointerMove={pill.trackMouse}
+      onPointerLeave={pill.forgetMouse}
+    >
       <canvas
         ref={canvasRef}
         tabIndex={0}
@@ -138,6 +157,18 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
         )}
       </div>
       {facts && <GraphHoverCard facts={facts} cardRef={cardRef} />}
+      {pill.view && (
+        <GraphPillActions
+          view={pill.view}
+          actions={actions}
+          boxRef={pill.boxRef}
+          onOpen={() => {
+            pill.close();
+            pick({ id: pill.view!.id });
+          }}
+          onClose={pill.done}
+        />
+      )}
       {slow && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-80 z-10 soft-panel px-10 py-4 text-xs text-text-muted">
           Efectos reducidos: la PC va lenta

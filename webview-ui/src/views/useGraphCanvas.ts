@@ -96,5 +96,6 @@ export function useGraphCanvas(
     fitAll: () => api.current?.fitAll(),
     panBy: (dx, dy) => api.current?.panBy(dx, dy),
     screenOf: (id, member) => api.current?.screenOf(id, member) ?? null,
+    pillOf: (id) => api.current?.pillOf(id) ?? null,
   };
 }

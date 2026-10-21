@@ -7,6 +7,7 @@ import {
   HOVER_DWELL_MS,
   HoverDwell,
   hoverFacts,
+  overSpot,
 } from '../src/views/graphHover.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
@@ -156,5 +157,19 @@ describe('recentTools', () => {
       'Corriendo: npm test',
     );
     expect(recentTools(undefined)).toEqual([]);
+  });
+});
+
+describe('overSpot (the grown pill)', () => {
+  it('centred on the pill, inside the view', () => {
+    const view = { w: 1000, h: 600 };
+    expect(overSpot({ x: 400, y: 200, w: 100, h: 20 }, { w: 300, h: 90 }, view)).toEqual({
+      left: 300,
+      top: 165,
+    });
+    expect(overSpot({ x: 0, y: 0, w: 100, h: 20 }, { w: 300, h: 90 }, view)).toEqual({
+      left: 8,
+      top: 8,
+    });
   });
 });

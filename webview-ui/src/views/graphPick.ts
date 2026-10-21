@@ -31,3 +31,8 @@ export function stepIn(
   if (at === -1) return (dir === 1 ? order[0] : order[order.length - 1]) ?? null;
   return order[at + dir] ?? null;
 }
+
+/** Whether an agent's pill has something to act on. */
+export function pillActs(view: AgentView | undefined): view is AgentView {
+  return !!view && view.kind === 'needs' && (!!view.permission || !!view.yourTurnId);
+}

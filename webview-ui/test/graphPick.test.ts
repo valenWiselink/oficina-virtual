@@ -4,7 +4,7 @@ import type { AgentView } from '../src/views/agentViews.js';
 import { ClawdLife } from '../src/views/clawdLife.js';
 import { TRICK_CLICKS } from '../src/views/clawdTricks.js';
 import { poseFor } from '../src/views/graphDraw.js';
-import { mostUrgent, stepIn, tabOrder } from '../src/views/graphPick.js';
+import { mostUrgent, pillActs, stepIn, tabOrder } from '../src/views/graphPick.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
   id,
@@ -87,5 +87,22 @@ describe('calm mode poses', () => {
       expect(a.blink).toBeFalsy();
     }
     expect(poseFor('work', 3, 0.1).type).not.toBe(poseFor('work', 3, 0.3).type);
+  });
+});
+
+describe('pillActs', () => {
+  it('a pill grows only while it asks something you can answer here', () => {
+    const permission = {
+      type: 'permissionPending' as const,
+      requestId: 'r',
+      toolName: 'Bash',
+      toolInput: {},
+      createdAt: 0,
+    };
+    expect(pillActs(view(1, { kind: 'needs', permission }))).toBe(true);
+    expect(pillActs(view(1, { kind: 'needs', yourTurnId: 't' }))).toBe(true);
+    expect(pillActs(view(1, { kind: 'needs', asksInTerminal: true }))).toBe(false);
+    expect(pillActs(view(1, { kind: 'work', permission }))).toBe(false);
+    expect(pillActs(undefined)).toBe(false);
   });
 });
