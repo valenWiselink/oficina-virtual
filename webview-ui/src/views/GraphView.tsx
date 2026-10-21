@@ -13,6 +13,7 @@ import {
 import { GraphContextMenu } from './GraphContextMenu.js';
 import { GraphFilterBar } from './GraphFilterBar.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
+import { GraphMeetingBanner } from './GraphMeetingBanner.js';
 import { GraphMemberPanel } from './GraphMemberPanel.js';
 import { GraphPillActions } from './GraphPillActions.js';
 import { useGraphView } from './useGraphView.js';
@@ -81,9 +82,11 @@ function GraphOverlays({
 }) {
   const { sel, pill, controls, keys } = g;
   const followed = views.find((v) => v.id === g.followId);
+  const meeting = views.find((v) => v.id === g.meetingId);
   return (
     <>
       {followed && <FollowBanner view={followed} onStop={() => controls.follow(null)} />}
+      {meeting && <GraphMeetingBanner lead={meeting} onBack={() => controls.unfocusMeeting()} />}
       <GraphToolbar controls={controls} />
       <GraphFilterBar views={views} filter={g.filter} onChange={g.setFilter} />
       {g.hover.facts && !g.menu.menu && (

@@ -62,9 +62,11 @@ import {
   libraryVisitors,
 } from './graphLibrary.js';
 import { drawLinks, fader, type Pen } from './graphLinks.js';
+import { meetingAngle, type MeetingCircle, meetingCircles, meetingRadius } from './graphMeeting.js';
 import { pinOf } from './graphPins.js';
 import type { SimEdge, SimNode } from './graphSim.js';
 
+export { meetingAngle, meetingRadius } from './graphMeeting.js';
 export { VOS, WORLD } from './graphWorld.js';
 import { VOS, WORLD } from './graphWorld.js';
 const SUB_R = 22;
@@ -102,6 +104,9 @@ export interface SceneMarks {
 export interface SceneOut extends HitScene {
   /** Everything drawn, in world coords (for "Encuadrar todo" and the minimap). */
   content: Bounds;
+  /** Each meeting's circle around its lead (a double click in its hole
+   *  focuses it), world coords. */
+  meetings: MeetingCircle[];
 }
 
 /** Where each node wants to be: a stable ring, pulled by what it is doing. */
@@ -161,22 +166,6 @@ export function layout(nodes: Map<string, SimNode>, list: AgentView[]) {
     });
   });
   for (const id of [...nodes.keys()]) if (!live.has(id)) nodes.delete(id);
-}
-
-/** The free wedge on the lead's right (its label goes there), in radians. */
-const LABEL_WEDGE = (80 * Math.PI) / 180;
-/** Arc each subagent needs so their name chips do not touch. */
-const SUB_ARC_PX = 125;
-
-/** How far a meeting's subagents sit from their lead. */
-export function meetingRadius(count: number): number {
-  return Math.max(150, (count * SUB_ARC_PX) / (Math.PI * 2 - LABEL_WEDGE));
-}
-
-/** Where the j-th of n subagents sits around its lead (0 rad = right). */
-export function meetingAngle(j: number, n: number): number {
-  const span = Math.PI * 2 - LABEL_WEDGE;
-  return LABEL_WEDGE / 2 + (span * (j + 0.5)) / n;
 }
 
 export function edgesOf(list: AgentView[]): SimEdge[] {
@@ -310,6 +299,7 @@ export function drawScene(
     arrows,
     pills,
     passive: pen.passive,
+    meetings: meetingCircles(list, nodes),
   };
 }
 

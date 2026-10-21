@@ -6,6 +6,7 @@ import {
   type Bounds,
   type Camera,
   centerOn,
+  fitCamera,
   isVisible,
   panBy,
   type Pt,
@@ -41,6 +42,8 @@ const TOOLBAR_CLEARANCE_PX = 64;
 /** A double click comes this close (at least). */
 const DOUBLE_CLICK_ZOOM = 1.8;
 const VOS_ZOOM = 1.5;
+/** Room kept around a focused meeting's circle (its name chips). */
+const MEETING_ROOM = 60;
 /** How long focusOn waits for an agent that is not drawn yet. */
 const FOCUS_WAIT_MS = 2000;
 
@@ -79,6 +82,8 @@ export interface GraphInputs {
   dim?: ReadonlySet<string> | null;
   /** An agent dragged and dropped on another one's disc (`toId`). */
   onDrop?: (fromId: number, toId: number) => void;
+  /** A meeting got the focus (a double click in its hole), or let go (null). */
+  onMeeting?: (leadId: number | null) => void;
   /** The camera started (id) or stopped (null) going along with an agent. */
   onFollow?: (id: number | null) => void;
 }
@@ -104,6 +109,8 @@ export interface GraphControls {
   centerOn: (id: number, member?: number, zoom?: number) => void;
   /** Esc while dragging: put it back, nothing dropped. false: no drag. */
   cancelDrag: () => boolean;
+  /** Esc with a meeting focused: the camera goes back. false: none was. */
+  unfocusMeeting: () => boolean;
 }
 
 /** Each workspace's zoom and position, kept while the office is open (also
@@ -145,6 +152,8 @@ export class GraphStage implements PointerHost {
   private pillHover: number | null = null;
   /** While dragging an agent: the one under it that would get its answer. */
   private dropOn: number | null = null;
+  /** A meeting in focus, and the camera to go back to. */
+  private meeting: { id: number; back: { cam: Camera; autoFit: boolean } } | null = null;
   /** focusOn's node, until it is drawn (or the wait runs out). */
   private pendingFocus: { key: string; until: number } | null = null;
 
@@ -258,7 +267,7 @@ export class GraphStage implements PointerHost {
     const marks = {
       selectedId: inp.selected?.id ?? null,
       selectedMember: inp.selected?.member,
-      focus: this.updateHover(inp, now) ?? inp.dim ?? null,
+      focus: this.updateHover(inp, now) ?? this.meetingFocus(inp) ?? inp.dim ?? null,
       dropTarget: this.dropOn,
     };
     this.out = drawScene(this.ctx, this.th, scene, inp.views, this.nodes, marks, inp.life);
@@ -407,10 +416,45 @@ export class GraphStage implements PointerHost {
         return;
       case 'passive':
         // Drawn things are not the background: the panel stays.
+        if (repeat) this.focusMeetingAt(p);
         return;
       default:
         if (!repeat) onSelect(null, false);
+        else this.focusMeetingAt(p);
     }
+  }
+
+  /** A double click in a meeting's hole: frame it and fade the rest. */
+  private focusMeetingAt(p: Pt): void {
+    const w = toWorld(this.rig.cam, p);
+    const m = this.out?.meetings.find((c) => Math.hypot(c.x - w.x, c.y - w.y) <= c.r);
+    if (!m || this.meeting?.id === m.id) return;
+    const back = this.meeting?.back ?? { cam: this.rig.cam, autoFit: this.rig.autoFit };
+    this.rig.follow(null);
+    const pad = m.r + MEETING_ROOM;
+    const bounds = { minX: m.x - pad, minY: m.y - pad, maxX: m.x + pad, maxY: m.y + pad };
+    this.rig.go(fitCamera(bounds, this.rig.view, 40));
+    this.meeting = { id: m.id, back };
+    this.inputs().onMeeting?.(m.id);
+  }
+
+  private meetingFocus(inp: GraphInputs): ReadonlySet<string> | null {
+    if (!this.meeting) return null;
+    if (!inp.views.some((v) => v.id === this.meeting!.id)) {
+      this.unfocusMeeting();
+      return null;
+    }
+    return focusOf(inp.views, { id: this.meeting.id }, liveFileLinks());
+  }
+
+  private unfocusMeeting(): boolean {
+    const m = this.meeting;
+    if (!m) return false;
+    this.meeting = null;
+    if (m.back.autoFit) this.rig.fit();
+    else this.rig.go(m.back.cam);
+    this.inputs().onMeeting?.(null);
+    return true;
   }
 
   longPress(target: GraphTarget | null, p: Pt): void {
@@ -445,6 +489,7 @@ export class GraphStage implements PointerHost {
       zoomBy: (factor) => this.rig.zoomBy(factor),
       fitAll: () => this.rig.fit(),
       panBy: (dx, dy) => this.pan(dx, dy),
+      unfocusMeeting: () => this.unfocusMeeting(),
       cancelDrag: () => {
         if (!this.held) return false;
         this.pointers.abort();

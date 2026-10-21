@@ -34,6 +34,7 @@ export function useGraphView(
   const [followId, setFollowId] = useState<number | null>(null);
   const [slow, setSlow] = useState(false);
   const [filter, setFilter] = useState<GraphFilter>('all');
+  const [meetingId, setMeetingId] = useState<number | null>(null);
   const controls = useGraphCanvas(canvasRef, {
     views,
     selected: sel.marked,
@@ -51,6 +52,7 @@ export function useGraphView(
     onMenu: (target, at) => menu.open(target, at),
     onDrop: (fromId, toId) => actions.onHandOffTo?.(fromId, toId),
     onFollow: setFollowId,
+    onMeeting: setMeetingId,
     onSlow: () => setSlow(true),
     onHover: hover.setHover,
     onFrame: () => {
@@ -72,7 +74,7 @@ export function useGraphView(
     selection,
     select,
   });
-  return { sel, hover, pill, followId, slow, controls, keys, menu, filter, setFilter };
+  return { sel, hover, pill, followId, slow, controls, keys, menu, filter, setFilter, meetingId };
 }
 
 /** Esc, from the graph: drop a drag, stop following, then shrink the pill, then let go
@@ -84,8 +86,8 @@ function releaser(
   sel: { clear: () => void },
 ): () => void {
   return () => {
-    // A drag in progress goes back first (nothing dropped).
-    if (controls.cancelDrag()) return;
+    // A drag in progress goes back first (nothing dropped), then a meeting.
+    if (controls.cancelDrag() || controls.unfocusMeeting()) return;
     if (followId !== null) controls.follow(null);
     else if (pill.isOpen()) pill.close();
     else sel.clear();
