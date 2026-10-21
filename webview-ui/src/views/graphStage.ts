@@ -73,6 +73,8 @@ export interface GraphInputs {
   /** The mouse came onto an agent's request pill, or a click hit it: it
    *  grows into its actions. */
   onPill?: (id: number, how: 'hover' | 'click') => void;
+  /** Right click, or a finger held still: the menu of what is there. */
+  onMenu?: (target: GraphTarget | null, at: Pt) => void;
   /** The camera started (id) or stopped (null) going along with an agent. */
   onFollow?: (id: number | null) => void;
 }
@@ -221,6 +223,7 @@ export class GraphStage implements PointerHost {
     layout(this.nodes, inp.views);
     if (this.held) this.holdNode(this.held);
     this.focusPending(now);
+    this.pointers.tick(now);
     // What you hold pulls nobody: dragging a member leaves its lead in place.
     const held = this.held?.node;
     const edges = edgesOf(inp.views).filter((e) => e.a !== held && e.b !== held);
@@ -375,6 +378,15 @@ export class GraphStage implements PointerHost {
       default:
         if (!repeat) onSelect(null, false);
     }
+  }
+
+  longPress(target: GraphTarget | null, p: Pt): void {
+    this.inputs().onMenu?.(target, p);
+  }
+
+  /** A right click at p (screen px). */
+  menuAt(p: Pt): void {
+    this.inputs().onMenu?.(this.targetAt(p), p);
   }
 
   /** "Vos" opens the most urgent wait (as Alt+N); a double click centres it;

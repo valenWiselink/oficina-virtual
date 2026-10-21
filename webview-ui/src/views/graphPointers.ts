@@ -11,13 +11,17 @@ import { type GraphTarget, targetKey } from './graphHit.js';
  *   and whatever was held is let go where it was; lifting one finger goes on
  *   panning with the other, never a click;
  * - a click on the same target as the one just before is a repeat (the
- *   second half of a double click): the host centres instead of selecting.
+ *   second half of a double click): the host centres instead of selecting;
+ * - a finger held still for LONG_PRESS_MS is a long press (the touch
+ *   equivalent of a right click): no click follows it.
  */
 
 /** A drag shorter than this is a click. */
 export const CLICK_SLOP_PX = 4;
 /** Two clicks on the same thing this close in time make a double click. */
 export const DOUBLE_CLICK_MS = 400;
+/** A finger held still this long opens the menu. */
+export const LONG_PRESS_MS = 550;
 
 export type Grab = { id: number; member?: number };
 
@@ -35,6 +39,8 @@ export interface PointerHost {
   /** A click (null target: the background); `repeat`: the same target was
    *  clicked just before. */
   click(target: GraphTarget | null, p: Pt, repeat: boolean): void;
+  /** A finger held still on something (or the background). */
+  longPress?(target: GraphTarget | null, p: Pt): void;
 }
 
 interface Press {
@@ -43,6 +49,11 @@ interface Press {
   last: Pt;
   dragging: boolean;
   target: GraphTarget | null;
+  /** When it went down and whether by a finger (a long press needs both). */
+  at: number;
+  touch: boolean;
+  /** A long press already used it: nothing else happens. */
+  used?: boolean;
 }
 
 const grabOf = (t: GraphTarget | null): Grab | null =>
@@ -65,10 +76,11 @@ export class PointerTracker {
     return this.pointers.size > 0;
   }
 
-  down(id: number, p: Pt): void {
+  down(id: number, p: Pt, now = 0, touch = false): void {
     this.pointers.set(id, p);
     if (this.pointers.size === 1) {
-      this.press = { id, start: p, last: p, dragging: false, target: this.host.targetAt(p) };
+      const target = this.host.targetAt(p);
+      this.press = { id, start: p, last: p, dragging: false, target, at: now, touch };
       return;
     }
     if (this.pointers.size === 2 && this.press) this.startPinch(id);
@@ -94,7 +106,7 @@ export class PointerTracker {
     }
     this.pointers.set(id, p);
     const press = this.press;
-    if (!press || press.id !== id || this.pinchIds) return;
+    if (!press || press.id !== id || this.pinchIds || press.used) return;
     if (!press.dragging && Math.hypot(p.x - press.start.x, p.y - press.start.y) < CLICK_SLOP_PX)
       return;
     press.dragging = true;
@@ -132,19 +144,37 @@ export class PointerTracker {
       // The finger left on the glass goes on panning from where it is.
       const [rest] = [...this.pointers.entries()];
       this.press = rest
-        ? { id: rest[0], start: rest[1], last: rest[1], dragging: true, target: null }
+        ? {
+            id: rest[0],
+            start: rest[1],
+            last: rest[1],
+            dragging: true,
+            target: null,
+            at: 0,
+            touch: true,
+          }
         : null;
       return;
     }
     const press = this.press;
     if (!press || press.id !== id) return;
     this.press = null;
+    if (press.used) return;
     const grab = grabOf(press.target);
     if (press.dragging) {
       if (grab) this.host.release(grab, clean);
       return;
     }
     if (clean) this.clickAt(press.target, p, now);
+  }
+
+  /** Each frame: a finger held still long enough becomes a long press. */
+  tick(now: number): void {
+    const press = this.press;
+    if (!press || !press.touch || press.dragging || press.used || this.pinchIds) return;
+    if (now - press.at < LONG_PRESS_MS) return;
+    press.used = true;
+    this.host.longPress?.(press.target, press.start);
   }
 
   private clickAt(target: GraphTarget | null, p: Pt, now: number): void {

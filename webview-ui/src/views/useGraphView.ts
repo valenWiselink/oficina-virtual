@@ -12,6 +12,7 @@ import { dayKey, officeLife, takeDailyWave } from './officeLife.js';
 import { type GraphControls, useGraphCanvas } from './useGraphCanvas.js';
 import { useGraphHover } from './useGraphHover.js';
 import { useGraphKeys } from './useGraphKeys.js';
+import { useGraphMenu } from './useGraphMenu.js';
 import { useGraphPill } from './useGraphPill.js';
 import { useGraphSelection } from './useGraphSelection.js';
 
@@ -44,6 +45,7 @@ export function useGraphView(
       sel.clicked(picked, repeat);
     },
     onPill: pill.onPill,
+    onMenu: (target, at) => menu.open(target, at),
     onFollow: setFollowId,
     onSlow: () => setSlow(true),
     onHover: hover.setHover,
@@ -52,9 +54,10 @@ export function useGraphView(
       pill.place(controls, rootRef.current);
     },
   });
+  const { pick, select, selected, selection } = sel;
+  const menu = useGraphMenu({ views, actions, controls, following: followId, pick, select });
   const release = releaser(followId, controls, pill, sel);
   useGraphEvents({ rootRef, controls, release, opened: sel.opened, life: lifeRef.current });
-  const { selected, selection, select } = sel;
   const keys = useGraphKeys({
     views,
     actions,
@@ -65,7 +68,7 @@ export function useGraphView(
     selection,
     select,
   });
-  return { sel, hover, pill, followId, slow, controls, keys };
+  return { sel, hover, pill, followId, slow, controls, keys, menu };
 }
 
 /** Esc, from the graph: stop following, then shrink the pill, then let go

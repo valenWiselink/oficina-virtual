@@ -10,6 +10,7 @@ import {
   GraphToolbar,
   SlowNotice,
 } from './GraphChrome.js';
+import { GraphContextMenu } from './GraphContextMenu.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
 import { GraphPillActions } from './GraphPillActions.js';
 import { useGraphView } from './useGraphView.js';
@@ -54,6 +55,14 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
         onFocus={g.keys.onFocus}
       />
       <GraphOverlays g={g} views={views} actions={actions} />
+      {g.menu.menu && (
+        <GraphContextMenu
+          menu={g.menu.menu}
+          bounds={{ w: rootRef.current?.clientWidth ?? 0, h: rootRef.current?.clientHeight ?? 0 }}
+          onPick={g.menu.run}
+          onClose={g.menu.close}
+        />
+      )}
     </div>
   );
 }
@@ -74,7 +83,9 @@ function GraphOverlays({
     <>
       {followed && <FollowBanner view={followed} onStop={() => controls.follow(null)} />}
       <GraphToolbar controls={controls} />
-      {g.hover.facts && <GraphHoverCard facts={g.hover.facts} cardRef={g.hover.cardRef} />}
+      {g.hover.facts && !g.menu.menu && (
+        <GraphHoverCard facts={g.hover.facts} cardRef={g.hover.cardRef} />
+      )}
       {pill.view && (
         <GraphPillActions
           view={pill.view}
