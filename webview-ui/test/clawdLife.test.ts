@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AgentView } from '../src/views/agentViews.js';
 import { ClawdLife, GLANCE_MS, isAsleep, SLEEP_AFTER_MS } from '../src/views/clawdLife.js';
+import { nodMotion } from '../src/views/clawdTricks.js';
 import { dayKey, takeDailyWave } from '../src/views/officeLife.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
@@ -179,5 +180,35 @@ describe('the big wave, once a day', () => {
 
   it('the day by the local clock', () => {
     expect(dayKey(new Date(2026, 9, 1, 23, 59))).toBe('2026-10-01');
+  });
+});
+
+describe('the nod: your message got to it', () => {
+  it('nods when it goes from waiting on you, finished or idle to work', () => {
+    for (const from of ['needs', 'done', 'idle'] as const) {
+      const life = new ClawdLife();
+      life.observe([view(1, { kind: from })], 0);
+      life.observe([view(1, { kind: 'work' })], 1000);
+      expect(life.nod(1, 1100)).not.toBeNull();
+    }
+  });
+
+  it('not at first sight, not between busy states, not for a supervised one', () => {
+    const life = new ClawdLife();
+    life.observe([view(1, { kind: 'work' })], 0);
+    expect(life.nod(1, 10)).toBeNull();
+    life.observe([view(1, { kind: 'think' })], 100);
+    expect(life.nod(1, 110)).toBeNull();
+    const other = new ClawdLife();
+    other.observe([view(2, { kind: 'done' })], 0);
+    other.observe([view(2, { kind: 'work', askingSupervisor: { id: 9, name: 'Jefa' } })], 100);
+    expect(other.nod(2, 110)).toBeNull();
+  });
+
+  it('two small dips of the head, then still', () => {
+    expect(nodMotion(0).lift).toBeCloseTo(0);
+    expect(nodMotion(0.25).lift).toBeLessThan(0);
+    expect(nodMotion(0.25).blink).toBe(true);
+    expect(nodMotion(0.5).lift).toBeCloseTo(0);
   });
 });

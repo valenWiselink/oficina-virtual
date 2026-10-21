@@ -8,7 +8,7 @@ import { GAZE_NEAR_PX, type GazeContext, gazeTarget, lookToward } from './clawdG
 import { impatience } from './clawdImpatience.js';
 import { type ClawdLife, isAsleep } from './clawdLife.js';
 import { effortLevel, effortMarks, modelLook } from './clawdLook.js';
-import { activityProp, arrivalMotion, trickMotion } from './clawdTricks.js';
+import { activityProp, arrivalMotion, nodMotion, trickMotion } from './clawdTricks.js';
 import {
   type Bounds,
   type Camera,
@@ -496,6 +496,12 @@ function livePose(
   let lift = life.hop(v.id, f.now);
   if (pose.wave === undefined && !pose.sleep && life.waving(index, f.now)) {
     pose.wave = Math.floor(f.t * 5) % 2;
+  }
+  const nod = life.nod(v.id, f.now);
+  if (nod !== null) {
+    const m = nodMotion(nod);
+    lift += m.lift;
+    if (m.blink) pose.blink = true;
   }
   const arriving = life.arrival(v.id, f.now);
   if (arriving !== null) {

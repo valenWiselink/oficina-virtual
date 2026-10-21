@@ -2,6 +2,7 @@ import type { AgentView } from './agentViews.js';
 import {
   ARRIVE_MS,
   burstHop,
+  NOD_MS,
   recentClicks,
   type Trick,
   TRICK_CLICKS,
@@ -33,6 +34,8 @@ export const GLANCE_MS = 320;
  * - everyone waves the first time you open the graph in the day; coming back
  *   to it later they only blink together; an agent that shows up later pops in;
  * - how long each has been working without a break (for its coffee);
+ * - a nod when it goes from waiting (on you, finished or idle) to work: your
+ *   message got to it (not for a supervised one its supervisor handles);
  * - the first state seen (page load, reconnect) is never an event.
  */
 export class ClawdLife {
@@ -46,6 +49,8 @@ export class ClawdLife {
   private readonly tricks = new Map<number, { trick: Trick; at: number }>();
   private readonly arrivals = new Map<number, number>();
   private readonly workingSince = new Map<number, number>();
+  private readonly kinds = new Map<number, AgentView['kind']>();
+  private readonly nods = new Map<number, number>();
   /** When it first saw anyone (what exists then is not news). */
   private firstSeenAt: number | null = null;
   private waveAt: number | null = null;
@@ -62,6 +67,7 @@ export class ClawdLife {
       const before = this.seen.get(v.id);
       this.seen.set(v.id, { completed, allDone });
       this.trackWork(v, now);
+      this.trackNod(v, now);
       if (!before) {
         if (!firstSight) this.arrivals.set(v.id, now);
         continue;
@@ -71,6 +77,21 @@ export class ClawdLife {
     }
     const anyWaiting = views.some((v) => v.kind === 'needs');
     if (!anyWaiting) this.release(now);
+  }
+
+  /** Waiting (on you, finished, idle) → working: it got your message. */
+  private trackNod(v: AgentView, now: number): void {
+    const before = this.kinds.get(v.id);
+    this.kinds.set(v.id, v.kind);
+    const waited = before === 'needs' || before === 'done' || before === 'idle';
+    const busy =
+      v.kind === 'work' || v.kind === 'think' || v.kind === 'meet' || v.kind === 'research';
+    if (waited && busy && !v.askingSupervisor) this.nods.set(v.id, now);
+  }
+
+  /** 0..1 progress of its nod, or null. */
+  nod(id: number, now: number): number | null {
+    return progress(this.nods.get(id), now, NOD_MS);
   }
 
   private trackWork(v: AgentView, now: number): void {
