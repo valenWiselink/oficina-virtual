@@ -159,8 +159,16 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   control socket holds messages only briefly and never one that changes an
   agent by id (`transport/sendQueue.ts`).
 - Sounds: `notificationSound.ts` (Ajustes: Todo / Sólo cuando te necesitan /
-  Nada) and `effects/turnSounds.ts` (toc-toc for a need, a spaced soft plin
-  for a turn with nothing for you, chosen 1.5 s after the turn ends).
+  Nada), drawn by `effects/soundSynth.ts` (Web Audio on any context, so an
+  OfflineAudioContext can render them to a file) from the values in
+  `constants.ts`. `effects/turnSounds.ts` picks one, 1.5 s after a turn ends:
+  the door (two low wood knocks) for what blocks an agent — a permission or
+  a question —, the "te toca" (two soft rising notes, same wood, quieter),
+  or a spaced soft plin for a turn with nothing for you. No plin for an agent
+  whose terminal or chat is on screen; while you type (a key in the last
+  4 s) the plin and the "te toca" wait and one sounds when you stop; the
+  door never waits. A Windows notice goes out `silent` whenever the office
+  sounds itself. The sparkle ("Hecho", a merge) is decoration: off in calm mode.
 - `onboarding/` — first-run welcome (checks, hooks consent, folder, first
   agent) and the guided tour (`data-tour` marks on its targets).
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.

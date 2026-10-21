@@ -16,10 +16,10 @@ const waitKey = (v: AgentView) => `${v.id}:${v.yourTurnId ?? v.statusText}`;
 /**
  * What the browser tab says about "Te necesita": "(3) Oficina" counting
  * everything there (permissions, questions and "te toca", not only
- * permissions), an amber dot on the tab icon, the toc-toc when a new wait
- * shows up, and one Windows notice per wait that passes 30 s. Permissions
- * already sound and notify the moment they arrive, so the knock and the
- * notice here are for the rest, once each.
+ * permissions), an amber dot on the tab icon, a sound when a new wait shows
+ * up (the door for a question, the "te toca" otherwise), and one Windows
+ * notice per wait that passes 30 s. Permissions already sound and notify the
+ * moment they arrive, so the sound and the notice here are for the rest, once each.
  */
 export function useNeedsYouSignals(views: AgentView[]): void {
   // A supervised agent's needs come to you through its supervisor.

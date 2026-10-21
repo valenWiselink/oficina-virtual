@@ -1,23 +1,24 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 import {
   CHEER_NOTES,
   CHEER_VOLUME,
   DONE_NOTES,
   DONE_VOLUME,
-  PERMISSION_NOTES,
-  PERMISSION_VOLUME,
-  type SoundNote,
+  DOOR_SOUND,
+  TETOCA_SOUND,
 } from './constants.js';
+import { isCalm } from './effects/calmMode.js';
+import { scheduleNotes, scheduleWood } from './effects/soundSynth.js';
 import { createTurnSounds } from './effects/turnSounds.js';
 import { isFocused, noteWhileFocused } from './focus/focusMode.js';
 
 /**
- * Ajustes → Sonidos: everything (the toc-toc when you are needed, a soft plin
- * when a turn ends with nothing for you, the sparkle on "Hecho"), only when
- * you are needed, or nothing. Remembered in this browser; "nothing" is also
- * the office's saved on/off (settingsLoaded.soundEnabled), so another window
- * of the same office agrees.
+ * Ajustes → Sonidos: everything (the knock on the door when an agent is
+ * blocked, the "te toca", a soft plin when a turn ends with nothing for you,
+ * the sparkle on "Hecho"), only when you are needed, or nothing. Remembered
+ * in this browser; "nothing" is also the office's saved on/off
+ * (settingsLoaded.soundEnabled), so another window of the same office agrees.
  */
 export type SoundMode = 'all' | 'needs' | 'none';
 
@@ -75,44 +76,14 @@ export function useSoundMode(): SoundMode {
   );
 }
 
-/** One note: a sine with a faint octave above it (a bell, not a beep) for
- *  `bell`, a plain triangle tap otherwise. */
-function playNote(ctx: AudioContext, note: SoundNote, volume: number, bell: boolean): void {
-  const t = ctx.currentTime + note.at;
-  const partials = bell
-    ? [
-        { k: 1, v: 1 },
-        { k: 2, v: 0.25 },
-      ]
-    : [{ k: 1, v: 1 }];
-  for (const { k, v } of partials) {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = bell ? 'sine' : 'triangle';
-    osc.frequency.setValueAtTime(note.hz * k, t);
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(volume * v, t + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + note.ring);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(t);
-    osc.stop(t + note.ring);
-  }
-}
-
 /** Play, if the chosen mode lets this kind through (`needsYou`: it calls you). */
-async function play(
-  notes: readonly SoundNote[],
-  volume: number,
-  bell: boolean,
-  needsYou: boolean,
-): Promise<void> {
+async function play(schedule: (ctx: AudioContext) => void, needsYou: boolean): Promise<void> {
   if (mode === 'none' || (mode === 'needs' && !needsYou)) return;
   try {
     audioCtx ??= new AudioContext();
     // Resume a suspended context (browsers suspend it until a user gesture).
     if (audioCtx.state === 'suspended') await audioCtx.resume();
-    for (const note of notes) playNote(audioCtx, note, volume, bell);
+    schedule(audioCtx);
   } catch {
     // Audio may not be available
   }
@@ -122,30 +93,84 @@ async function play(
  *  officeSounds; silent in focus mode, where it is only counted). */
 function playDoneSound(): Promise<void> {
   if (isFocused()) return Promise.resolve();
-  return play(DONE_NOTES, DONE_VOLUME, true, false);
+  return play((ctx) => scheduleNotes(ctx, ctx.destination, DONE_NOTES, DONE_VOLUME, true), false);
 }
 
-/** Something needs you: the plain "toc-toc" (a permission, a question, a
- *  "te toca"). A wait that does not block the agent stays quiet in focus mode. */
-export function playPermissionSound(urgent = true): Promise<void> {
-  if (!urgent && isFocused()) return Promise.resolve();
-  return play(PERMISSION_NOTES, PERMISSION_VOLUME, false, true);
+/** An agent is blocked until you answer (a permission, a question): the
+ *  knock on the door. Always the same, in focus and calm mode too. */
+export function playPermissionSound(): Promise<void> {
+  return play((ctx) => scheduleWood(ctx, ctx.destination, DOOR_SOUND), true);
 }
 
-/** You marked "Hecho": a small sparkle (silent in focus mode). */
-export function playCheerSound(): Promise<void> {
+/** A finished turn left you something ("te toca"): it does not block the
+ *  agent, so it stays quiet in focus mode. */
+function playTeTocaSound(): Promise<void> {
   if (isFocused()) return Promise.resolve();
-  return play(CHEER_NOTES, CHEER_VOLUME, true, false);
+  return play((ctx) => scheduleWood(ctx, ctx.destination, TETOCA_SOUND), true);
+}
+
+/** You marked "Hecho", or a PR got merged: a small sparkle. Decoration, so
+ *  silent in focus and calm mode. */
+export function playCheerSound(): Promise<void> {
+  if (isFocused() || isCalm()) return Promise.resolve();
+  return play((ctx) => scheduleNotes(ctx, ctx.destination, CHEER_NOTES, CHEER_VOLUME, true), false);
+}
+
+/** The agents whose terminal or chat is on screen (see useAgentsInView). */
+let inView: ReadonlySet<number> = new Set();
+/** When you last pressed a key in the office. */
+let lastKeyAt = -Infinity;
+/** A modifier pressed alone is not typing. */
+const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'CapsLock']);
+
+if (typeof window !== 'undefined') {
+  // Capture phase: the terminal stops its keys from bubbling.
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (!MODIFIERS.has(e.key)) lastKeyAt = Date.now();
+    },
+    true,
+  );
+}
+
+function agentInView(agentId: number): boolean {
+  const visible = typeof document === 'undefined' || document.visibilityState === 'visible';
+  return visible && inView.has(agentId);
+}
+
+/** Tell the sounds which agents' terminal or chat you have in front of you
+ *  (the drawer's panes, or a phone's terminal page): their plin is not news. */
+export function useAgentsInView(onScreen: ReadonlyArray<number | null>): void {
+  const ids = onScreen.filter((id) => id !== null).join(',');
+  useEffect(() => {
+    inView = new Set(ids ? ids.split(',').map(Number) : []);
+  }, [ids]);
 }
 
 /** The office's sounds for turn ends and new needs (effects/turnSounds.ts). */
-export const officeSounds = createTurnSounds({
-  knock: (urgent) => void playPermissionSound(urgent),
-  finished: () => {
-    if (isFocused()) noteWhileFocused('termino');
+export const officeSounds = createTurnSounds(
+  {
+    door: () => void playPermissionSound(),
+    teToca: () => void playTeTocaSound(),
+    finished: () => {
+      if (isFocused()) noteWhileFocused('termino');
+    },
+    plin: () => void playDoneSound(),
   },
-  plin: () => void playDoneSound(),
-});
+  () => Date.now(),
+  { inView: agentInView, lastKeyAt: () => lastKeyAt },
+);
+
+/** Whether the office itself sounds for something that needs you: the
+ *  chosen mode lets it through and the browser lets the page play (a tab
+ *  needs a click or a key first). Then a Windows notice goes out silent:
+ *  one sound, not two. */
+export function officeSoundsForYou(): boolean {
+  if (mode === 'none') return false;
+  if (audioCtx?.state === 'running') return true;
+  return typeof navigator === 'undefined' || navigator.userActivation?.hasBeenActive !== false;
+}
 
 /** Call from any user-gesture handler to ensure AudioContext is unlocked */
 export function unlockAudio(): void {
