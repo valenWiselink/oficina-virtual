@@ -264,6 +264,35 @@ describe('buildAgentViews: a meeting of teammates', () => {
     ]);
   });
 
+  it('a meeting whose members all went idle no longer keeps its lead busy', () => {
+    const members = [2, 3, 4, 5];
+    const characters = new Map<number, CharacterFacts>([
+      [1, ch({ isActive: false })],
+      ...members.map((id): [number, CharacterFacts] => [
+        id,
+        ch({ leadAgentId: 1, agentName: `frente-${id}`, isActive: false }),
+      ]),
+    ]);
+    const idle = inputs({ agentIds: [1, ...members], characters });
+    const [lead] = buildAgentViews({ ...idle, finished: (id) => id === 1 });
+    expect(lead).toMatchObject({ kind: 'done', statusText: 'Terminó' });
+    // Still drawn around their lead, waiting.
+    expect(lead.subagents.map((s) => s.kind)).toEqual(['done', 'done', 'done', 'done']);
+    expect(buildAgentViews(idle)[0].kind).toBe('idle');
+  });
+
+  it('a single idle member does not make its lead look busy either', () => {
+    const characters = new Map<number, CharacterFacts>([
+      [1, ch({ isActive: false })],
+      [2, ch({ leadAgentId: 1, agentName: 'frente-solo', isActive: false })],
+    ]);
+    const [lead] = buildAgentViews({
+      ...inputs({ agentIds: [1, 2], characters }),
+      finished: (id) => id === 1,
+    });
+    expect(lead.kind).toBe('done');
+  });
+
   it('a member whose lead is gone shows on its own', () => {
     const characters = new Map([[2, ch({ leadAgentId: 9, agentName: 'suelto' })]]);
     expect(buildAgentViews(inputs({ agentIds: [2], characters })).map((v) => v.id)).toEqual([2]);

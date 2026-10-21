@@ -317,6 +317,11 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
       })
       .concat(members);
 
+    // A meeting is on only while someone in it works: members that went idle
+    // ("Esperando la junta") stay drawn around their lead but do not keep it
+    // busy (2026-10-21: a lead showed "En junta" long after its own turn and
+    // its four teammates had stopped).
+    const working = subs.filter((s) => s.kind !== 'done' && s.kind !== 'idle');
     const permission = input.permissions.find((p) => p.id === id);
     const tool = liveTool(input.agentTools[id]);
     const task = identity?.tasks.find((t) => t.status === 'in_progress');
@@ -341,10 +346,15 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
       // sits at the prompt (a hold expired after 9.5 min, 2026-10-20).
       kind = 'needs';
       text = ASKS_IN_TERMINAL;
-    } else if (subs.length >= MEETING_MIN_SUBAGENTS) {
+    } else if (subs.length >= MEETING_MIN_SUBAGENTS && working.length > 0) {
       kind = 'meet';
       text = `En junta · ${subs.length} subagentes`;
-    } else if (subs.length === 1 && !tool && !(ch.isActive && input.inTurn(id))) {
+    } else if (
+      working.length === 1 &&
+      subs.length === 1 &&
+      !tool &&
+      !(ch.isActive && input.inTurn(id))
+    ) {
       // Its own turn ended but a sub-agent it started is still at work.
       kind = 'work';
       text = `Con un subagente: ${subs[0].label}`;
