@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import type { ChatItem } from '../../../core/src/messages.js';
 import { transport } from '../transport/index.js';
-import { sameMessage } from './chatText.js';
+import { type PendingDelivery, sameMessage } from './chatText.js';
 
 /** Each agent's conversation as chat lines: loaded when its chat opens,
  *  then appended as the session writes. */
@@ -17,8 +17,8 @@ export interface PendingMessage {
   key: string;
   text: string;
   at: number;
-  /** The agent was busy when it went: it reads it after its turn. */
-  queued: boolean;
+  /** Whether it reached the agent's terminal (sendToAgent). */
+  delivery: PendingDelivery;
 }
 
 const pending = new Map<number, PendingMessage[]>();
@@ -28,10 +28,37 @@ function emit(): void {
   for (const l of listeners) l();
 }
 
-/** Draw a message you just sent until the transcript brings it. */
-export function addPending(agentId: number, text: string, queued: boolean): void {
-  const entry = { key: `p${++pendingSeq}`, text, at: Date.now(), queued };
+/** Draw a message you just sent until the transcript brings it; the key
+ *  settles its delivery later. */
+export function addPending(agentId: number, text: string): string {
+  const entry: PendingMessage = {
+    key: `p${++pendingSeq}`,
+    text,
+    at: Date.now(),
+    delivery: 'sending',
+  };
   pending.set(agentId, [...(pending.get(agentId) ?? []), entry]);
+  emit();
+  return entry.key;
+}
+
+/** It reached the agent's terminal, or it never will. */
+export function settleDelivery(agentId: number, key: string, sent: boolean): void {
+  const waiting = pending.get(agentId);
+  if (!waiting?.some((p) => p.key === key)) return;
+  const delivery: PendingDelivery = sent ? 'sent' : 'failed';
+  pending.set(
+    agentId,
+    waiting.map((p) => (p.key === key ? { ...p, delivery } : p)),
+  );
+  emit();
+}
+
+/** Forget one (a failed message you retry or discard). */
+export function dropPending(agentId: number, key: string): void {
+  const left = (pending.get(agentId) ?? []).filter((p) => p.key !== key);
+  if (left.length > 0) pending.set(agentId, left);
+  else pending.delete(agentId);
   emit();
 }
 

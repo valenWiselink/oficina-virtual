@@ -5,6 +5,7 @@ import { usePaneModes } from '../chat/chatMode.js';
 import { ChatPane } from '../chat/ChatPane.js';
 import { TERMINAL_DRAWER_RESIZE_HANDLE_PX } from '../constants.js';
 import { isVerticalDock, type TerminalDock } from '../hooks/useTerminalDock.js';
+import { sendToAgent } from '../terminal/agentInput.js';
 import { useTerminalFontSize } from '../terminal/fontZoom.js';
 import type { TerminalSearchHandle } from '../terminal/terminalAddons.js';
 import type { TerminalConnectionStatus } from '../terminal/terminalClient.js';
@@ -14,7 +15,6 @@ import type { BoardActions } from '../views/BoardCard.js';
 import type { AgentAppearance, TabStatus } from './AgentCard.js';
 import { AgentCardBar } from './AgentCardBar.js';
 import { TERMINAL_HEADER_PX, TerminalHeader } from './TerminalHeader.js';
-import type { TerminalInputHandle } from './TerminalPane.js';
 import { TerminalPaneStack } from './TerminalPaneStack.js';
 import { TerminalSearchBar } from './TerminalSearchBar.js';
 import { terminalSlots } from './terminalSlots.js';
@@ -53,9 +53,6 @@ interface TerminalDrawerProps {
   /** The "+" tile under the tabs: a new agent, like "+ Agente". */
   onNewAgent?: () => void;
 }
-
-/** How long after the chat's paste its Enter goes (sendTo). */
-const CHAT_ENTER_AFTER_MS = 150;
 
 /** Per dock: layout of [cards, panel] (cards always face the office), the
  *  margins that float the panel off the window edges, the drag handle on its
@@ -111,22 +108,7 @@ export function TerminalDrawer(props: TerminalDrawerProps) {
   // Its session has written nothing yet: show the terminal (chatMode.ts).
   const modeOf = (agentId: number) =>
     paneMode(agentId, props.viewFor(agentId)?.lastRecordAt === undefined);
-  const inputs = useRef(new Map<number, TerminalInputHandle>());
   if (agentIds.length === 0) return null;
-  const onInputHandle = (agentId: number, handle: TerminalInputHandle | null) => {
-    if (handle) inputs.current.set(agentId, handle);
-    else inputs.current.delete(agentId);
-  };
-  // The chat writes into the agent's terminal as if typed there: a bracketed
-  // paste (so newlines stay inside the message), then Enter — late enough
-  // for a background session, whose input travels through `claude attach`,
-  // to have taken the paste first (the server's sendToTerminal waits 80 ms).
-  const sendTo = (agentId: number, text: string) => {
-    const input = inputs.current.get(agentId);
-    if (!input) return;
-    input.paste(text);
-    setTimeout(() => input.send('\r'), CHAT_ENTER_AFTER_MS);
-  };
   const openSearch = (agentId: number) => {
     setMode(agentId, 'terminal');
     setSearchFor(agentId);
@@ -206,7 +188,8 @@ export function TerminalDrawer(props: TerminalDrawerProps) {
               <ChatPane
                 view={view}
                 actions={props.actions}
-                onSend={(text) => sendTo(agentId, text)}
+                // Written into its terminal as if typed there (agentInput.ts).
+                onSend={(text) => sendToAgent(agentId, text)}
                 onShowTerminal={() => setMode(agentId, 'terminal')}
               />
             </div>
@@ -231,7 +214,6 @@ export function TerminalDrawer(props: TerminalDrawerProps) {
           paneClassName="inset-4"
           fontSizePx={fontSizePx}
           onSearchRequest={openSearch}
-          onInputHandle={onInputHandle}
           onRegisterSearch={registerSearch}
           placement={(agentId) =>
             slotOf(agentId) >= 0 && modeOf(agentId) === 'terminal'

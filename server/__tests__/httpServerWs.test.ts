@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 
 import { WS_CLOSE_FORBIDDEN_ORIGIN, WS_CLOSE_UNAUTHORIZED } from '../src/constants.js';
+import { SERVER_BOOT_ID } from '../src/serverBoot.js';
 
 // Isolated temp HOME: the server writes ~/.pixel-agents/{server.json,servers/}
 // and the consent assertions below read ~/.pixel-agents/config.json.
@@ -186,6 +187,21 @@ describe('/ws connection gate', () => {
     sockets.push(result.socket);
 
     expect(result.accepted).toBe(true);
+  });
+
+  // Agent ids start over on every start: the first thing a page hears is
+  // which run this is, so it can tell a restart from a blip.
+  it('says which run of the server it is before anything else', async () => {
+    const { port } = await startStandalone();
+    const socket = new WebSocket(`ws://127.0.0.1:${port.toString()}/ws`);
+    sockets.push(socket);
+    const first = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      socket.once('message', (data: Buffer) =>
+        resolve(JSON.parse(data.toString()) as Record<string, unknown>),
+      );
+      setTimeout(() => reject(new Error('no first message')), 2_000);
+    });
+    expect(first).toEqual({ type: 'serverHello', bootId: SERVER_BOOT_ID });
   });
 
   // 4. An unparseable Origin is not a same-origin browser request.

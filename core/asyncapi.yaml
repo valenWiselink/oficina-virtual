@@ -115,6 +115,8 @@ components:
         - $ref: '#/components/schemas/FloorTilesLoaded'
         - $ref: '#/components/schemas/WallTilesLoaded'
         - $ref: '#/components/schemas/CarpetTilesLoaded'
+        # Connection
+        - $ref: '#/components/schemas/ServerHello'
         # Settings & config
         - $ref: '#/components/schemas/OfficeAccess'
         - $ref: '#/components/schemas/SettingsLoaded'
@@ -124,6 +126,7 @@ components:
         - $ref: '#/components/schemas/HooksStatus'
         - $ref: '#/components/schemas/HooksConsentRequest'
         - $ref: '#/components/schemas/ClaudeStatus'
+        - $ref: '#/components/schemas/TeTocaRuleStatus'
         - $ref: '#/components/schemas/FolderPicked'
         - $ref: '#/components/schemas/ExternalAssetDirectoriesUpdated'
         - $ref: '#/components/schemas/AreaMappingsLoaded'
@@ -188,6 +191,7 @@ components:
         - $ref: '#/components/schemas/SetBypassPermissions'
         - $ref: '#/components/schemas/SetBackgroundAgents'
         - $ref: '#/components/schemas/SetUsageLimits'
+        - $ref: '#/components/schemas/SetTeTocaRuleGlobal'
         - $ref: '#/components/schemas/SetShowHostDirectories'
         - $ref: '#/components/schemas/SaveDirectory'
         - $ref: '#/components/schemas/RemoveDirectory'
@@ -1115,6 +1119,31 @@ components:
         theme:
           $ref: '#/components/schemas/TerminalLook'
 
+    TeTocaRuleStatus:
+      description: >-
+        Where the "Te toca" rule (server/src/teTocaRule.ts) sits in the user's
+        global CLAUDE.md: `none`, `office` (the exact block the office or
+        instalar.ps1 appended, which the switch can take back) or `own` (their
+        own wording: left alone). The office's agents get the rule by flag
+        only when it is `none`. Sent on the tokened handshake and as the
+        answer to setTeTocaRuleGlobal.
+      type: object
+      additionalProperties: false
+      required: [type, status]
+      properties:
+        type:
+          const: teTocaRuleStatus
+        status:
+          $ref: '#/components/schemas/TeTocaRuleWhere'
+        error:
+          type: string
+          description: Why the change asked for could not be made.
+
+    TeTocaRuleWhere:
+      description: Where the "Te toca" rule sits in the global CLAUDE.md.
+      type: string
+      enum: [none, office, own]
+
     TerminalLook:
       description: |
         The background Claude Code's chosen theme (~/.claude.json "theme") is
@@ -1328,6 +1357,24 @@ components:
     # would otherwise pass through this discriminated union and the store's
     # broadcast fan-out (which would also leak one agent's output to every
     # connected client). See docs/design/standalone-terminal.md.
+
+    ServerHello:
+      description: >-
+        The first message on every connection: which run of the server this is.
+        Agent ids start over at 1 on every start, so a page that reconnects to
+        a different run must reload (and never deliver what it queued for the
+        old ids) instead of carrying on with ids that now name other agents.
+        The terminal socket takes the same id as `?boot=` and refuses a
+        mismatch.
+      type: object
+      additionalProperties: false
+      required: [type, bootId]
+      properties:
+        type:
+          const: serverHello
+        bootId:
+          type: string
+          description: Unique per server start (process id and start time).
 
     OfficeAccess:
       description: >-
@@ -2243,6 +2290,20 @@ components:
       properties:
         type:
           const: setUsageLimits
+        enabled:
+          type: boolean
+
+    SetTeTocaRuleGlobal:
+      description: >-
+        Also append the "Te toca" rule to the user's global CLAUDE.md (for the
+        sessions outside the office), or take back the block the office added.
+        Answered with teTocaRuleStatus.
+      type: object
+      additionalProperties: false
+      required: [type, enabled]
+      properties:
+        type:
+          const: setTeTocaRuleGlobal
         enabled:
           type: boolean
 

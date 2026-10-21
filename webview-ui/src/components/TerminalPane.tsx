@@ -2,7 +2,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
 import type { CSSProperties } from 'react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   TERMINAL_FONT_FAMILY,
@@ -16,6 +16,7 @@ import {
 import { registerAgentInput } from '../terminal/agentInput.js';
 import { attachClipboardInput } from '../terminal/clipboardInput.js';
 import { zoomTerminalFont } from '../terminal/fontZoom.js';
+import { pasteText } from '../terminal/pasteText.js';
 import { findRelativePaths, findWindowsPaths } from '../terminal/pathLinks.js';
 import { attachPromptMarks } from '../terminal/promptMarks.js';
 import {
@@ -30,6 +31,7 @@ import { terminalLinkOpener } from '../terminal/terminalLinks.js';
 import { useTerminalColorize, useTerminalScheme } from '../terminal/terminalLook.js';
 import { attachTouchInput } from '../terminal/touchInput.js';
 import { transport } from '../transport/index.js';
+import { InputDroppedNotice } from './InputDroppedNotice.js';
 
 interface TerminalPaneProps {
   agentId: number;
@@ -53,14 +55,22 @@ interface TerminalPaneProps {
   onRegisterInput?: (agentId: number, handle: TerminalInputHandle | null) => void;
 }
 
+/** Said in the terminal when what you wrote while it reconnected never went. */
+const INPUT_DROPPED_NOTE =
+  '[No le llegó lo que escribiste mientras la terminal se reconectaba. Escribilo de nuevo.]';
+
 /** Ways to feed input into a pane's PTY from outside the terminal itself. */
 export interface TerminalInputHandle {
-  /** Write raw bytes (key sequences) straight to the PTY. */
+  /** Write raw bytes (key sequences) straight to the PTY, as typed: while it
+   *  reconnects they are dropped (terminalClient.ts). */
   send: (data: string) => void;
-  /** Paste text through xterm, which wraps it in bracketed-paste markers when
-   *  the running app has turned that mode on — Claude Code has, and without
-   *  the markers a multiline paste would submit at its first newline. */
+  /** Paste text through xterm, as typed: wrapped in bracketed-paste markers
+   *  when the running app has turned that mode on — Claude Code has, and
+   *  without the markers a multiline paste would submit at its first newline. */
   paste: (data: string) => void;
+  /** A whole message: pasted, then Enter. While the terminal reconnects it
+   *  waits (up to 30 s); resolves whether it got there. */
+  submit: (text: string) => Promise<boolean>;
 }
 
 /**
@@ -81,6 +91,9 @@ export function TerminalPane({
   onRegisterInput,
 }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  // What you typed while it reconnected did not go (InputDroppedNotice).
+  const [droppedAt, setDroppedAt] = useState<number | null>(null);
+  const clearDropped = useCallback(() => setDroppedAt(null), []);
   const fitRef = useRef<FitAddon | null>(null);
   const termRef = useRef<Terminal | null>(null);
 
@@ -183,6 +196,10 @@ export function TerminalPane({
         term.write(`\r\n\x1b[90m[el proceso terminó con código ${String(exitCode)}]\x1b[0m\r\n`);
       },
       onStatusChange: (status) => statusRef.current?.(agentId, status),
+      onInputDropped: () => {
+        term.write(`\r\n\x1b[90m${INPUT_DROPPED_NOTE}\x1b[0m\r\n`);
+        setDroppedAt(Date.now());
+      },
     });
     void connection.connect();
 
@@ -197,7 +214,21 @@ export function TerminalPane({
     });
     const input: TerminalInputHandle = {
       send: (data) => connection.write(data),
-      paste: (data) => term.paste(data),
+      paste: (data) => {
+        try {
+          term.paste(data);
+        } catch {
+          // A pane never shown is not opened yet: xterm has already handed the
+          // paste to onData, then fails clearing a textarea it does not have.
+        }
+      },
+      // Not through term.paste: that is typing, which a reconnect drops. The
+      // paste is encoded when it goes, as the app wants it then.
+      submit: (text) =>
+        new Promise((resolve) => {
+          term.scrollToBottom();
+          connection.sendMessage(() => pasteText(text, term.modes.bracketedPasteMode), resolve);
+        }),
     };
     registerInputRef.current?.(agentId, input);
     // Anything in the office can write to this agent (agentInput.ts).
@@ -338,21 +369,23 @@ export function TerminalPane({
     // not apply to viewport panning), and once Safari claims the gesture the
     // touchmove preventDefault (touchGesture.ts) arrives too late. All touch
     // scrolling here is synthesized into wheel events instead.
-    <div
-      ref={hostRef}
-      className="relative overflow-hidden w-full h-full touch-none"
-      style={
-        {
-          display: isActive ? '' : 'none',
-          // Consumed by the `.xterm, .xterm *` rule in index.css to beat the
-          // global `* { font-pixel }` base rule. Fed from the same constant
-          // xterm measures its cell grid with, so CSS can't drift from metrics.
-          '--font-terminal': TERMINAL_FONT_FAMILY,
-          // The scrollbar thumb is drawn from the scheme's text colour, so it
-          // shows on light and dark schemes alike (index.css).
-          '--terminal-fg': scheme.theme.foreground,
-        } as CSSProperties
-      }
-    />
+    <div className="relative w-full h-full" style={{ display: isActive ? '' : 'none' }}>
+      <div
+        ref={hostRef}
+        className="relative overflow-hidden w-full h-full touch-none"
+        style={
+          {
+            // Consumed by the `.xterm, .xterm *` rule in index.css to beat the
+            // global `* { font-pixel }` base rule. Fed from the same constant
+            // xterm measures its cell grid with, so CSS can't drift from metrics.
+            '--font-terminal': TERMINAL_FONT_FAMILY,
+            // The scrollbar thumb is drawn from the scheme's text colour, so it
+            // shows on light and dark schemes alike (index.css).
+            '--terminal-fg': scheme.theme.foreground,
+          } as CSSProperties
+        }
+      />
+      <InputDroppedNotice at={droppedAt} onDone={clearDropped} />
+    </div>
   );
 }

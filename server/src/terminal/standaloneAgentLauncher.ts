@@ -26,6 +26,7 @@ import { startFileWatching } from '../fileWatcher.js';
 import { directoryNameFor, hostDirectory } from '../hostDirectory.js';
 import { assignPaletteIfNeeded } from '../paletteAssigner.js';
 import { type SupervisionScope, supervisors } from '../supervisors/supervision.js';
+import { ruleLaunchArgs } from '../teTocaRule.js';
 import type { AgentState } from '../types.js';
 import {
   attachCommand,
@@ -95,6 +96,14 @@ function supervisorArgs(sessionId: string, scope: SupervisionScope | undefined):
   }
 }
 
+/** Every launch's extra flags: a supervisor's files, or else the "Te toca"
+ *  rule (teTocaRule.ts) — at most one --append-system-prompt-file, which is
+ *  all Claude Code reads. Built anew on every launch, resume and relaunch. */
+function launchExtras(filesId: string | undefined, scope: SupervisionScope | undefined): string[] {
+  const supervisor = filesId ? supervisorArgs(filesId, scope) : [];
+  return supervisor.length > 0 ? supervisor : ruleLaunchArgs();
+}
+
 /**
  * Spawn a Claude agent in a PTY and register it with the runtime.
  * Returns the new agent id, or null when the terminal is unavailable.
@@ -137,7 +146,7 @@ export function launchStandaloneAgent(
         prompt,
         model,
         effort,
-        extraArgs: supervisorArgs(sessionId, supervision),
+        extraArgs: launchExtras(sessionId, supervision),
       });
   if (!launch) return fail('provider.buildLaunchCommand is not implemented');
 
@@ -341,7 +350,7 @@ function backgroundLaunchArgs(
     prompt: look.prompt,
     model: look.model,
     effort: look.effort,
-    extraArgs: filesId ? supervisorArgs(filesId, look.supervision) : [],
+    extraArgs: launchExtras(filesId, look.supervision),
   });
   return launch ? backgroundArgs(launch.args, look.name) : null;
 }

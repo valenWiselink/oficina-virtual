@@ -40,6 +40,7 @@ import { setBackgroundAgents, stopBackground } from './terminal/backgroundSessio
 import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { launchAgent } from './terminal/standaloneAgentLauncher.js';
+import { ruleStatus, setRuleInClaudeMd } from './teTocaRule.js';
 
 type WsSend = (message: Record<string, unknown>) => void;
 
@@ -520,6 +521,16 @@ export function handleClientMessage(
       break;
     }
 
+    case 'setTeTocaRuleGlobal': {
+      // The "Te toca" rule in the global CLAUDE.md too (teTocaRule.ts); every
+      // office hears where it stands now, the asker also why it failed.
+      if (typeof msg.enabled !== 'boolean') break;
+      const answer = setRuleInClaudeMd(msg.enabled);
+      if (answer.error) send({ ...answer });
+      else store.broadcast({ ...answer });
+      break;
+    }
+
     case 'setShowHostDirectories': {
       if (typeof msg.enabled !== 'boolean' || !adapter) break;
       adapter.setSetting(KEY_SHOW_HOST_DIRECTORIES, msg.enabled);
@@ -909,11 +920,13 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   // The plan's usage limits (and whether the status line that reads them is on).
   const limits = ctx.runtime?.usageLimits;
   if (ctx.privileged && limits) send({ ...limits.message() });
-  // For the first-run welcome: can an agent start here at all?
+  // For the first-run welcome: can an agent start here at all? And is the
+  // "Te toca" rule already in the global CLAUDE.md (welcome and Ajustes)?
   if (ctx.privileged) {
     void Promise.all([claudeStatus(), claudeTheme()]).then(([status, theme]) =>
       send({ ...status, theme }),
     );
+    send({ type: 'teTocaRuleStatus', status: ruleStatus() });
   }
 
   // 9. Re-announce live terminals AFTER existingAgents, so a browser that

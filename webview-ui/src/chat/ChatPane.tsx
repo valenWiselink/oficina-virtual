@@ -11,8 +11,15 @@ import { ChoiceReplies } from '../views/CardExtras.js';
 import { offersQuickReplies } from '../views/cardRules.js';
 import { clawdColor } from '../views/clawdColor.js';
 import { useChatFontSize, zoomChatFont } from './chatFont.js';
-import { addPending, type PendingMessage, useAgentChat, usePendingMessages } from './chatStore.js';
-import { isLongAnswer, withChatHint, withoutChatHint } from './chatText.js';
+import {
+  addPending,
+  dropPending,
+  type PendingMessage,
+  settleDelivery,
+  useAgentChat,
+  usePendingMessages,
+} from './chatStore.js';
+import { isLongAnswer, pendingNote, withChatHint, withoutChatHint } from './chatText.js';
 import { Markdown } from './Markdown.js';
 import { PathAgentContext } from './pathAgent.js';
 
@@ -50,8 +57,9 @@ export function ChatPane({
 }: {
   view: AgentView;
   actions: BoardActions;
-  /** Type the text into the agent's terminal and press Enter. */
-  onSend: (text: string) => void;
+  /** Type the text into the agent's terminal and press Enter; resolves
+   *  whether it got there (sendToAgent). */
+  onSend: (text: string) => Promise<boolean>;
   onShowTerminal: () => void;
 }) {
   const { items, failed, retry } = useAgentChat(view.id);
@@ -87,8 +95,8 @@ export function ChatPane({
     view.kind === 'research';
   // Written in the chat: it asks for a chat-sized answer, and shows at once.
   const send = (text: string) => {
-    onSend(withChatHint(text));
-    addPending(view.id, text, busy);
+    const key = addPending(view.id, text);
+    void onSend(withChatHint(text)).then((sent) => settleDelivery(view.id, key, sent));
     pinnedToEnd.current = true;
   };
 
@@ -159,7 +167,16 @@ export function ChatPane({
             ),
           )}
         {sending.map((p) => (
-          <PendingBubble key={p.key} message={p} />
+          <PendingBubble
+            key={p.key}
+            message={p}
+            busy={busy}
+            onRetry={() => {
+              dropPending(view.id, p.key);
+              send(p.text);
+            }}
+            onDiscard={() => dropPending(view.id, p.key)}
+          />
         ))}
         <AgentNow view={view} actions={actions} onShowTerminal={onShowTerminal} />
       </div>
@@ -227,23 +244,47 @@ function UserBubble({ item }: { item: ChatItem }) {
 const LATE_MS = 20_000;
 
 /** A message you sent that the conversation does not show yet. */
-function PendingBubble({ message }: { message: PendingMessage }) {
+function PendingBubble({
+  message,
+  busy,
+  onRetry,
+  onDiscard,
+}: {
+  message: PendingMessage;
+  busy: boolean;
+  onRetry: () => void;
+  onDiscard: () => void;
+}) {
+  // "Late" counts from when it is in the terminal and the agent is not busy
+  // (a busy one reads it when its turn ends): a long turn never makes it late.
   const [late, setLate] = useState(false);
+  const waiting = message.delivery === 'sent' && !busy;
   useEffect(() => {
-    const timer = setTimeout(() => setLate(true), Math.max(0, message.at + LATE_MS - Date.now()));
+    if (!waiting) return;
+    const timer = setTimeout(() => setLate(true), LATE_MS);
     return () => clearTimeout(timer);
-  }, [message.at]);
-  const note = message.queued
-    ? 'En cola: lo lee cuando termine lo que está haciendo'
-    : late
-      ? 'Todavía no aparece en la conversación: fijate en la terminal'
-      : 'Enviando…';
+  }, [waiting]);
+  const failed = message.delivery === 'failed';
   return (
-    <div className="self-end max-w-[85%] flex flex-col items-end gap-2 opacity-75">
+    <div
+      className={`self-end max-w-[85%] flex flex-col items-end gap-2 ${failed ? '' : 'opacity-75'}`}
+    >
       <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
         {message.text}
       </div>
-      <span className="text-2xs text-text-muted">Vos · {note}</span>
+      <span className={`text-2xs ${failed ? 'text-danger' : 'text-text-muted'}`} role="status">
+        Vos · {pendingNote(message.delivery, busy, late)}
+      </span>
+      {failed && (
+        <div className="flex gap-4">
+          <Button size="sm" variant="accent" onClick={onRetry}>
+            Reintentar
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onDiscard}>
+            Descartar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

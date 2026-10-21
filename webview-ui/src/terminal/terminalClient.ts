@@ -12,7 +12,9 @@
 import { TERMINAL_WS_PREFIX } from '../../../core/src/constants.js';
 import { parseServerFrame } from '../../../core/src/terminalFrames.js';
 import { reconnectDelayMs } from '../transport/reconnectBackoff.js';
+import { knownServerRun } from '../transport/serverBoot.js';
 import { serverToken } from '../transport/serverToken.js';
+import { HeldMessages, type WriteDone } from './heldInput.js';
 
 export interface TerminalConnectionHandlers {
   onOutput(data: string): void;
@@ -21,7 +23,16 @@ export interface TerminalConnectionHandlers {
   onReplay(data: string, cols: number, rows: number): void;
   onExit(exitCode: number): void;
   onStatusChange(status: TerminalConnectionStatus): void;
+  /** What was written while it reconnected never went (keys typed by hand,
+   *  or a message it did not come back in time for): say so where it was
+   *  typed. */
+  onInputDropped(): void;
 }
+
+/** Between a message's paste and its Enter, so the TUI takes the paste first —
+ *  late enough for a background session, whose input travels through
+ *  `claude attach` (the server's own sendToTerminal waits 80 ms). */
+const MESSAGE_ENTER_AFTER_MS = 150;
 
 export type TerminalConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed';
 
@@ -37,6 +48,14 @@ export class TerminalConnection {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private exited = false;
+  /** Closed for good (no token, or the server refused it): writes fail now
+   *  instead of waiting for a reconnect that will not come. */
+  private refused = false;
+  /** The server sent this socket's replay: input now reaches the PTY. */
+  private attached = false;
+  /** Something written while detached was dropped and that was said (once
+   *  per drop; said again after the reattach, whose replay clears the screen). */
+  private toldDropped = false;
   /** Last known geometry, re-sent on reconnect so a resize during a drop isn't lost. */
   private pending: { cols: number; rows: number } | null = null;
 
@@ -45,10 +64,13 @@ export class TerminalConnection {
   // runtime code.
   private readonly agentId: number;
   private readonly handlers: TerminalConnectionHandlers;
+  /** Whole messages sent while not attached: they go on the next replay. */
+  private readonly held: HeldMessages<() => string>;
 
   constructor(agentId: number, handlers: TerminalConnectionHandlers) {
     this.agentId = agentId;
     this.handlers = handlers;
+    this.held = new HeldMessages(() => this.tellDropped());
   }
 
   async connect(): Promise<void> {
@@ -63,17 +85,13 @@ export class TerminalConnection {
       console.error(
         '[Webview] Terminal: this page has no server token (open the URL the CLI printed).',
       );
+      this.refused = true;
       this.handlers.onStatusChange('closed');
+      this.held.drop();
       return;
     }
 
-    // The token rides the handshake query exactly as it does on /ws (the
-    // server's request log redacts it), so both sockets pass the same gate.
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${window.location.host}${TERMINAL_WS_PREFIX}/${String(
-      this.agentId,
-    )}?token=${encodeURIComponent(serverToken)}`;
-    const socket = new WebSocket(url);
+    const socket = new WebSocket(this.url(serverToken));
     this.socket = socket;
 
     socket.onopen = () => {
@@ -90,23 +108,34 @@ export class TerminalConnection {
         this.handlers.onOutput(frame.data);
       } else if (frame.type === 'replay') {
         this.handlers.onReplay(frame.data, frame.cols, frame.rows);
+        // Only a socket the server kept gets a replay (it refuses a page from
+        // a restarted run first): now what waited may go.
+        this.attached = true;
+        // The replay just wiped the notice written while away: say it again.
+        if (this.toldDropped) this.handlers.onInputDropped();
+        this.toldDropped = false;
+        this.sendHeld();
       } else {
         this.exited = true;
+        this.held.drop();
         this.handlers.onExit(frame.exitCode);
         this.handlers.onStatusChange('closed');
       }
     };
 
     socket.onclose = (event: CloseEvent) => {
+      this.attached = false;
       if (this.disposed || this.exited) return;
       // An application close code (bad token, forbidden origin, no such
-      // session) is final: retrying can't fix any of them, and hammering an
-      // auth-rejecting endpoint is pointless.
+      // session, a page from a restarted run) is final: retrying can't fix
+      // any of them, and hammering an auth-rejecting endpoint is pointless.
       if (event.code >= 4000 && event.code < 5000) {
         console.error(
           `[Webview] Terminal: agent ${String(this.agentId)} rejected (${String(event.code)}: ${event.reason})`,
         );
+        this.refused = true;
         this.handlers.onStatusChange('closed');
+        if (this.held.drop()) this.tellDropped();
         return;
       }
       this.scheduleReconnect();
@@ -129,14 +158,73 @@ export class TerminalConnection {
     }, delay);
   }
 
+  /** The socket url. The token rides the handshake query exactly as it does
+   *  on /ws (the server's request log redacts it), so both sockets pass the
+   *  same gate; the run this page belongs to lets a restarted server refuse
+   *  ids that now name other agents. */
+  private url(token: string): string {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const run = knownServerRun();
+    return `${protocol}//${window.location.host}${TERMINAL_WS_PREFIX}/${String(
+      this.agentId,
+    )}?token=${encodeURIComponent(token)}${run ? `&boot=${encodeURIComponent(run)}` : ''}`;
+  }
+
   private send(frame: Record<string, unknown>): boolean {
     if (this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(JSON.stringify(frame));
     return true;
   }
 
+  /**
+   * Keys typed into the terminal. Not attached right now (reconnecting):
+   * they are dropped, and the terminal says so once — sent late they could
+   * answer whatever Claude asks by then (a permission, another question).
+   */
   write(data: string): void {
-    this.send({ type: 'input', data });
+    if (this.attached && this.send({ type: 'input', data })) return;
+    if (!this.disposed) this.tellDropped();
+  }
+
+  private tellDropped(): void {
+    if (this.toldDropped) return;
+    this.toldDropped = true;
+    this.handlers.onInputDropped();
+  }
+
+  /**
+   * A whole message (sendToAgent): its paste, then Enter. While the terminal
+   * reconnects it waits up to INPUT_HOLD_MS for the next attach; `done` says
+   * whether it got there. `paste` is encoded at send time (bracketed or not,
+   * as the app wants it then).
+   */
+  sendMessage(paste: () => string, done: WriteDone): void {
+    if (this.disposed || this.exited || this.refused) done(false);
+    else if (this.attached) this.deliver(paste, done);
+    else this.held.hold(paste, done);
+  }
+
+  private deliver(paste: () => string, done: WriteDone): void {
+    if (!this.send({ type: 'input', data: paste() })) {
+      done(false);
+      return;
+    }
+    setTimeout(() => done(this.send({ type: 'input', data: '\r' })), MESSAGE_ENTER_AFTER_MS);
+  }
+
+  /** Back attached: the held messages go one after another, each with its
+   *  own pause before Enter. */
+  private sendHeld(): void {
+    const queue = this.held.take();
+    const next = () => {
+      const held = queue.shift();
+      if (!held) return;
+      this.deliver(held.item, (sent) => {
+        held.done(sent);
+        next();
+      });
+    };
+    next();
   }
 
   resize(cols: number, rows: number): void {
@@ -146,6 +234,7 @@ export class TerminalConnection {
 
   dispose(): void {
     this.disposed = true;
+    this.held.drop();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

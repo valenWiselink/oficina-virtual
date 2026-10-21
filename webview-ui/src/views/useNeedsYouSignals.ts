@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { useNow } from '../hooks/useNow.js';
+import { officeSounds } from '../notificationSound.js';
 import { notifyWindows } from '../permissions/windowsNotify.js';
 import type { AgentView } from './agentViews.js';
 
@@ -9,12 +10,16 @@ const ICON_SIZE = 64;
 /** A wait this long earns one system notice (only while the tab is hidden). */
 const NOTIFY_AFTER_MS = 30_000;
 
+/** One wait (a "te toca" or a question) of one agent. */
+const waitKey = (v: AgentView) => `${v.id}:${v.yourTurnId ?? v.statusText}`;
+
 /**
  * What the browser tab says about "Te necesita": "(3) Oficina" counting
  * everything there (permissions, questions and "te toca", not only
- * permissions), an amber dot on the tab icon, and one Windows notice per wait
- * that passes 30 s. Permissions already notify the moment they arrive, so the
- * notice here is for the rest, once each, without extra sound.
+ * permissions), an amber dot on the tab icon, the toc-toc when a new wait
+ * shows up, and one Windows notice per wait that passes 30 s. Permissions
+ * already sound and notify the moment they arrive, so the knock and the
+ * notice here are for the rest, once each.
  */
 export function useNeedsYouSignals(views: AgentView[]): void {
   // A supervised agent's needs come to you through its supervisor.
@@ -26,14 +31,30 @@ export function useNeedsYouSignals(views: AgentView[]): void {
     setIconDot(count > 0);
   }, [count]);
 
-  const notified = useRef(new Set<string>());
   const needingRef = useRef(needing);
   needingRef.current = needing;
+
+  // A new wait knocks (turnSounds.ts); the ones already there when the page
+  // opened are not news.
+  const knocked = useRef(new Set<string>());
+  const waits = needing
+    .filter((v) => !v.permission)
+    .map(waitKey)
+    .join('|');
+  useEffect(() => {
+    for (const v of needingRef.current) {
+      if (v.permission || knocked.current.has(waitKey(v))) continue;
+      knocked.current.add(waitKey(v));
+      officeSounds.needsYou(v.id, !!v.blocking);
+    }
+  }, [waits]);
+
+  const notified = useRef(new Set<string>());
   const now = useNow();
   useEffect(() => {
     for (const v of needingRef.current) {
       if (v.permission || v.waitingSince === undefined) continue;
-      const key = `${v.id}:${v.yourTurnId ?? v.statusText}`;
+      const key = waitKey(v);
       if (notified.current.has(key) || now - v.waitingSince < NOTIFY_AFTER_MS) continue;
       notified.current.add(key);
       notifyWindows(v.name, v.statusText, `oficina-espera-${v.id}`);

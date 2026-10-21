@@ -19,6 +19,7 @@ import {
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
 import type { PermissionBroker } from './permissionBroker.js';
+import { SERVER_BOOT_ID } from './serverBoot.js';
 import { supervisors } from './supervisors/supervision.js';
 import { registerSupervisorMcp } from './supervisors/supervisorMcp.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
@@ -252,6 +253,10 @@ function registerWebSocketRoute(
     }
 
     const { store } = options;
+
+    // First, which run this is: agent ids start over on every start, so a
+    // page that reconnects to another run must reload (serverBoot.ts).
+    safeSend(socket, { type: 'serverHello', bootId: SERVER_BOOT_ID });
 
     // Pipe store events to WebSocket client
     const onAgentAdded = (id: number, agent: AgentState) => {

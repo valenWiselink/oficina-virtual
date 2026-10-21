@@ -23,8 +23,10 @@ import { encodeTerminalFrame, parseClientFrame } from '../../../core/src/termina
 import {
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_NO_SESSION,
+  WS_CLOSE_STALE_PAGE,
   WS_CLOSE_UNAUTHORIZED,
 } from '../constants.js';
+import { bootOfRequest, SERVER_BOOT_ID } from '../serverBoot.js';
 import { isAllowedWebSocketOrigin, standaloneHandshakeVerdict } from '../wsAuth.js';
 import type { PtySessionManager } from './ptySessionManager.js';
 
@@ -80,6 +82,13 @@ export function registerTerminalRoutes(app: FastifyInstance, options: TerminalRo
         !isAllowedWebSocketOrigin(request.headers.origin, request.headers.host)
       ) {
         socket.close(WS_CLOSE_FORBIDDEN_ORIGIN, 'forbidden origin');
+        return;
+      }
+      // A page from before a restart: its agent ids name other agents now,
+      // and what it held while reconnecting must not reach this one.
+      const boot = bootOfRequest(request.url);
+      if (boot !== null && boot !== SERVER_BOOT_ID) {
+        socket.close(WS_CLOSE_STALE_PAGE, 'stale page');
         return;
       }
 

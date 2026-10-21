@@ -11,6 +11,7 @@ import { claudeProvider } from '../src/providers/hook/claude/claude.js';
 import type { IPty, PtyModule, PtySpawnOptions } from '../src/terminal/ptyModule.js';
 import { PtySessionManager } from '../src/terminal/ptySessionManager.js';
 import { launchStandaloneAgent } from '../src/terminal/standaloneAgentLauncher.js';
+import { ruleFilePath, TE_TOCA_RULE } from '../src/teTocaRule.js';
 
 /**
  * launchStandaloneAgent is the standalone counterpart of the VS Code adapter's
@@ -89,6 +90,8 @@ describe('launchStandaloneAgent', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-launcher-test-'));
     projectDir = path.join(tempDir, 'project-sessions');
     fs.mkdirSync(projectDir, { recursive: true });
+    // The user's global CLAUDE.md (teTocaRule.ts) lives in the test's folder.
+    process.env.CLAUDE_CONFIG_DIR = path.join(tempDir, 'claude-config');
     store = new AgentStateStore();
     runtime = new AgentRuntime(store, claudeProvider);
     broadcasts = [];
@@ -96,6 +99,7 @@ describe('launchStandaloneAgent', () => {
   });
 
   afterEach(() => {
+    delete process.env.CLAUDE_CONFIG_DIR;
     vi.useRealTimers();
     runtime.dispose();
     store.dispose();
@@ -130,7 +134,13 @@ describe('launchStandaloneAgent', () => {
     // On Windows the bare name is resolved to its full path (node-pty does not
     // search PATH there); elsewhere it is spawned as is.
     expect(path.parse(harness.spawnArgs[0].file).name).toBe('claude');
-    expect(harness.spawnArgs[0].args).toEqual(['--session-id', agent?.sessionId]);
+    // With the "Te toca" rule, since this user's CLAUDE.md does not have it.
+    expect(harness.spawnArgs[0].args).toEqual([
+      '--session-id',
+      agent?.sessionId,
+      '--append-system-prompt-file',
+      ruleFilePath(),
+    ]);
     expect(harness.spawnArgs[0].options.cwd).toBe(cwd);
     expect(harness.manager.has(1)).toBe(true);
 
@@ -140,6 +150,35 @@ describe('launchStandaloneAgent', () => {
 
     // The UI learns a terminal exists so the drawer opens a tab.
     expect(broadcasts).toContainEqual({ type: 'terminalSessionOpened', agentId: 1 });
+  });
+
+  it('hands the "Te toca" rule once per launch, resumes included, and the file holds it', () => {
+    const harness = workingPtyManager();
+    const cwd = path.join(tempDir, 'workspace');
+    fs.mkdirSync(cwd);
+    launch(harness, { directoryPath: cwd });
+    const sessionId = store.get(1)!.sessionId;
+    harness.spawned[0].exit(0);
+    launch(harness, {
+      resume: { sessionId, cwd, directoryName: 'workspace' },
+    });
+    for (const { args } of harness.spawnArgs) {
+      expect(args.filter((a) => a === '--append-system-prompt-file')).toHaveLength(1);
+    }
+    expect(harness.spawnArgs[1].args.slice(0, 2)).toEqual(['--resume', sessionId]);
+    expect(fs.readFileSync(ruleFilePath(), 'utf-8')).toBe(TE_TOCA_RULE);
+  });
+
+  it('leaves the rule out when the global CLAUDE.md already has it', () => {
+    const configDir = process.env.CLAUDE_CONFIG_DIR!;
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(configDir, 'CLAUDE.md'),
+      'Cerrá con «te toca: …» si me dejás algo.\n',
+    );
+    const harness = workingPtyManager();
+    launch(harness, { directoryPath: tempDir });
+    expect(harness.spawnArgs[0].args).not.toContain('--append-system-prompt-file');
   });
 
   it('passes bypassPermissions through to the launch command', () => {

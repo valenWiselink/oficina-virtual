@@ -23,19 +23,16 @@ export function registerAgentInput(agentId: number, handle: TerminalInputHandle 
   changed();
 }
 
-/** Delay between the pasted text and Enter, so the TUI takes the paste first. */
-const ENTER_AFTER_MS = 40;
-
 /**
  * Send a message to an agent: a bracketed paste (newlines stay inside the
- * message), then Enter. False when the agent has no terminal here.
+ * message), then Enter. Resolves true once it reached the agent's terminal —
+ * right away, or when a terminal that is reconnecting comes back (it waits up
+ * to INPUT_HOLD_MS); false when the agent has no terminal here, or it did not
+ * come back in time. Only true may count as done.
  */
-export function sendToAgent(agentId: number, text: string): boolean {
+export function sendToAgent(agentId: number, text: string): Promise<boolean> {
   const input = handles.get(agentId);
-  if (!input) return false;
-  input.paste(text);
-  setTimeout(() => input.send('\r'), ENTER_AFTER_MS);
-  return true;
+  return input ? input.submit(text) : Promise.resolve(false);
 }
 
 function subscribe(listener: () => void): () => void {

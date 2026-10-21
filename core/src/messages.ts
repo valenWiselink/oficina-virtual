@@ -36,6 +36,7 @@ export type ServerMessage =
   | FloorTilesLoaded
   | WallTilesLoaded
   | CarpetTilesLoaded
+  | ServerHello
   | OfficeAccess
   | SettingsLoaded
   | BypassPermissionsUpdated
@@ -44,6 +45,7 @@ export type ServerMessage =
   | HooksStatus
   | HooksConsentRequest
   | ClaudeStatus
+  | TeTocaRuleStatus
   | FolderPicked
   | ExternalAssetDirectoriesUpdated
   | AreaMappingsLoaded
@@ -104,6 +106,7 @@ export type ClientMessage =
   | SetBypassPermissions
   | SetBackgroundAgents
   | SetUsageLimits
+  | SetTeTocaRuleGlobal
   | SetShowHostDirectories
   | SaveDirectory
   | RemoveDirectory
@@ -419,6 +422,11 @@ export interface CarpetTilesLoaded {
   sets: string[][][][];
 }
 
+export interface ServerHello {
+  type: 'serverHello';
+  bootId: string;
+}
+
 export interface OfficeAccess {
   type: 'officeAccess';
   readOnly: boolean;
@@ -488,6 +496,14 @@ export interface ClaudeStatus {
 }
 
 export type TerminalLook = 'light' | 'dark';
+
+export interface TeTocaRuleStatus {
+  type: 'teTocaRuleStatus';
+  status: TeTocaRuleWhere;
+  error?: string;
+}
+
+export type TeTocaRuleWhere = 'none' | 'office' | 'own';
 
 export interface FolderPicked {
   type: 'folderPicked';
@@ -710,19 +726,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_360;
-  supervision?: AnonymousSchema_361;
+  effort?: AnonymousSchema_364;
+  supervision?: AnonymousSchema_365;
 }
 
-export type AnonymousSchema_360 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_364 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_361 {
-  kind: AnonymousSchema_362;
+export interface AnonymousSchema_365 {
+  kind: AnonymousSchema_366;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_362 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_366 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -771,16 +787,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_387;
+  scope: AnonymousSchema_391;
 }
 
-export interface AnonymousSchema_387 {
-  kind: AnonymousSchema_388;
+export interface AnonymousSchema_391 {
+  kind: AnonymousSchema_392;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_388 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_392 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';
@@ -891,6 +907,11 @@ export interface SetBackgroundAgents {
 
 export interface SetUsageLimits {
   type: 'setUsageLimits';
+  enabled: boolean;
+}
+
+export interface SetTeTocaRuleGlobal {
+  type: 'setTeTocaRuleGlobal';
   enabled: boolean;
 }
 

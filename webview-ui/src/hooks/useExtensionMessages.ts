@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ClaudeStatus, HooksConsentRequest } from '../../../core/src/messages.js';
 import { isSupervised } from '../identity/identityStore.js';
-import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
+import { applySavedSound, officeSounds, playPermissionSound } from '../notificationSound.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
 import { reconcileExistingAgents } from '../office/engine/existingAgents.js';
 import type { OfficeState } from '../office/engine/officeState.js';
@@ -564,9 +564,10 @@ export function useExtensionMessages(
           os.showWaitingBubble(id, msg.awaitingInput === true);
           // Once per finished turn (the office repeats "waiting"), and only
           // for agents whose news is yours: a supervised one's goes through
-          // its supervisor, a meeting member's through its lead.
+          // its supervisor, a meeting member's through its lead. Which sound
+          // (or none) is chosen a moment later (turnSounds.ts).
           const teammate = os.characters.get(id)?.leadAgentId !== undefined;
-          if (!wasWaiting && !teammate && !isSupervised(id)) playDoneSound();
+          if (!wasWaiting && !teammate && !isSupervised(id)) officeSounds.turnEnded(id);
         }
       } else if (msg.type === 'agentToolPermission') {
         const id = msg.id as number;
@@ -741,7 +742,7 @@ export function useExtensionMessages(
         }));
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean;
-        setSoundEnabled(soundOn);
+        applySavedSound(soundOn);
         if (typeof msg.watchAllSessions === 'boolean') {
           setWatchAllSessions(msg.watchAllSessions as boolean);
         }

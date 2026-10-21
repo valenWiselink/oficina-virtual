@@ -101,6 +101,9 @@ export const WS_CLOSE_FORBIDDEN_ORIGIN = 4003;
 /** Terminal socket: the agent has no PTY on this server (never spawned, or
  *  already exited). The route only ever attaches; it cannot start one. */
 export const WS_CLOSE_NO_SESSION = 4004;
+/** Terminal socket: the page names another run of the server (`?boot=`), so
+ *  its agent ids are stale and this one may now belong to another agent. */
+export const WS_CLOSE_STALE_PAGE = 4005;
 
 export const HOOK_EVENT_BUFFER_MS = 5_000;
 /** Grace period after SessionEnd(reason=clear/resume) before triggering onSessionEnd.
