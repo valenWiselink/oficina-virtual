@@ -30,6 +30,9 @@ export interface PermissionBrokerEvents {
   onPending: (request: PendingPermission) => void;
   /** A request is no longer answerable; the card must go away. */
   onResolved: (request: PendingPermission, outcome: PermissionOutcome) => void;
+  /** A request that expired here (still asked in the terminal) was settled
+   *  there: the tool ran, or the turn or session ended. */
+  onSettled?: (request: PendingPermission) => void;
 }
 
 /**
@@ -40,10 +43,14 @@ export interface PermissionBrokerEvents {
  * request can end without an office decision resolves it with `null`, which
  * the hook script turns into "print nothing" (the terminal keeps the say).
  * The broker's other job is truthfulness: a card must disappear as soon as
- * the request stops being real, or the office lies.
+ * the request stops being real, or the office lies — and an expired hold (or
+ * the office shutting down) is not an answer: the terminal still asks, so the
+ * request is kept as "asked in the terminal" until the session settles it.
  */
 export class PermissionBroker {
   private readonly held = new Map<string, HeldRequest>();
+  /** Expired here, still asked in the terminal (no longer answerable). */
+  private readonly inTerminal = new Map<string, PendingPermission>();
 
   constructor(
     private readonly events: PermissionBrokerEvents,
@@ -100,7 +107,7 @@ export class PermissionBroker {
    *  request was settled elsewhere end it. */
   observe(event: Record<string, unknown>): void {
     const sessionId = typeof event.session_id === 'string' ? event.session_id : '';
-    if (!sessionId || this.held.size === 0) return;
+    if (!sessionId || (this.held.size === 0 && this.inTerminal.size === 0)) return;
     switch (event.hook_event_name) {
       case 'PostToolUse':
       case 'PostToolUseFailure':
@@ -113,6 +120,17 @@ export class PermissionBroker {
     }
   }
 
+  /** Requests the office let go of that the terminal still asks, oldest first. */
+  askedInTerminal(): PendingPermission[] {
+    return [...this.inTerminal.values()].sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  /** Take back a request still asked in the terminal (restored after a
+   *  restart), so the session's next PostToolUse/Stop/SessionEnd settles it. */
+  rememberAskedInTerminal(request: PendingPermission): void {
+    this.inTerminal.set(request.requestId, request);
+  }
+
   /**
    * A tool ran or failed: if it is the call a held request was asking about,
    * the terminal answered it. Matching on name + input (not merely the
@@ -121,14 +139,15 @@ export class PermissionBroker {
    * gains `answers`), so the asked fields must all match, not the whole object.
    */
   toolFinished(sessionId: string, toolName: string, toolInput: unknown): void {
+    const asked = (request: PendingPermission) =>
+      request.sessionId === sessionId &&
+      request.toolName === toolName &&
+      containsInput(toolInput, request.toolInput);
     for (const request of [...this.held.values()]) {
-      if (
-        request.sessionId === sessionId &&
-        request.toolName === toolName &&
-        containsInput(toolInput, request.toolInput)
-      ) {
-        this.finish(request.requestId, null, 'terminal');
-      }
+      if (asked(request)) this.finish(request.requestId, null, 'terminal');
+    }
+    for (const request of [...this.inTerminal.values()]) {
+      if (asked(request)) this.settle(request);
     }
   }
 
@@ -137,6 +156,14 @@ export class PermissionBroker {
     for (const request of [...this.held.values()]) {
       if (request.sessionId === sessionId) this.finish(request.requestId, null, 'terminal');
     }
+    for (const request of [...this.inTerminal.values()]) {
+      if (request.sessionId === sessionId) this.settle(request);
+    }
+  }
+
+  private settle(request: PendingPermission): void {
+    if (!this.inTerminal.delete(request.requestId)) return;
+    this.events.onSettled?.(request);
   }
 
   /** Everything still answerable, oldest first (for a client that just connected). */
@@ -159,6 +186,8 @@ export class PermissionBroker {
     this.held.delete(requestId);
     clearTimeout(request.timer);
     request.resolve(decision);
+    // Expired is not an answer: the terminal keeps asking.
+    if (outcome === 'expired') this.inTerminal.set(requestId, toPublic(request));
     this.events.onResolved(toPublic(request), outcome);
   }
 }

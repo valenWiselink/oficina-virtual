@@ -31,22 +31,39 @@ export function pendingPermissionMessage(
  * away, and so does the character's "Needs approval" bubble — unless the same
  * session still has another request waiting. Without the clear, the bubble
  * stayed up until the turn ended (measured ~10 s after an office approval).
+ *
+ * An expired hold (or the office shutting down) answers nothing: the terminal
+ * still asks, so only the card goes. The agent stays in "Te necesita" as
+ * asking in the terminal until settledPermissionMessages — clearing it here
+ * showed it "Trabajando" while it sat waiting (a 503 s wait, 2026-10-20).
  */
 export function resolvedPermissionMessages(
   request: PendingPermission,
   outcome: PermissionOutcome,
   store: AgentStateStore,
-  stillPending: PendingPermission[],
+  stillAsked: PendingPermission[],
 ): Record<string, unknown>[] {
   const id = agentIdForSession(request.sessionId, store);
   const messages: Record<string, unknown>[] = [
     { type: 'permissionResolved', requestId: request.requestId, id, outcome },
   ];
-  const sameSessionWaiting = stillPending.some((r) => r.sessionId === request.sessionId);
+  if (outcome === 'expired') return messages;
+  return messages.concat(settledPermissionMessages(request, store, stillAsked));
+}
+
+/** The bubble goes once a request is over — answered, or settled in the
+ *  terminal (the tool ran, the turn or the session ended) — unless the
+ *  session still asks something else (`stillAsked`: held or in the terminal). */
+export function settledPermissionMessages(
+  request: PendingPermission,
+  store: AgentStateStore,
+  stillAsked: PendingPermission[],
+): Record<string, unknown>[] {
+  const id = agentIdForSession(request.sessionId, store);
+  const sameSessionWaiting = stillAsked.some((r) => r.sessionId === request.sessionId);
   const agent = id === undefined ? undefined : store.get(id);
-  if (agent && !sameSessionWaiting) {
-    agent.permissionSent = false;
-    messages.push({ type: 'agentToolPermissionClear', id });
-  }
-  return messages;
+  if (!agent || sameSessionWaiting) return [];
+  agent.permissionSent = false;
+  agent.permissionSince = undefined;
+  return [{ type: 'agentToolPermissionClear', id }];
 }

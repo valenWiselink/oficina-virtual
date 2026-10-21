@@ -49,6 +49,59 @@ describe('buildAgentViews', () => {
     expect(one({ permissions: [permission] })).toMatchObject({ kind: 'needs', permission });
   });
 
+  it('a permission the office no longer holds stays in "Te necesita", in the terminal', () => {
+    // The hold expired (or the office restarted): no card, the bubble stays,
+    // and the tool it asks about is still open.
+    const view = one({
+      characters: new Map([[1, ch({ bubbleType: 'permission' })]]),
+      agentTools: { 1: [{ status: 'Running: rm -rf build', done: false, permissionWait: true }] },
+      permissionSince: () => 1234,
+      inTurn: () => true,
+    });
+    expect(view).toMatchObject({
+      kind: 'needs',
+      statusText: 'Te pide permiso en la terminal',
+      asksInTerminal: true,
+      waitingSince: 1234,
+      blocking: true,
+    });
+    expect(view.permission).toBeUndefined();
+  });
+
+  it('after a restart the ask comes from the messages, with no bubble or tool known', () => {
+    const view = one({ askingPermission: () => true, permissionSince: () => 777 });
+    expect(view).toMatchObject({
+      kind: 'needs',
+      statusText: 'Te pide permiso en la terminal',
+      waitingSince: 777,
+    });
+  });
+
+  it('with the request held, it is answerable here, not "in the terminal"', () => {
+    const permission = {
+      type: 'permissionPending',
+      requestId: 'r',
+      id: 1,
+      createdAt: 99,
+    } as PermissionPending;
+    const view = one({
+      characters: new Map([[1, ch({ bubbleType: 'permission' })]]),
+      permissions: [permission],
+      permissionSince: () => 1234,
+    });
+    expect(view).toMatchObject({ statusText: 'Necesita tu permiso', waitingSince: 99 });
+    expect(view.asksInTerminal).toBeUndefined();
+  });
+
+  it('a question is a question even while its prompt is up', () => {
+    const view = one({
+      characters: new Map([[1, ch({ bubbleType: 'permission' })]]),
+      agentTools: { 1: [{ status: 'Waiting for your answer', done: false }] },
+    });
+    expect(view).toMatchObject({ kind: 'needs', statusText: 'Te hizo una pregunta' });
+    expect(view.asksInTerminal).toBeUndefined();
+  });
+
   it('a running tool is work, shown in Spanish or by its task phrase', () => {
     const agentTools = { 1: [{ status: 'Reading a.go', done: false }] };
     expect(one({ agentTools })).toMatchObject({ kind: 'work', statusText: 'Leyendo a.go' });

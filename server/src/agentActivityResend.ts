@@ -73,6 +73,12 @@ export function resendAgentActivity(
       });
     }
 
+    // 3b. A permission it still asks (also one the office no longer holds and
+    // the terminal still shows): without it a reload showed it "Trabajando".
+    if (agent.permissionSent) {
+      send({ type: 'agentToolPermission', id, since: agent.permissionSince });
+    }
+
     // 4. Waiting status
     if (agent.isWaiting) {
       send({

@@ -8,6 +8,7 @@ import { hasTurnInProgress } from '../identity/turnStore.js';
 import { isYourTurnDone } from '../identity/yourTurnStore.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import type { ToolActivity } from '../office/types.js';
+import { isAskingPermission, permissionSince } from '../permissions/permissionSinceStore.js';
 import { type AgentView, buildAgentViews } from './agentViews.js';
 
 /** Views refresh this often: enough for status changes, cheap for React. */
@@ -46,6 +47,8 @@ export function useAgentViews(input: UseAgentViewsInputs): AgentView[] {
     terminalAgentIds: input.terminalAgentIds,
     identity: getIdentity,
     finished: (id) => input.agentStatuses[id] === 'waiting',
+    askingPermission: isAskingPermission,
+    permissionSince,
     yourTurnDone: isYourTurnDone,
     inTurn: hasTurnInProgress,
     researching: (id) => isResearching(id),

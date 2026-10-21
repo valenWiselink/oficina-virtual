@@ -628,20 +628,26 @@ export class HookEventHandler {
     // When lead has inline teammates, route permission to the teammates instead.
     // The hook fires on the lead's session_id but the permission is for a teammate.
     const inlineTeammates = getInlineTeammates(agentId, this.agents);
+    // `since`: how long it has waited, also once the office stops holding it.
+    const ask = (a: AgentState) => {
+      a.permissionSince = (a.permissionSent && a.permissionSince) || Date.now();
+      a.permissionSent = true;
+    };
     if (inlineTeammates.length > 0) {
       for (const [id, a] of inlineTeammates) {
         cancelPermissionTimer(id, this.permissionTimers);
-        a.permissionSent = true;
-        this.agents.broadcast({ type: 'agentToolPermission', id });
+        ask(a);
+        this.agents.broadcast({ type: 'agentToolPermission', id, since: a.permissionSince });
       }
       return;
     }
 
     cancelPermissionTimer(agentId, this.permissionTimers);
-    agent.permissionSent = true;
+    ask(agent);
     this.agents.broadcast({
       type: 'agentToolPermission',
       id: agentId,
+      since: agent.permissionSince,
     });
     // Also notify any sub-agents with active tools
     for (const parentToolId of agent.activeSubagentToolNames.keys()) {

@@ -90,6 +90,9 @@ export interface AgentView {
   hasTerminal: boolean;
   /** A held permission request the office can answer right here. */
   permission?: PermissionPending;
+  /** It asks a permission the office cannot answer (the hold expired, the
+   *  office restarted, or it never held it): only its terminal can. */
+  asksInTerminal?: boolean;
   /** Set when the finished turn left something for you ("te toca"). */
   yourTurnId?: string;
   /** "Te necesita" only: since when (ms, from the server's own clock — a
@@ -151,6 +154,11 @@ export interface ViewInputs {
   /** The agent ended its turn and is waiting (from its status, which lasts
    *  until the next turn — unlike the old office's 2-second bubble). */
   finished: (id: number) => boolean;
+  /** It asks a permission, held or not (from the messages: the bubble misses
+   *  one replayed before its character exists). */
+  askingPermission?: (id: number) => boolean;
+  /** Since when it asks a permission (server clock), held or not. */
+  permissionSince?: (id: number) => number | undefined;
   /** "Te toca" answers the operator already marked done. */
   yourTurnDone: (turnId: string) => boolean;
   inTurn: (id: number) => boolean;
@@ -160,6 +168,8 @@ export interface ViewInputs {
 /** A meeting is an agent working with this many subagents at once. */
 const MEETING_MIN_SUBAGENTS = 2;
 const ASKING_STATUS = 'Waiting for your answer';
+/** A permission only its terminal can answer now (no card here). */
+const ASKS_IN_TERMINAL = 'Te pide permiso en la terminal';
 
 function folderName(path: string | undefined): string | undefined {
   return path?.split(/[\\/]/).filter(Boolean).pop();
@@ -266,7 +276,11 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
     const task = identity?.tasks.find((t) => t.status === 'in_progress');
     let kind: AgentKind;
     let text: string;
-    if (permission || ch.bubbleType === 'permission' || tool?.permissionWait) {
+    const asksPermission =
+      ch.bubbleType === 'permission' ||
+      !!tool?.permissionWait ||
+      input.askingPermission?.(id) === true;
+    if (permission) {
       kind = 'needs';
       text = 'Necesita tu permiso';
     } else if (tool?.status === ASKING_STATUS) {
@@ -275,6 +289,12 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
       // question, and saying so would be a lie.
       kind = 'needs';
       text = 'Te hizo una pregunta';
+    } else if (asksPermission) {
+      // Still asked, with no card to answer here: it stays in "Te necesita"
+      // until the tool runs or the turn ends — never "Trabajando" while it
+      // sits at the prompt (a hold expired after 9.5 min, 2026-10-20).
+      kind = 'needs';
+      text = ASKS_IN_TERMINAL;
     } else if (subs.length >= MEETING_MIN_SUBAGENTS) {
       kind = 'meet';
       text = `En junta · ${subs.length} subagentes`;
@@ -309,7 +329,12 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
       text = 'Sin tarea';
     }
 
-    const asksYou = kind === 'needs' && !permission && pendingAsk(identity, input.yourTurnDone);
+    const asksInTerminal = text === ASKS_IN_TERMINAL;
+    const asksYou =
+      kind === 'needs' &&
+      !permission &&
+      !asksInTerminal &&
+      pendingAsk(identity, input.yourTurnDone);
     const tasks = identity?.tasks ?? [];
     const done = tasks.filter((t) => t.status === 'completed').length;
     const folder = folderName(identity?.cwd);
@@ -350,6 +375,7 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
         subagents: subs,
         hasTerminal: input.terminalAgentIds.includes(id),
         permission,
+        asksInTerminal: asksInTerminal || undefined,
         yourTurnId: asksYou ? identity!.yourTurnId : undefined,
         prUrl: asksYou ? identity?.yourTurnUrl : undefined,
         branch: identity?.gitBranch,
@@ -358,7 +384,10 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
         lastReplyHead: identity?.lastReplyHead,
         lastRecordAt: identity?.lastRecordAt,
         area: identity?.area,
-        waitingSince: permission?.createdAt ?? (asksYou ? identity?.yourTurnAt : undefined),
+        waitingSince:
+          permission?.createdAt ??
+          (asksInTerminal ? input.permissionSince?.(id) : undefined) ??
+          (asksYou ? identity?.yourTurnAt : undefined),
         blocking: kind === 'needs' && !asksYou,
         supervisorNames: [],
         teamSize: 0,

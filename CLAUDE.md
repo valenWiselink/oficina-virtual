@@ -103,7 +103,20 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   only after consent (`consentGate.ts` decides, `consentExecutor.ts` performs;
   rationale was upstream's ADR 0001). Never rewrite a settings shape we did not
   author; hook identity is the `/.pixel-agents/hooks/claude-hook.js` suffix of
-  the command's first token, case-insensitive.
+  the command's first token, case-insensitive. The listen-only events run
+  `async` (Claude Code does not wait for them, so they can arrive out of
+  order); Stop, PermissionRequest and SessionStart/End stay synchronous.
+  `hookEventOrder.ts` drops what newer events contradict, by `tool_use_id` /
+  `agent_id` and by the script's `oficina_hook_at` stamp.
+- `hookHealth.ts` — counts the office's own hooks that Claude Code cut or saw
+  fail (`attachment` records `hook_cancelled` / `hook_non_blocking_error` in
+  the transcripts, via `transcriptTaps.ts`); from 5 in 10 min the page says so.
+- `permissionBroker.ts` / `terminalAsks.ts` — a hold that expires (570 s) or a
+  shutdown is not an answer: the request stays "asked in the terminal" until
+  PostToolUse/Stop/SessionEnd settle it, and is saved
+  (`~/.pixel-agents/permisos-en-terminal.json`) for sessions that outlive the
+  office (background or external), taken back when the agent returns unless
+  its transcript moved on.
 - `terminal/` — PTYs (`@lydell/node-pty`, prebuilt) streamed to the browser.
 
 Agent tracking also still loads the old office assets and layout: the

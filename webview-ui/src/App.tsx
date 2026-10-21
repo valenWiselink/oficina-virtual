@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 
 import { useEditAgent } from './agents/useEditAgent.js';
 import { useSupervisionSync } from './agents/useSupervisionSync.js';
+import { showTerminalOf } from './chat/chatMode.js';
 import { BroadcastDialog } from './command/BroadcastDialog.js';
 import { CommandPalette } from './command/CommandPalette.js';
 import { useCommandPaletteShortcut } from './command/usePaletteShortcut.js';
@@ -336,6 +337,10 @@ function App() {
         onHandOff: requestHandOff,
         onClose: handleCloseAgent,
         onEdit: requestEdit,
+        onOpenTerminal: (id) => {
+          showTerminalOf(id);
+          handleClick(id);
+        },
         onYourTurnDone: (turnId) => {
           markYourTurnDone(turnId);
           const done = agentViews.find((v) => v.yourTurnId === turnId);
