@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   effortSetBy,
+  firstOtherLink,
   identityMessage,
   observeIdentity,
   seedIdentity,
@@ -197,6 +198,32 @@ describe('yourTurnOf', () => {
     expect(yourTurnOf('Los deploys están en curso. Cuando terminen te aviso.')).toBeUndefined();
   });
 
+  it('keeps up to 240 characters of the ask (at 120, 16 of 118 arrived cut)', () => {
+    expect(yourTurnOf(`Te toca: ${'a'.repeat(300)}`)).toHaveLength(240);
+    expect(yourTurnOf(`Te toca: ${'b'.repeat(200)}`)).toBe('b'.repeat(200));
+  });
+
+  it('carries the first non-PR link and the choices of the answer', () => {
+    const agent = blank();
+    const text = [
+      'PR: https://github.com/w/web/pull/9. Probalo en https://dev.wiselink.app/es/ferias.',
+      '¿Cuál preferís?',
+      '1. **Mergear ya**',
+      '2. **Esperar**',
+    ].join('\n');
+    const record = { type: 'assistant', uuid: 'x', message: { content: [{ type: 'text', text }] } };
+    observeIdentity(agent, record);
+    expect(identityMessage(1, agent)).toMatchObject({
+      replyLink: 'https://dev.wiselink.app/es/ferias',
+      replyChoices: {
+        options: [
+          { n: 1, label: 'Mergear ya' },
+          { n: 2, label: 'Esperar' },
+        ],
+      },
+    });
+  });
+
   it('follows the latest answer: a new one without an ask clears it', () => {
     const agent = blank();
     const reply = (uuid: string, text: string) => ({
@@ -306,5 +333,19 @@ describe('effortSetBy: /effort typed in the terminal', () => {
     expect(
       effortSetBy({ ...out('<local-command-stdout>Set effort level to max'), isSidechain: true }),
     ).toBeUndefined();
+  });
+});
+
+describe('firstOtherLink', () => {
+  it('skips pull requests and trailing punctuation', () => {
+    expect(
+      firstOtherLink(
+        'PR https://github.com/o/r/pull/3/files y el artefacto (https://claude.ai/artifact/abc).',
+      ),
+    ).toBe('https://claude.ai/artifact/abc');
+    expect(firstOtherLink('Release: https://github.com/o/r/releases/tag/v1.0.14, listo')).toBe(
+      'https://github.com/o/r/releases/tag/v1.0.14',
+    );
+    expect(firstOtherLink('Sólo https://github.com/o/r/pull/3')).toBeUndefined();
   });
 });

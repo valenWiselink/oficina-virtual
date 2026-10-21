@@ -278,7 +278,9 @@ async function main(): Promise<void> {
     const dayLog = runtime.dayLog;
     setRecapCallback((id, text, at) => dayLog.recap(id, text, at));
     for (const root of claudeProvider.getAllSessionRoots?.() ?? []) dayLog.readRecapsFrom(root);
-    runtime.prWatch = watchAgentPrs(store, runtime.dayLog);
+    runtime.prWatch = watchAgentPrs(store, runtime.dayLog, {
+      terminalOf: (id) => ptyManager.get(id),
+    });
 
     // Supervisor agents: who supervises whom, and what reaches them (their
     // agents' permissions, questions and finished turns).

@@ -298,6 +298,9 @@ export interface AgentIdentity {
   yourTurnId?: string;
   yourTurnAt?: number;
   yourTurnUrl?: string;
+  yourTurnMerged?: MergedAsk;
+  replyLink?: string;
+  replyChoices?: ReplyChoices;
   lastReplyHead?: string;
   lastRecordAt?: number;
   backgroundTasks?: number;
@@ -322,6 +325,22 @@ export interface AgentTask {
 }
 
 export type AgentTaskStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface MergedAsk {
+  number: number;
+  url: string;
+  told: boolean;
+}
+
+export interface ReplyChoices {
+  options: ReplyChoice[];
+  recommends: boolean;
+}
+
+export interface ReplyChoice {
+  n: number;
+  label: string;
+}
 
 export interface LayoutLoaded {
   type: 'layoutLoaded';
@@ -673,19 +692,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_347;
-  supervision?: AnonymousSchema_348;
+  effort?: AnonymousSchema_355;
+  supervision?: AnonymousSchema_356;
 }
 
-export type AnonymousSchema_347 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_355 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_348 {
-  kind: AnonymousSchema_349;
+export interface AnonymousSchema_356 {
+  kind: AnonymousSchema_357;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_349 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_357 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -734,16 +753,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_374;
+  scope: AnonymousSchema_382;
 }
 
-export interface AnonymousSchema_374 {
-  kind: AnonymousSchema_375;
+export interface AnonymousSchema_382 {
+  kind: AnonymousSchema_383;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_375 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_383 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 
+import { prAskOf, prStateOf, rememberPrLinks } from './mergedAsk.js';
+import { replyChoices } from './replyChoices.js';
 import { repoAreaOf } from './repoArea.js';
 import { supervisors } from './supervisors/supervision.js';
 import type { AgentState, AgentTask } from './types.js';
@@ -191,23 +193,54 @@ function observeLastReply(agent: AgentState, record: Record<string, unknown>): b
     .trim();
   if (!text) return false;
   const headBefore = replyHead(agent.lastReply);
+  const extrasBefore = JSON.stringify([agent.replyLink, agent.replyChoices]);
   agent.lastReply = text;
   const headChanged = replyHead(text) !== headBefore;
-  const ask = yourTurnOf(text);
   const before = agent.yourTurn;
-  const at = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : NaN;
-  agent.yourTurn = ask
-    ? {
-        text: ask,
-        id: String(record.uuid ?? text.length),
-        at: Number.isNaN(at) ? undefined : at,
-        prUrl: firstPrUrl(text),
-      }
-    : undefined;
-  return headChanged || before?.text !== agent.yourTurn?.text || before?.id !== agent.yourTurn?.id;
+  rememberPrLinks((agent.prLinks ??= new Map()), text);
+  agent.yourTurn = yourTurnRecord(agent, text, record);
+  agent.replyLink = firstOtherLink(text);
+  agent.replyChoices = replyChoices(text, agent.yourTurn?.text);
+  return (
+    headChanged ||
+    before?.text !== agent.yourTurn?.text ||
+    before?.id !== agent.yourTurn?.id ||
+    extrasBefore !== JSON.stringify([agent.replyLink, agent.replyChoices])
+  );
 }
 
-const YOUR_TURN_MAX = 120;
+/** A PR the office already saw merged or closed asks nothing of you. */
+function isSettledPr(url: string): boolean {
+  const state = prStateOf(url);
+  return state === 'merged' || state === 'closed';
+}
+
+/** The "te toca" of an answer, with the one PR it is only about (if any) —
+ *  already done when that PR is known merged. */
+function yourTurnRecord(
+  agent: AgentState,
+  text: string,
+  record: Record<string, unknown>,
+): AgentState['yourTurn'] | undefined {
+  const ask = yourTurnOf(text, isSettledPr);
+  if (!ask) return undefined;
+  const at = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : NaN;
+  const prAsk = prAskOf(ask, text, agent.prLinks);
+  return {
+    text: ask,
+    id: String(record.uuid ?? text.length),
+    at: Number.isNaN(at) ? undefined : at,
+    prUrl: prAsk?.url ?? firstPrUrl(text, isSettledPr),
+    prAsk,
+    merged:
+      prAsk && prStateOf(prAsk.url) === 'merged'
+        ? { number: prAsk.number, url: prAsk.url, told: false }
+        : undefined,
+  };
+}
+
+/** Long enough for a whole ask: at 120, 16 of 118 arrived cut (2026-10-20). */
+const YOUR_TURN_MAX = 240;
 /** "Te toca: …" on a line of its own (bold, quoted or arrowed is fine). */
 const YOUR_TURN_LINE = /^[\s>*_\-→]*te toca\**\s*:\**\s*(.+)$/im;
 const PR_LINK = /https:\/\/github\.com\/[^/\s)]+\/([^/\s)]+)\/pull\/(\d+)/g;
@@ -215,18 +248,24 @@ const PR_LINK = /https:\/\/github\.com\/[^/\s)]+\/([^/\s)]+)\/pull\/(\d+)/g;
 /**
  * What an answer leaves for the operator. The agent's own words come first: a
  * line "Te toca: mergear PR #812" (the global CLAUDE.md asks for it). Without
- * one, pull-request links are the evidence — a PR handed over waits on you.
- * Anything else (a summary, a plain "listo") asks nothing, and the office
- * does not guess.
+ * one, pull-request links are the evidence — a PR handed over waits on you,
+ * unless it is already merged or closed (`settled`): "Se mergeó #2563" is
+ * news, not a review to do. Anything else (a summary, a plain "listo") asks
+ * nothing, and the office does not guess.
  */
-export function yourTurnOf(reply: string): string | undefined {
+export function yourTurnOf(
+  reply: string,
+  settled: (url: string) => boolean = () => false,
+): string | undefined {
   const line = reply.match(YOUR_TURN_LINE)?.[1];
   if (line) {
     const clean = line.replace(/[*_`]/g, '').trim();
     if (clean) return clip(clean, YOUR_TURN_MAX);
   }
   const prs = new Map<string, string>();
-  for (const m of reply.matchAll(PR_LINK)) prs.set(`${m[1]}#${m[2]}`, m[1]);
+  for (const m of reply.matchAll(PR_LINK)) {
+    if (!settled(m[0])) prs.set(`${m[1]}#${m[2]}`, m[1]);
+  }
   if (prs.size === 0) return undefined;
   const repos = new Set(prs.values());
   const numbers = [...prs.keys()].map((k) => `#${k.split('#')[1]}`);
@@ -247,9 +286,27 @@ export function replyHead(reply: string | undefined): string | undefined {
   return flat ? clip(flat, REPLY_HEAD_MAX) : undefined;
 }
 
-/** The first pull request the answer links, for an "Abrir PR" button. */
-export function firstPrUrl(reply: string): string | undefined {
-  return reply.match(/https:\/\/github\.com\/[^/\s)]+\/[^/\s)]+\/pull\/\d+/)?.[0];
+/** The first pull request the answer links (and is not `skip`ped), for an
+ *  "Abrir PR" button. */
+export function firstPrUrl(
+  reply: string,
+  skip: (url: string) => boolean = () => false,
+): string | undefined {
+  for (const m of reply.matchAll(PR_LINK)) if (!skip(m[0])) return m[0];
+  return undefined;
+}
+
+const ANY_LINK = /https?:\/\/[^\s<>()[\]"'`]+/g;
+const PR_PAGE = /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/;
+
+/** The answer's first link that is not a pull request (a dev URL, an
+ *  artifact, a release), for an "Abrir" button. */
+export function firstOtherLink(reply: string): string | undefined {
+  for (const m of reply.matchAll(ANY_LINK)) {
+    const url = m[0].replace(/[.,;:!?»*_]+$/, '');
+    if (!PR_PAGE.test(url)) return url;
+  }
+  return undefined;
 }
 
 function clip(text: string, max: number): string {
@@ -365,6 +422,9 @@ export function identityMessage(id: number, agent: AgentState): Record<string, u
     yourTurnId: agent.yourTurn?.id,
     yourTurnAt: agent.yourTurn?.at,
     yourTurnUrl: agent.yourTurn?.prUrl,
+    yourTurnMerged: agent.yourTurn?.merged,
+    replyLink: agent.replyLink,
+    replyChoices: agent.replyChoices,
     lastReplyHead: replyHead(agent.lastReply),
     lastRecordAt: agent.lastRecordAt,
     backgroundTasks: runningBackground(agent).length,

@@ -104,6 +104,11 @@ export class PrWatch {
     return [...this.statuses.values()];
   }
 
+  /** The state learned for one PR, if any. */
+  stateOf(url: string): PrState | undefined {
+    return this.statuses.get(url)?.state;
+  }
+
   /** Ask gh about every known PR still worth asking about. */
   async tick(): Promise<void> {
     if (this.disabled || this.ticking) return;
