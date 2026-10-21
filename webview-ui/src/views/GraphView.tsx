@@ -11,6 +11,7 @@ import {
   SlowNotice,
 } from './GraphChrome.js';
 import { GraphContextMenu } from './GraphContextMenu.js';
+import { GraphFilterBar } from './GraphFilterBar.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
 import { GraphMemberPanel } from './GraphMemberPanel.js';
 import { GraphPillActions } from './GraphPillActions.js';
@@ -84,6 +85,7 @@ function GraphOverlays({
     <>
       {followed && <FollowBanner view={followed} onStop={() => controls.follow(null)} />}
       <GraphToolbar controls={controls} />
+      <GraphFilterBar views={views} filter={g.filter} onChange={g.setFilter} />
       {g.hover.facts && !g.menu.menu && (
         <GraphHoverCard facts={g.hover.facts} cardRef={g.hover.cardRef} />
       )}

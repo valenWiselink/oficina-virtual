@@ -7,6 +7,7 @@ import { useWorkspaces } from '../workspaces/workspaceStore.js';
 import type { AgentView } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
 import type { ClawdLife } from './clawdLife.js';
+import { filterFocus, type GraphFilter } from './graphFilter.js';
 import { onRevealOnGraph } from './graphReveal.js';
 import { dayKey, officeLife, takeDailyWave } from './officeLife.js';
 import { type GraphControls, useGraphCanvas } from './useGraphCanvas.js';
@@ -32,6 +33,7 @@ export function useGraphView(
   const pill = useGraphPill(views);
   const [followId, setFollowId] = useState<number | null>(null);
   const [slow, setSlow] = useState(false);
+  const [filter, setFilter] = useState<GraphFilter>('all');
   const controls = useGraphCanvas(canvasRef, {
     views,
     selected: sel.marked,
@@ -45,6 +47,7 @@ export function useGraphView(
       sel.clicked(picked, repeat);
     },
     onPill: pill.onPill,
+    dim: filterFocus(views, filter),
     onMenu: (target, at) => menu.open(target, at),
     onDrop: (fromId, toId) => actions.onHandOffTo?.(fromId, toId),
     onFollow: setFollowId,
@@ -69,7 +72,7 @@ export function useGraphView(
     selection,
     select,
   });
-  return { sel, hover, pill, followId, slow, controls, keys, menu };
+  return { sel, hover, pill, followId, slow, controls, keys, menu, filter, setFilter };
 }
 
 /** Esc, from the graph: drop a drag, stop following, then shrink the pill, then let go

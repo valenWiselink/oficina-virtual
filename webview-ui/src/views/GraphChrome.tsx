@@ -101,7 +101,7 @@ export function FollowBanner({ view, onStop }: { view: AgentView; onStop: () => 
       />
       <div
         role="status"
-        className="absolute left-1/2 -translate-x-1/2 bottom-80 z-20 max-w-[calc(100%-28px)] soft-panel pl-10 pr-4 py-3 flex items-center gap-6 text-xs text-text"
+        className="absolute left-14 bottom-80 z-20 max-w-[calc(100%-28px)] soft-panel pl-10 pr-4 py-3 flex items-center gap-6 text-xs text-text"
       >
         <span className="w-8 h-8 rounded-full shrink-0" style={{ background: color }} />
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">

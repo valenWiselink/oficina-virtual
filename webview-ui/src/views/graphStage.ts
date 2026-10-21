@@ -75,6 +75,8 @@ export interface GraphInputs {
   onPill?: (id: number, how: 'hover' | 'click') => void;
   /** Right click, or a finger held still: the menu of what is there. */
   onMenu?: (target: GraphTarget | null, at: Pt) => void;
+  /** What stays crisp without hovering (the filter by state); null: all. */
+  dim?: ReadonlySet<string> | null;
   /** An agent dragged and dropped on another one's disc (`toId`). */
   onDrop?: (fromId: number, toId: number) => void;
   /** The camera started (id) or stopped (null) going along with an agent. */
@@ -256,7 +258,7 @@ export class GraphStage implements PointerHost {
     const marks = {
       selectedId: inp.selected?.id ?? null,
       selectedMember: inp.selected?.member,
-      focus: this.updateHover(inp, now),
+      focus: this.updateHover(inp, now) ?? inp.dim ?? null,
       dropTarget: this.dropOn,
     };
     this.out = drawScene(this.ctx, this.th, scene, inp.views, this.nodes, marks, inp.life);
@@ -493,7 +495,8 @@ function drawMinimapIfNeeded(
   if (allInView) return null;
   const box = {
     x: view.w - MINIMAP.w - MINIMAP.margin,
-    y: view.h - MINIMAP.h - 84,
+    // Above the zoom buttons and the filter by state.
+    y: view.h - MINIMAP.h - 128,
     w: MINIMAP.w,
     h: MINIMAP.h,
   };
