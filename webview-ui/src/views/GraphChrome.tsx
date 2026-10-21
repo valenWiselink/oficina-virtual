@@ -101,13 +101,13 @@ export function FollowBanner({ view, onStop }: { view: AgentView; onStop: () => 
       />
       <div
         role="status"
-        className="absolute left-1/2 -translate-x-1/2 top-56 z-20 soft-panel pl-10 pr-4 py-3 flex items-center gap-6 text-xs text-text"
+        className="absolute left-1/2 -translate-x-1/2 bottom-80 z-20 max-w-[calc(100%-28px)] soft-panel pl-10 pr-4 py-3 flex items-center gap-6 text-xs text-text"
       >
         <span className="w-8 h-8 rounded-full shrink-0" style={{ background: color }} />
-        <span>
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
           Siguiendo a <strong className="font-semibold">{view.name}</strong>
         </span>
-        <Button size="sm" variant="ghost" title="Esc" onClick={onStop}>
+        <Button size="sm" variant="ghost" title="Esc" className="shrink-0" onClick={onStop}>
           Dejar de seguir
         </Button>
       </div>
@@ -117,7 +117,7 @@ export function FollowBanner({ view, onStop }: { view: AgentView; onStop: () => 
 
 export function SlowNotice() {
   return (
-    <div className="absolute left-1/2 -translate-x-1/2 bottom-80 z-10 soft-panel px-10 py-4 text-xs text-text-muted">
+    <div className="absolute left-1/2 -translate-x-1/2 bottom-168 z-10 soft-panel px-10 py-4 text-xs text-text-muted">
       Efectos reducidos: la PC va lenta
     </div>
   );
@@ -128,7 +128,7 @@ export function GraphHint({ text }: { text: string }) {
   return (
     <div
       role="status"
-      className="absolute left-1/2 -translate-x-1/2 bottom-112 z-20 soft-panel px-10 py-4 text-xs text-text"
+      className="absolute left-1/2 -translate-x-1/2 bottom-124 z-20 soft-panel px-10 py-4 text-xs text-text"
     >
       {text}
     </div>
