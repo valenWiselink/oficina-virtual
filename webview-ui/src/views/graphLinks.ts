@@ -39,11 +39,12 @@ type Fade = <T>(keys: readonly string[], draw: () => T) => T;
 export function fader(
   ctx: CanvasRenderingContext2D,
   focus: ReadonlySet<string> | null | undefined,
+  alpha = DIM_ALPHA,
 ): Fade {
   return (keys, draw) => {
     if (!focus || keys.every((k) => focus.has(k))) return draw();
     ctx.save();
-    ctx.globalAlpha *= DIM_ALPHA;
+    ctx.globalAlpha *= alpha;
     try {
       return draw();
     } finally {

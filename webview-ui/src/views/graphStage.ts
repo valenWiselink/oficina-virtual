@@ -15,6 +15,7 @@ import {
 } from './graphCamera.js';
 import { type GraphTheme, readTheme, rgba } from './graphDraw.js';
 import { drawMinimap, MINIMAP, minimapToWorld } from './graphExtras.js';
+import { QUIET_ALPHA } from './graphFilter.js';
 import {
   applyWheel,
   pinchStep,
@@ -23,7 +24,7 @@ import {
   WheelStream,
 } from './graphGestures.js';
 import { type Box, type GraphTarget, hitTest } from './graphHit.js';
-import { focusOf, HoverDwell, type HoverTarget } from './graphHover.js';
+import { DIM_ALPHA, focusOf, HoverDwell, type HoverTarget } from './graphHover.js';
 import { mostUrgent } from './graphPick.js';
 import { setPin } from './graphPins.js';
 import { type Grab, type Mods, type PointerHost, PointerTracker } from './graphPointers.js';
@@ -115,6 +116,8 @@ export interface GraphControls {
   cancelDrag: () => boolean;
   /** Esc with a meeting focused: the camera goes back. false: none was. */
   unfocusMeeting: () => boolean;
+  /** Frame a lead's meeting and fade the rest (its menu, «Enfocar junta»). */
+  focusMeeting: (leadId: number) => boolean;
 }
 
 /** Each workspace's zoom and position, kept while the office is open (also
@@ -279,7 +282,7 @@ export class GraphStage implements PointerHost {
     const marks = {
       selectedId: inp.selected?.id ?? null,
       selectedMember: inp.selected?.member,
-      focus: this.updateHover(inp, now) ?? this.meetingFocus(inp) ?? inp.dim ?? null,
+      ...this.focusMarks(inp, now),
       dropTarget: this.dropOn,
       dragged: this.held?.node.startsWith('a') ? Number(this.held.node.slice(1)) : null,
       picked: inp.picked,
@@ -464,7 +467,14 @@ export class GraphStage implements PointerHost {
   private focusMeetingAt(p: Pt): void {
     const w = toWorld(this.rig.cam, p);
     const m = this.out?.meetings.find((c) => Math.hypot(c.x - w.x, c.y - w.y) <= c.r);
-    if (!m || this.meeting?.id === m.id) return;
+    if (m) this.focusMeeting(m.id);
+  }
+
+  /** Frame a meeting and fade the rest (false: that lead has no meeting). */
+  private focusMeeting(id: number): boolean {
+    const m = this.out?.meetings.find((c) => c.id === id);
+    if (!m) return false;
+    if (this.meeting?.id === m.id) return true;
     const back = this.meeting?.back ?? { cam: this.rig.cam, autoFit: this.rig.autoFit };
     this.rig.follow(null);
     const pad = m.r + MEETING_ROOM;
@@ -472,6 +482,15 @@ export class GraphStage implements PointerHost {
     this.rig.go(fitCamera(bounds, this.rig.view, 40));
     this.meeting = { id: m.id, back };
     this.inputs().onMeeting?.(m.id);
+    return true;
+  }
+
+  /** What stays crisp: the hovered team, else a focused meeting, else the
+   *  filter; and how much the rest fades. */
+  private focusMarks(inp: GraphInputs, now: number) {
+    const hover = this.updateHover(inp, now);
+    if (hover) return { focus: hover, focusAlpha: DIM_ALPHA };
+    return { focus: this.meetingFocus(inp) ?? inp.dim ?? null, focusAlpha: QUIET_ALPHA };
   }
 
   private meetingFocus(inp: GraphInputs): ReadonlySet<string> | null {
@@ -526,6 +545,7 @@ export class GraphStage implements PointerHost {
       fitAll: () => this.rig.fit(),
       panBy: (dx, dy) => this.pan(dx, dy),
       unfocusMeeting: () => this.unfocusMeeting(),
+      focusMeeting: (id) => this.focusMeeting(id),
       cancelDrag: () => {
         if (!this.held) return false;
         this.pointers.abort();

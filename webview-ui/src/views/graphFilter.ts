@@ -7,6 +7,10 @@ import type { AgentKind, AgentView } from './agentViews.js';
 
 export type GraphFilter = 'all' | 'needs' | 'work' | 'idle';
 
+/** How visible the others stay under a filter or a focused meeting (a
+ *  little less than while hovering: these last). */
+export const QUIET_ALPHA = 0.3;
+
 export const GRAPH_FILTERS: ReadonlyArray<{ id: GraphFilter; label: string }> = [
   { id: 'all', label: 'Todos' },
   { id: 'needs', label: 'Te necesitan' },

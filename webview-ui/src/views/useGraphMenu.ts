@@ -52,6 +52,7 @@ function runAgentItem(id: MenuItemId, v: AgentView, d: MenuDeps): void {
   else if (id === 'pr' && v.prUrl) window.open(v.prUrl, '_blank', 'noopener');
   else if (id === 'handoff') a.onHandOff?.(v.id);
   else if (id === 'follow') d.controls.follow(d.following === v.id ? null : v.id);
+  else if (id === 'meeting') d.controls.focusMeeting(v.id);
   else if (id === 'edit') a.onEdit?.(v.id);
   else if (id === 'close') a.onClose?.(v.id);
 }

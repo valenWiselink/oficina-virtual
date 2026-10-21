@@ -140,4 +140,11 @@ describe('menuItems', () => {
       'lead',
     ]);
   });
+
+  it('a lead with a meeting can focus it from its menu', () => {
+    const member = (id: number) => ({ id, label: 'S', kind: 'work' as const, statusText: '' });
+    const lead = view(1, { kind: 'meet', subagents: [member(-1), member(-2)] });
+    expect(ids(menuItems({ kind: 'agent', id: 1 }, [lead], all, ctx))).toContain('meeting');
+    expect(ids(menuItems({ kind: 'agent', id: 1 }, [view(1)], all, ctx))).not.toContain('meeting');
+  });
 });

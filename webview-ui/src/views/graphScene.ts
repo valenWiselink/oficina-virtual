@@ -96,6 +96,9 @@ export interface SceneMarks {
   /** While you hover an agent, what stays crisp (graphHover.ts focusOf);
    *  everything else fades. null: everything crisp. */
   focus?: ReadonlySet<string> | null;
+  /** How visible the rest stays (hovering: 40 %; a filter or a meeting in
+   *  focus: less). */
+  focusAlpha?: number;
   /** While you drag an agent over another: the one that would get its answer,
    *  and the dragged one (drawn see-through, so the target shows). */
   dropTarget?: number | null;
@@ -275,7 +278,7 @@ export function drawScene(
     f,
     nodes,
     passive: { boxes: [], circles: [], segments: [] },
-    fade: fader(ctx, marks.focus),
+    fade: fader(ctx, marks.focus, marks.focusAlpha),
   };
   background(ctx, th, f);
   worldTransform(ctx, f);
@@ -393,7 +396,12 @@ function drawBodies(
     const body = () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life);
     if (v.id === marks.dragged && marks.dropTarget != null) seeThrough(pen.ctx, body);
     else pen.fade([`a${v.id}`], body);
-    if (v.id === marks.dropTarget) drawDropRing(pen, n);
+    if (v.id === marks.dropTarget)
+      drawDropRing(
+        pen,
+        n,
+        list.find((x) => x.id === marks.dragged),
+      );
     if (marks.picked?.has(v.id)) drawPickRing(pen, n);
     grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
   });
@@ -457,18 +465,23 @@ function seeThrough(ctx: CanvasRenderingContext2D, draw: () => void) {
 
 /** The agent a dragged one would hand its answer to: a ring and what
  *  dropping does. */
-function drawDropRing(pen: Pen, n: SimNode) {
+function drawDropRing(pen: Pen, n: SimNode, from: AgentView | undefined) {
   const { ctx, th } = pen;
+  // In the colour of the one you carry, and saying whose answer it gets.
+  const color = from ? colorOf(from) : th.accent;
   ctx.save();
-  ctx.strokeStyle = th.accent;
+  ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(n.x, n.y, n.r + 9, 0, Math.PI * 2);
   ctx.stroke();
   setFont(ctx, 600, 11);
-  ctx.fillStyle = th.accent;
+  ctx.fillStyle = th.ink;
   ctx.textAlign = 'center';
-  ctx.fillText('Soltalo para pasarle su respuesta', n.x, n.y - n.r - 16);
+  const text = from
+    ? `Soltá para pasarle la última respuesta de ${clip(from.name, NAME_CHARS)}`
+    : 'Soltá para pasarle la última respuesta';
+  ctx.fillText(text, n.x, n.y - n.r - 16);
   ctx.restore();
 }
 
