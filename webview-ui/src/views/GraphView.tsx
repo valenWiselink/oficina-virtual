@@ -15,6 +15,7 @@ import { GraphFilterBar } from './GraphFilterBar.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
 import { GraphMeetingBanner } from './GraphMeetingBanner.js';
 import { GraphMemberPanel } from './GraphMemberPanel.js';
+import { GraphPickPanel } from './GraphPickPanel.js';
 import { GraphPillActions } from './GraphPillActions.js';
 import { useGraphView } from './useGraphView.js';
 
@@ -112,9 +113,15 @@ function GraphOverlays({
   );
 }
 
-/** The picked agent's panel, or a member's own (clicked in its meeting). */
+/** The picked agent's panel, a member's own (clicked in its meeting), or
+ *  the several picked together. */
 function PickedPanel({ g, actions }: { g: GraphState; actions: BoardActions }) {
-  const { sel, controls } = g;
+  const { sel, controls, picks } = g;
+  if (picks.any) {
+    const views = g.views.filter((v) => picks.set.has(v.id));
+    if (views.length > 0)
+      return <GraphPickPanel views={views} actions={actions} onClear={picks.clear} />;
+  }
   const lead = sel.selected;
   if (!lead) return null;
   const memberId = sel.selection?.member;

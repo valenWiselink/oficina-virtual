@@ -44,6 +44,8 @@ export interface BoardActions {
   onHandOff?: (id: number) => void;
   /** Pass its latest answer straight to another agent (a drop on the graph). */
   onHandOffTo?: (fromId: number, toId: number) => void;
+  /** "Mensaje a varios" with these already chosen (picked on the graph). */
+  onMessageMany?: (ids: number[]) => void;
   onClose?: (id: number) => void;
   /** Name, colour, model and effort (agents/useEditAgent.tsx). */
   onEdit?: (id: number) => void;

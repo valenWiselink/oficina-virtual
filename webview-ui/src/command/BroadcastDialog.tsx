@@ -13,6 +13,8 @@ interface BroadcastDialogProps {
   open: boolean;
   onClose: () => void;
   views: AgentView[];
+  /** Already chosen when it opens (several picked on the graph). */
+  initial?: readonly number[];
 }
 
 /**
@@ -20,18 +22,28 @@ interface BroadcastDialogProps {
  * agent as if written in its terminal. Grouped by folder, with "todos" per
  * folder; an agent without a terminal in this office cannot be chosen.
  */
-export function BroadcastDialog({ open, onClose, views }: BroadcastDialogProps) {
+export function BroadcastDialog({ open, onClose, views, initial }: BroadcastDialogProps) {
   return (
     <Modal isOpen={open} onClose={onClose} title="Mensaje a varios agentes" width={520} zIndex={60}>
-      {open && <BroadcastBody views={views} onClose={onClose} />}
+      {open && <BroadcastBody views={views} onClose={onClose} initial={initial} />}
     </Modal>
   );
 }
 
-function BroadcastBody({ views, onClose }: { views: AgentView[]; onClose: () => void }) {
+function BroadcastBody({
+  views,
+  onClose,
+  initial,
+}: {
+  views: AgentView[];
+  onClose: () => void;
+  initial?: readonly number[];
+}) {
   const writable = useWritableAgents();
   const [text, setText] = useState('');
-  const [chosen, setChosen] = useState<ReadonlySet<number>>(() => new Set());
+  const [chosen, setChosen] = useState<ReadonlySet<number>>(
+    () => new Set((initial ?? []).filter((id) => writable.has(id))),
+  );
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; missed: string[] } | null>(null);
   const groups = groupByFolder(views);

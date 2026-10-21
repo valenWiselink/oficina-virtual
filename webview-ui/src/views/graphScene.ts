@@ -98,6 +98,8 @@ export interface SceneMarks {
   focus?: ReadonlySet<string> | null;
   /** While you drag an agent over another: the one that would get its answer. */
   dropTarget?: number | null;
+  /** Agents picked together: a dashed ring each. */
+  picked?: ReadonlySet<number>;
 }
 
 /** What is clickable (graphHit.ts reads it) and what was drawn. */
@@ -388,6 +390,7 @@ function drawBodies(
     const state = { selected, pulsing: at.pulsing.has(v.id), index, gaze };
     pen.fade([`a${v.id}`], () => drawAgentBody(pen.ctx, pen.th, pen.f, v, n, state, life));
     if (v.id === marks.dropTarget) drawDropRing(pen, n);
+    if (marks.picked?.has(v.id)) drawPickRing(pen, n);
     grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
   });
   const order = [...list].sort(
@@ -455,6 +458,19 @@ function drawDropRing(pen: Pen, n: SimNode) {
   ctx.fillStyle = th.accent;
   ctx.textAlign = 'center';
   ctx.fillText('Soltalo para pasarle su respuesta', n.x, n.y - n.r - 16);
+  ctx.restore();
+}
+
+/** One of the agents picked together. */
+function drawPickRing(pen: Pen, n: SimNode) {
+  const { ctx, th } = pen;
+  ctx.save();
+  ctx.strokeStyle = th.accent;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, n.r + 7, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }
 

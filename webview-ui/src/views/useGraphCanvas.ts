@@ -23,7 +23,8 @@ function attachInput(canvas: HTMLCanvasElement, stage: GraphStage): () => void {
     // Only the main button: the right one opens the menu (contextmenu).
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     lastTouch = e.pointerType === 'touch';
-    stage.pointers.down(e.pointerId, local(e), e.timeStamp, lastTouch);
+    const mods = { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
+    stage.pointers.down(e.pointerId, local(e), e.timeStamp, lastTouch, mods);
     canvas.setPointerCapture(e.pointerId);
   };
   const onMove = (e: PointerEvent) => {
