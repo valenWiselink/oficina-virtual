@@ -6,13 +6,14 @@ const KINDS: ReadonlyArray<{ value: string | null; label: string }> = [
   { value: null, label: 'Nadie' },
   { value: 'workspace', label: 'Un espacio' },
   { value: 'agents', label: 'Elegidos' },
-  { value: 'all', label: 'Todos' },
+  { value: 'all', label: 'Todos (Jarvis)' },
 ];
 
 /**
  * "Supervisa": nobody (a regular agent), a workspace's agents (whoever joins
  * it later too), a hand-picked few, or everyone in every workspace. Its team
- * then sends it their permissions, questions and finished turns.
+ * then sends it their permissions, questions and finished turns. The
+ * supervisor of everyone is Jarvis, which also opens and closes agents.
  */
 export function SupervisionField({
   scope,
@@ -21,6 +22,7 @@ export function SupervisionField({
   candidates,
   disabled,
   allowPicked = true,
+  jarvisTaken = false,
   onChange,
 }: {
   scope: SupervisionScope;
@@ -30,6 +32,8 @@ export function SupervisionField({
   disabled: boolean;
   /** "Elegidos" needs the agent to exist (launching: pick them later in Editar). */
   allowPicked?: boolean;
+  /** Another agent is already Jarvis: there is one per office. */
+  jarvisTaken?: boolean;
   onChange: (scope: SupervisionScope, picked: string[]) => void;
 }) {
   const pick = (kind: string | null) => {
@@ -55,7 +59,8 @@ export function SupervisionField({
         choices={KINDS.filter(
           (k) =>
             (k.value !== 'workspace' || workspaces.length > 0) &&
-            (k.value !== 'agents' || allowPicked),
+            (k.value !== 'agents' || allowPicked) &&
+            (k.value !== 'all' || !jarvisTaken),
         )}
         value={scope.kind === 'none' ? null : scope.kind}
         disabled={disabled}

@@ -1,25 +1,67 @@
 /**
  * The office tools a supervisor gets over MCP (supervisorMcp.ts): see its
  * team, read an agent's last answer, approve or refuse a permission, write to
- * one of its agents. Everything is limited to its own team; approvals also
- * pass the office's guard (supervisorGuard.ts) whatever the supervisor says.
- * Answers are plain text in castellano, written for Claude to act on.
+ * one of its agents, open one for a task and close one that finished.
+ * Everything is limited to its own team; approvals also pass the office's
+ * guard (supervisorGuard.ts) and launches their own (supervisorLaunch.ts),
+ * whatever the supervisor says. Answers are plain text in castellano,
+ * written for Claude to act on. The supervisor of everyone (Jarvis) opens and
+ * closes agents by its own rules (jarvisTools.ts).
  */
 
+import {
+  cleanEffort,
+  cleanModel,
+  EFFORT_LEVELS,
+  MODEL_ALIASES,
+  NICKNAME_MAX,
+} from '../agentEdits.js';
 import { spokenName } from '../agentIdentity.js';
 import type { AgentStateStore } from '../agentStateStore.js';
+import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
 import type { PendingPermission, PermissionBroker } from '../permissionBroker.js';
 import { sendToTerminal } from '../terminal/handOff.js';
 import type { AgentState } from '../types.js';
-import type { SupervisorRegistry } from './supervision.js';
+import {
+  LAUNCHED_ALIVE_MAX,
+  type SupervisionScope,
+  type SupervisorRegistry,
+} from './supervision.js';
+import { broadcastSupervision } from './supervisionMessages.js';
 import { supervisorMayApprove } from './supervisorGuard.js';
+import { launchFolder, type LaunchPlaces, teamState } from './supervisorLaunch.js';
 import { describeRequest } from './supervisorRelay.js';
+
+/** An agent launch as the office runs it (jarvisPowers wires it). */
+export interface AgentLaunch {
+  directoryPath: string;
+  prompt: string;
+  nickname: string;
+  model?: string;
+  effort?: string;
+}
+
+/** What lanzar_agente asks for: the same words for every supervisor. */
+export interface LaunchInput {
+  carpeta: string;
+  tarea: string;
+  apodo: string;
+  modelo?: string;
+  esfuerzo?: string;
+}
 
 export interface ToolDeps {
   store: AgentStateStore;
   registry: SupervisorRegistry;
   broker?: Pick<PermissionBroker, 'pending' | 'decide'>;
   terminalOf: (id: number) => { write(data: string): void } | undefined;
+  /** Open an agent like the launch dialog does; resolves to its id, or null
+   *  when it could not start (absent: this office has no terminals). */
+  launch?: (options: AgentLaunch) => Promise<number | null>;
+  /** Close an agent like the office's ✕ does. */
+  close?: (id: number) => boolean;
+  /** Where an agent can be opened: the office's folders and recent ones. */
+  folders?: () => Array<{ name: string; path: string }>;
 }
 
 const HEAD_CHARS = 160;
@@ -38,15 +80,15 @@ function head(text: string | undefined): string | undefined {
 
 export class SupervisorTools {
   constructor(
-    private readonly deps: ToolDeps,
-    private readonly supervisorId: number,
+    protected readonly deps: ToolDeps,
+    protected readonly supervisorId: number,
   ) {}
 
-  private members(): Member[] {
+  protected members(): Member[] {
     return this.deps.registry.members(this.supervisorId);
   }
 
-  private pendingOf(agent: AgentState): PendingPermission[] {
+  protected pendingOf(agent: AgentState): PendingPermission[] {
     return (this.deps.broker?.pending() ?? []).filter((p) => p.sessionId === agent.sessionId);
   }
 
@@ -73,14 +115,7 @@ export class SupervisorTools {
     return members
       .map(([id, agent]) => {
         const pending = this.pendingOf(agent);
-        const state =
-          pending.length > 0
-            ? 'te necesita (permiso)'
-            : !agent.isWaiting
-              ? 'trabajando'
-              : agent.lastReply
-                ? 'terminó su turno'
-                : 'sin tarea';
+        const state = teamState(id, agent, pending.length, this.deps.store).words;
         const doing = [...agent.activeToolStatuses.values()].at(-1);
         const folder = agent.cwd?.split(/[\\/]/).pop();
         const parts = [
@@ -89,7 +124,7 @@ export class SupervisorTools {
           folder ? `carpeta ${folder}` : undefined,
           doing ? `ahora: ${doing}` : undefined,
           head(agent.lastReply) ? `dijo: ${head(agent.lastReply)}` : undefined,
-          agent.officeTerminal ? undefined : 'sin terminal en la oficina (no le podés escribir)',
+          agent.officeTerminal ? undefined : this.outsideNote(),
         ].filter(Boolean);
         const asks = pending.map(
           (p) =>
@@ -143,6 +178,22 @@ export class SupervisorTools {
       : 'Ese permiso ya no está pendiente (se respondió o venció).';
   }
 
+  /** How `equipo` marks an agent whose terminal is not the office's. */
+  protected outsideNote(): string {
+    return 'sin terminal en la oficina (no le podés escribir)';
+  }
+
+  /** The answer when the office cannot type into an agent's terminal. */
+  protected noTerminal(name: string): string {
+    return `«${name}» no tiene su terminal en la oficina: no le puedo escribir. Pedile a Valentín que lo traiga.`;
+  }
+
+  /** How the supervisor signs what it writes to its agents. */
+  protected signature(): string {
+    const me = this.deps.store.get(this.supervisorId);
+    return `[Supervisor «${me ? spokenName(me) : 'tu supervisor'}»]`;
+  }
+
   escribirAAgente(query: string, mensaje: string): string {
     const text = mensaje.trim();
     if (!text) return 'El mensaje está vacío.';
@@ -150,12 +201,111 @@ export class SupervisorTools {
     if (typeof found === 'string') return found;
     const [id, agent] = found;
     const terminal = this.deps.terminalOf(id);
-    if (!terminal) {
-      return `«${spokenName(agent)}» no tiene su terminal en la oficina: no le puedo escribir. Pedile a Valentín que lo traiga.`;
-    }
-    const me = this.deps.store.get(this.supervisorId);
-    const from = me ? spokenName(me) : 'tu supervisor';
-    sendToTerminal(terminal, `[Supervisor «${from}»] ${text}`);
+    if (!terminal) return this.noTerminal(spokenName(agent));
+    sendToTerminal(terminal, `${this.signature()} ${text}`);
+    this.wrote(agent, text);
     return `Listo: se lo escribí a «${spokenName(agent)}».`;
+  }
+
+  /** After a message reached one of its agents (Jarvis notes it down). */
+  protected wrote(_agent: AgentState, _text: string): void {}
+
+  /** Where it may open agents: what lands in its scope (supervisorLaunch.ts). */
+  private places(me: AgentState, scope: SupervisionScope): LaunchPlaces {
+    const live = [...this.deps.store.values()].flatMap((a) => (a.cwd ? [a.cwd] : []));
+    return {
+      scope,
+      workspaceFolders: this.deps.registry.folders.all()[me.sessionId],
+      teamFolders: [me, ...this.members().map(([, a]) => a)].flatMap((a) => (a.cwd ? [a.cwd] : [])),
+      knownFolders: [...(this.deps.folders?.() ?? []).map((f) => f.path), ...live],
+    };
+  }
+
+  /** The new agent's task, nickname, model and effort, or why one does not do. */
+  private launchChoice(input: LaunchInput): Omit<AgentLaunch, 'directoryPath'> | string {
+    const prompt = input.tarea.trim();
+    if (!prompt) return 'Falta la tarea: es el primer mensaje que le llega al agente.';
+    if (prompt.length > LAUNCH_PROMPT_MAX_LENGTH) {
+      return `La tarea es muy larga (máximo ${LAUNCH_PROMPT_MAX_LENGTH} caracteres): resumila y pasale el resto después con escribir_a_agente.`;
+    }
+    const nickname = input.apodo.trim().replace(/^«|»$/g, '');
+    if (!nickname) return 'Falta el apodo: uno corto y fácil de decir.';
+    if (nickname.length > NICKNAME_MAX) return `El apodo es muy largo (máximo ${NICKNAME_MAX}).`;
+    const taken = [...this.deps.store.values()].some(
+      (a) =>
+        a.leadAgentId === undefined &&
+        !a.spawnToolUseId &&
+        spokenName(a).toLowerCase() === nickname.toLowerCase(),
+    );
+    if (taken) return `Ya hay un agente «${nickname}»: elegí otro apodo.`;
+    const model = cleanModel(input.modelo);
+    if (input.modelo?.trim() && !model) {
+      return `No conozco el modelo «${input.modelo}» (usá ${MODEL_ALIASES.join(', ')}).`;
+    }
+    const effort = cleanEffort(input.esfuerzo);
+    if (input.esfuerzo?.trim() && !effort) {
+      return `No conozco el esfuerzo «${input.esfuerzo}» (usá ${EFFORT_LEVELS.join(', ')}).`;
+    }
+    return { prompt, nickname, model, effort };
+  }
+
+  /** A new office agent for one task, on its team: in a folder of its scope,
+   *  with the task as its first message, within LAUNCHED_ALIVE_MAX. */
+  async lanzarAgente(input: LaunchInput): Promise<string> {
+    const me = this.deps.store.get(this.supervisorId);
+    if (!me?.supervision) return 'Ya no sos supervisor: no puedo abrir agentes por vos.';
+    if (!this.deps.launch) return 'Esta oficina no puede abrir agentes (no tiene terminales).';
+    const choice = this.launchChoice(input);
+    if (typeof choice === 'string') return choice;
+    const alive = this.deps.registry.launchedAlive(me);
+    if (alive >= LAUNCHED_ALIVE_MAX) {
+      return `Ya tenés ${alive} agentes abiertos por vos andando y el tope es ${LAUNCHED_ALIVE_MAX}. Cerrá con cerrar_agente alguno que haya terminado, o pedíselo a Valentín.`;
+    }
+    const place = launchFolder(input.carpeta, this.places(me, me.supervision));
+    if (!place.ok) return place.reason;
+
+    const landed = this.deps.registry.beginLaunch(me.sessionId);
+    let id: number | null;
+    try {
+      id = await this.deps.launch({ ...choice, directoryPath: place.path });
+    } catch (err) {
+      id = null;
+      console.error(`[Pixel Agents] Supervisor launch in ${place.path}: ${String(err)}`);
+    } finally {
+      landed();
+    }
+    if (id === null) {
+      return `No pude abrir a «${choice.nickname}» en ${place.path}: la oficina muestra el motivo.`;
+    }
+    const agent = this.deps.store.get(id);
+    if (agent) {
+      this.deps.registry.noteLaunched(me, agent.sessionId);
+      broadcastSupervision(this.deps.store);
+    }
+    return `Listo: abrí a «${choice.nickname}» (id ${id}) en ${place.path} con su tarea. Ya está en tu equipo: la oficina te avisa cuando pida algo o termine.`;
+  }
+
+  /** Close one of its agents, only when it finished or has nothing to do. */
+  cerrarAgente(query: string): string {
+    if (!this.deps.close) return 'Esta oficina no puede cerrar agentes.';
+    const found = this.find(query);
+    if (typeof found === 'string') return found;
+    const [id, agent] = found;
+    const name = spokenName(agent);
+    if (!agent.officeTerminal) {
+      return `«${name}» corre afuera de la oficina (VS Code u otra terminal): a ese lo cierra Valentín.`;
+    }
+    const state = teamState(id, agent, this.pendingOf(agent).length, this.deps.store);
+    if (state.kind === 'needs') {
+      return `No lo cierro: «${name}» ${state.words}. Resolvelo primero, o traéselo a Valentín.`;
+    }
+    if (state.kind === 'work') {
+      return `No lo cierro: «${name}» está ${state.words}. Cerralo cuando termine.`;
+    }
+    const left = agent.yourTurn && !agent.yourTurn.merged ? agent.yourTurn.text : undefined;
+    if (!this.deps.close(id)) return `No pude cerrar a «${name}».`;
+    return left
+      ? `Cerré a «${name}» (su conversación queda guardada). Le había dejado a Valentín: «Te toca: ${left}» (si todavía no se lo pasaste, pasáselo).`
+      : `Cerré a «${name}». Su conversación queda guardada.`;
   }
 }

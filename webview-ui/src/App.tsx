@@ -32,6 +32,9 @@ import { useKeyboardViewport } from './hooks/useKeyboardViewport.js';
 import { useTerminalDock } from './hooks/useTerminalDock.js';
 import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { markYourTurnDone } from './identity/yourTurnStore.js';
+import { JarvisBar } from './jarvis/JarvisBar.js';
+import { findJarvis, jarvisHome, withoutJarvis } from './jarvis/jarvisRules.js';
+import { JarvisVisor } from './jarvis/JarvisVisor.js';
 import { useLaunchDialog } from './launch/LaunchDialog.js';
 import type { TakenLook } from './launch/launchMemory.js';
 import { UsageLimitsMeter } from './limits/UsageLimitsMeter.js';
@@ -133,6 +136,8 @@ function App() {
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
   const [broadcastPreset, setBroadcastPreset] = useState<number[] | undefined>(undefined);
   const [launchSignal, setLaunchSignal] = useState(0);
+  // The visor's «Contestar» focuses what you write to Jarvis in its bar.
+  const [jarvisFocus, setJarvisFocus] = useState(0);
   useCommandPaletteShortcut(() => setIsPaletteOpen(true));
   const openHistory = (tab: HistoryTab) => {
     setHistoryTab(tab);
@@ -165,18 +170,25 @@ function App() {
   // further down, so the drawer reads them through this ref.
   const kindRef = useRef<(id: number) => AgentKind | undefined>(() => undefined);
   const kindOf = useCallback((id: number) => kindRef.current(id), []);
+  // Jarvis's terminal never opens by itself (it has no tab); known further down.
+  const jarvisIdRef = useRef<number | undefined>(undefined);
+  const isJarvisTerminal = useCallback((id: number) => id === jarvisIdRef.current, []);
   const terminalDrawer = useTerminalDrawer({
     terminalAgentIds,
     getOfficeState,
     kindOf,
     dock: terminalDock,
+    isHidden: isJarvisTerminal,
   });
 
   // Every launch (desktop drawer and mobile bar) asks name and colour first,
   // avoiding the names and colours already in the office (views come later).
   const takenRef = useRef<() => TakenLook[]>(() => []);
   const takenLooks = useCallback(() => takenRef.current(), []);
-  const { requestLaunch, launchDialog } = useLaunchDialog(takenLooks);
+  // One Jarvis per office: the dialog stops offering it once there is one.
+  const hasJarvisRef = useRef(false);
+  const jarvisTaken = useCallback(() => hasJarvisRef.current, []);
+  const { requestLaunch, launchDialog } = useLaunchDialog(takenLooks, jarvisTaken);
   const launchIntoDirectory = requestLaunch;
   const mobileShell = useMobileShell({
     getOfficeState,
@@ -236,6 +248,11 @@ function App() {
   });
   kindRef.current = (id) => agentViews.find((v) => v.id === id)?.kind;
   takenRef.current = () => agentViews.map((v) => ({ name: v.name, palette: v.palette }));
+  // Jarvis has no avatar: everything that shows agents (board, graph, lists,
+  // tabs) gets the office without it; it lives in its bar and its visor.
+  const jarvis = findJarvis(agentViews);
+  hasJarvisRef.current = jarvis !== undefined;
+  const officeViews = withoutJarvis(agentViews, jarvis);
   const workspaceState = useWorkspaces();
   const { requestEdit, editDialog } = useEditAgent(agentViews);
   useSupervisionSync(agentViews, workspaceState);
@@ -292,7 +309,7 @@ function App() {
   // Workspaces: the views show one group of agents at a time (desktop).
   const workspaces = useWorkspaceLayer({
     enabled: !isMobile && !isDebugMode,
-    views: agentViews,
+    views: officeViews,
     terminalAgentIds,
     shownAgentId: terminalDrawer.shownAgentId,
     showTab: terminalDrawer.showTab,
@@ -310,7 +327,7 @@ function App() {
     },
     [revealIn, handleClick],
   );
-  useOfficeKeys(workspaces.shown, openAgent, agentViews);
+  useOfficeKeys(workspaces.shown, openAgent, officeViews);
   // A terminal tab opens its agent too: the graph follows.
   const { select: selectTerminalTab } = terminalDrawer;
   const selectTab = useCallback(
@@ -320,6 +337,33 @@ function App() {
     },
     [selectTerminalTab],
   );
+  // Jarvis's terminal is no tab: it shows only while you opened it (from its
+  // conversation), and stays mounted so the bar can write to it.
+  const jarvisId = jarvis?.id;
+  jarvisIdRef.current = jarvisId;
+  // A Jarvis just launched opens its terminal before the office knows it is
+  // Jarvis (its identity comes right after): put that away, once.
+  const autoOpened = terminalDrawer.lastOpened;
+  const handledAutoOpen = useRef(-1);
+  const { close: closeDrawer, showTab: showDrawerTab } = terminalDrawer;
+  useEffect(() => {
+    if (jarvisId === undefined || autoOpened?.agentId !== jarvisId) return;
+    if (handledAutoOpen.current === autoOpened.seq) return;
+    handledAutoOpen.current = autoOpened.seq;
+    const other = terminalAgentIds.find((id) => id !== jarvisId);
+    if (other !== undefined) showDrawerTab(other);
+    closeDrawer();
+  }, [jarvisId, autoOpened, closeDrawer, showDrawerTab, terminalAgentIds]);
+  // Its tab shows only while its terminal is open on purpose («Ver la terminal»).
+  const shownTabId = terminalDrawer.isOpen ? terminalDrawer.shownAgentId : null;
+  const drawerTabIds = (workspaces.tabIds ?? terminalAgentIds).filter(
+    (id) => id !== jarvisId || id === shownTabId,
+  );
+  const summonHome = jarvisHome(directories, officeViews);
+  const summonJarvis =
+    !officeReadOnly && terminalAvailable && summonHome
+      ? () => requestLaunch(summonHome, true)
+      : undefined;
 
   // First run: the welcome (checks, a folder, the first agent), then the tour.
   const onboarding = useOnboarding({
@@ -388,96 +432,115 @@ function App() {
   const officeRegion = (
     <div
       // @container: the toolbar's usage meter shrinks with the office, not the window.
-      className={`@container relative overflow-hidden ${isMobile ? 'w-full h-full' : 'flex-1 min-w-0 min-h-0'}`}
+      className={`@container relative overflow-hidden flex flex-col ${isMobile ? 'w-full h-full' : 'flex-1 min-w-0 min-h-0'}`}
     >
-      {!isDebugMode ? (
-        // The two views replace the pixel office (decided 2026-10-19): the
-        // board for managing, the live graph for how agents work together.
-        <div className="absolute inset-0">
-          {view === 'tablero' ? (
-            <BoardView views={workspaces.shown} actions={agentActions} space={workspaces.space} />
-          ) : (
-            <GraphView views={workspaces.shown} actions={agentActions} />
-          )}
-          {workspaces.bar}
-        </div>
-      ) : (
-        <DebugView
-          agents={agents}
-          selectedAgent={selectedAgent}
-          agentTools={agentTools}
-          agentStatuses={agentStatuses}
-          subagentTools={subagentTools}
-          officeState={officeState}
-          onSelectAgent={handleSelectAgent}
-        />
-      )}
+      {/* The office itself; Jarvis's bar sits under it, in flow. */}
+      <div className="relative flex-1 min-h-0">
+        {!isDebugMode ? (
+          // The two views replace the pixel office (decided 2026-10-19): the
+          // board for managing, the live graph for how agents work together.
+          <div className="absolute inset-0">
+            {view === 'tablero' ? (
+              <BoardView views={workspaces.shown} actions={agentActions} space={workspaces.space} />
+            ) : (
+              <GraphView views={workspaces.shown} actions={agentActions} />
+            )}
+            {workspaces.bar}
+          </div>
+        ) : (
+          <DebugView
+            agents={agents}
+            selectedAgent={selectedAgent}
+            agentTools={agentTools}
+            agentStatuses={agentStatuses}
+            subagentTools={subagentTools}
+            officeState={officeState}
+            onSelectAgent={handleSelectAgent}
+          />
+        )}
 
-      {isHistoryOpen && !isDebugMode && (
-        <HistoryPanel
-          tab={historyTab}
-          onTabChange={setHistoryTab}
-          views={agentViews}
-          onClose={() => setIsHistoryOpen(false)}
-          onOpenAgent={openAgent}
-        />
-      )}
-      {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
-      {!isMobile && <FocusBanner />}
-      {/* The desktop app's updates (nothing in a browser). */}
-      {!isMobile && <UpdateCorner views={agentViews} permissions={permissionCards.cards} />}
+        {isHistoryOpen && !isDebugMode && (
+          <HistoryPanel
+            tab={historyTab}
+            onTabChange={setHistoryTab}
+            views={officeViews}
+            onClose={() => setIsHistoryOpen(false)}
+            onOpenAgent={openAgent}
+          />
+        )}
+        {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
+        {!isMobile && <FocusBanner />}
+        {/* The desktop app's updates (nothing in a browser). */}
+        {!isMobile && <UpdateCorner views={agentViews} permissions={permissionCards.cards} />}
 
-      {officeReadOnly && (
-        <div className="absolute mobile-safe-top left-1/2 -translate-x-1/2 z-10 text-sm text-text-muted pointer-events-none select-none whitespace-nowrap">
-          Solo lectura
-        </div>
-      )}
+        {officeReadOnly && (
+          <div className="absolute mobile-safe-top left-1/2 -translate-x-1/2 z-10 text-sm text-text-muted pointer-events-none select-none whitespace-nowrap">
+            Solo lectura
+          </div>
+        )}
 
-      {/* A read-only office gets no toolbar: launching, layout editing and every
+        {/* A read-only office gets no toolbar: launching, layout editing and every
           setting would be refused by the server anyway. */}
-      {!isMobile && !officeReadOnly && (
-        <BottomToolbar
-          view={view}
-          onViewChange={setView}
-          isSettingsOpen={isSettingsOpen}
-          onToggleSettings={() => setIsSettingsOpen((v) => !v)}
-          isHistoryOpen={isHistoryOpen}
-          onToggleHistory={() => setIsHistoryOpen((v) => !v)}
-          launchSignal={launchSignal}
-          directories={directories}
-          onAddDirectory={directoryEditor.add}
-          onEditDirectory={directoryEditor.edit}
-          terminalAvailable={terminalAvailable}
-          terminalUnavailableReason={terminalUnavailableReason}
-          onLaunch={requestLaunch}
+        {!isMobile && !officeReadOnly && (
+          <BottomToolbar
+            view={view}
+            onViewChange={setView}
+            isSettingsOpen={isSettingsOpen}
+            onToggleSettings={() => setIsSettingsOpen((v) => !v)}
+            isHistoryOpen={isHistoryOpen}
+            onToggleHistory={() => setIsHistoryOpen((v) => !v)}
+            launchSignal={launchSignal}
+            directories={directories}
+            onAddDirectory={directoryEditor.add}
+            onEditDirectory={directoryEditor.edit}
+            terminalAvailable={terminalAvailable}
+            terminalUnavailableReason={terminalUnavailableReason}
+            onLaunch={requestLaunch}
+          />
+        )}
+
+        {/* Mobile: Settings floats top-left (the layout editor stays desktop-
+            only — its tools are drag/hover-driven). */}
+        {isMobile && !isDebugMode && !officeReadOnly && (
+          <div className="absolute mobile-safe-top left-8 z-20 flex items-center gap-6">
+            <Button
+              size="sm"
+              variant={isSettingsOpen ? 'active' : 'default'}
+              className="border-border! shadow-soft"
+              onClick={() => setIsSettingsOpen((v) => !v)}
+            >
+              Ajustes
+            </Button>
+            <UsageLimitsMeter floating />
+          </div>
+        )}
+
+        <ConnectionIndicator />
+        {/* Claude Code's hooks failing to reach us: say so, offer to reinstall. */}
+        <HookHealthNotice
+          onReinstall={
+            officeReadOnly || !('claude' in hooksInstalled)
+              ? undefined
+              : () =>
+                  transport.send({ type: 'setHooksEnabled', providerId: 'claude', enabled: true })
+          }
+        />
+        {!isDebugMode && (
+          <JarvisVisor
+            jarvis={jarvis}
+            actions={agentActions}
+            onAnswer={() => setJarvisFocus((n) => n + 1)}
+          />
+        )}
+      </div>
+      {!isDebugMode && (terminalAvailable || jarvis) && (
+        <JarvisBar
+          jarvis={jarvis}
+          actions={agentActions}
+          onSummon={summonJarvis}
+          focusSignal={jarvisFocus}
         />
       )}
-
-      {/* Mobile: Settings floats top-left (the layout editor stays desktop-
-            only — its tools are drag/hover-driven). */}
-      {isMobile && !isDebugMode && !officeReadOnly && (
-        <div className="absolute mobile-safe-top left-8 z-20 flex items-center gap-6">
-          <Button
-            size="sm"
-            variant={isSettingsOpen ? 'active' : 'default'}
-            className="border-border! shadow-soft"
-            onClick={() => setIsSettingsOpen((v) => !v)}
-          >
-            Ajustes
-          </Button>
-          <UsageLimitsMeter floating />
-        </div>
-      )}
-
-      <ConnectionIndicator />
-      {/* Claude Code's hooks failing to reach us: say so, offer to reinstall. */}
-      <HookHealthNotice
-        onReinstall={
-          officeReadOnly || !('claude' in hooksInstalled)
-            ? undefined
-            : () => transport.send({ type: 'setHooksEnabled', providerId: 'claude', enabled: true })
-        }
-      />
     </div>
   );
 
@@ -527,7 +590,7 @@ function App() {
             <TerminalDrawer
               agentIds={terminalAgentIds}
               onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
-              tabIds={workspaces.tabIds}
+              tabIds={drawerTabIds}
               shownAgentId={terminalDrawer.shownAgentId}
               onSelectAgent={selectTab}
               onCloseAgent={handleCloseAgent}
@@ -574,7 +637,7 @@ function App() {
           <CommandPalette
             open={isPaletteOpen}
             onClose={() => setIsPaletteOpen(false)}
-            views={agentViews}
+            views={officeViews}
             spaceOf={workspaces.spaceOf}
             onOpenAgent={openAgent}
             onNewAgent={() => setLaunchSignal((n) => n + 1)}
@@ -591,19 +654,20 @@ function App() {
           <BroadcastDialog
             open={isBroadcastOpen}
             onClose={() => setIsBroadcastOpen(false)}
-            views={agentViews}
+            views={officeViews}
             initial={broadcastPreset}
           />
         </>
       )}
       {!isMobile && !isDebugMode && (
-        <OfficeCheers views={agentViews} onOpenHistory={() => setIsHistoryOpen(true)} />
+        <OfficeCheers views={officeViews} onOpenHistory={() => setIsHistoryOpen(true)} />
       )}
       {/* The board answers permissions inside each card; the graph keeps the
           floating cards so a request is never out of reach. */}
       {view !== 'tablero' && (
         <PermissionCards
-          cards={permissionCards.cards}
+          // Jarvis asks in its visor and its bar.
+          cards={permissionCards.cards.filter((c) => c.id === undefined || c.id !== jarvisId)}
           describeAgent={describePermissionAgent}
           onAllow={permissionCards.allow}
           onDeny={permissionCards.deny}

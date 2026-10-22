@@ -78,13 +78,15 @@ describe('the office MCP endpoint for supervisors', () => {
     return client;
   }
 
-  it('lists the five tools and answers with the supervisor’s own team', async () => {
+  it('lists the seven tools and answers with the supervisor’s own team', async () => {
     const client = await connect(tokens.jefa);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'aprobar_permiso',
+      'cerrar_agente',
       'equipo',
       'escribir_a_agente',
+      'lanzar_agente',
       'rechazar_permiso',
       'ultima_respuesta',
     ]);

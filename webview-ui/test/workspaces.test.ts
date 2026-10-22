@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL,
   changedKeys,
+  folderOf,
   followKeys,
   inWorkspace,
   moveWorkspace,
   needsByWorkspace,
-  folderOf,
   newcomersToAssign,
+  ownFolders,
   withoutWorkspace,
   workspaceOf,
   type WorkspaceState,
@@ -34,6 +35,13 @@ describe('workspaceOf', () => {
     expect(workspaceOf(agent(2, 'k2', 'WebApp'), s)).toBe('wl');
     expect(workspaceOf(agent(3, 'k3', 'otra'), s)).toBeNull();
     expect(workspaceOf(agent(4, 'k4'), s)).toBeNull();
+  });
+
+  it('puts an agent its supervisor opened in that workspace, unless moved by hand', () => {
+    const s = state({ assignments: { k2: 'per' } });
+    expect(workspaceOf({ key: 'k1', dir: 'webapp', home: 'per' }, s)).toBe('per');
+    expect(workspaceOf({ key: 'k2', dir: 'webapp', home: 'wl' }, s)).toBe('per');
+    expect(workspaceOf({ key: 'k3', dir: 'webapp', home: 'borrado' }, s)).toBe('wl');
   });
 
   it('ignores an assignment to a workspace that no longer exists', () => {
@@ -141,5 +149,19 @@ describe('moveWorkspace', () => {
     expect(
       workspaceOf(agent, { ...shared, workspaces: moveWorkspace(shared.workspaces, 'per', 'wl') }),
     ).toBe('per');
+  });
+});
+
+describe('ownFolders', () => {
+  it('gives the folders that land in a workspace: not the ones an earlier one claims', () => {
+    const s = state({
+      workspaces: [
+        { id: 'wl', name: 'Wiselink', folders: ['development', 'webapp'] },
+        { id: 'per', name: 'Personal', folders: ['Development', 'oficina-virtual'] },
+      ],
+    });
+    expect(ownFolders(s, 'wl')).toEqual(['development', 'webapp']);
+    expect(ownFolders(s, 'per')).toEqual(['oficina-virtual']);
+    expect(ownFolders(s, 'borrado')).toEqual([]);
   });
 });

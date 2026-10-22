@@ -134,7 +134,24 @@ Ayuda).
   o a todos. Le llegan los permisos, las preguntas y los turnos terminados de su
   equipo; aprueba lo seguro, te pide lo demás con un «Te toca» y te cuenta qué hizo
   cada uno. Lo peligroso (push, borrar, publicar, migraciones, deploys) siempre te
-  lo pide a vos: la oficina no lo deja aprobarlo.
+  lo pide a vos: la oficina no lo deja aprobarlo. También lanza un agente por
+  pedido (sólo en carpetas de lo que supervisa, hasta 4 andando a la vez) y lo
+  cierra cuando terminó y ya te lo contó (nunca si trabaja o espera algo).
+- **Jarvis**: el que supervisa a todos, uno solo por oficina y sin avatar, como
+  en las películas. No es una tarjeta ni está en el grafo: vive en una **barra al
+  pie de la oficina** (su anillo, lo último que dijo, los botones para contestarle
+  y dónde escribirle; la flecha abre su conversación) y, cuando te necesita,
+  **aparece en el medio de la pantalla** con la pregunta en grande («Después» o
+  Esc lo guardan en la barra). Si no hay ninguno, la barra ofrece «Llamar a
+  Jarvis». Te trata de usted y te dice «señor». Además de supervisar, dirige: le
+  pedís algo y abre un agente nuevo con su tarea y un apodo, se lo da a uno que ya
+  está en eso, le pasa a un agente lo que hizo otro y cierra a los que terminaron
+  (nunca a uno que está trabajando). A los agentes que corren fuera de la oficina
+  (VS Code, la app de escritorio) les escribe con los mensajes entre sesiones de
+  Claude Code. Lleva una bitácora en `~/.pixel-agents/jarvis/bitacora.md` con lo
+  que abrió, pasó y cerró y lo que le pediste recordar, así una conversación nueva
+  retoma donde quedó la anterior. Por ahora se le habla escribiendo; la voz viene
+  después.
 - Las rutas de archivos en la terminal se abren con un clic en el Explorador.
 - **Agentes que sobreviven a reinicios** (Ajustes → Agentes, prendido por
   defecto): cada agente corre como sesión en segundo plano de Claude Code y la
