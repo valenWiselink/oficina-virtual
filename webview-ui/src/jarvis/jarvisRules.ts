@@ -1,0 +1,111 @@
+import { describeToolInput } from '../permissions/describeToolInput.js';
+import type { AgentView } from '../views/agentViews.js';
+
+/**
+ * Jarvis has no avatar (asked for 2026-10-22: "sin avatar, sin presencia,
+ * como las películas"). It is the office's one supervisor of everyone; the
+ * board, the graph and every list leave it out, and it lives in its bar at
+ * the foot of the office (JarvisBar) and, when it needs you, in the middle of
+ * the screen (JarvisVisor). Pure, so it is tested without a DOM.
+ */
+
+/** The office's Jarvis: the oldest supervisor of everyone (one per office; an
+ *  older office may have made two, the others stay ordinary cards). */
+export function findJarvis(views: readonly AgentView[]): AgentView | undefined {
+  let found: AgentView | undefined;
+  for (const v of views) {
+    if (v.supervision?.kind === 'all' && (!found || v.id < found.id)) found = v;
+  }
+  return found;
+}
+
+/** The office without Jarvis: not a card, a node or a tab, and no «Lo
+ *  supervisa Jarvis» on every card (it watches everyone). An agent it is
+ *  handling still says so ("Lo atiende Jarvis"). */
+export function withoutJarvis(views: AgentView[], jarvis: AgentView | undefined): AgentView[] {
+  if (!jarvis) return views;
+  return views
+    .filter((v) => v.id !== jarvis.id)
+    .map((v) =>
+      v.supervisedBy.includes(jarvis.id)
+        ? {
+            ...v,
+            supervisedBy: v.supervisedBy.filter((id) => id !== jarvis.id),
+            supervisorNames: v.supervisorNames.filter((n) => n !== jarvis.name),
+          }
+        : v,
+    );
+}
+
+/** How its ring looks: not in the office, quiet, working, or waiting on you. */
+export type JarvisMood = 'away' | 'idle' | 'busy' | 'needs';
+
+export function jarvisMood(jarvis: AgentView | undefined): JarvisMood {
+  if (!jarvis) return 'away';
+  if (jarvis.kind === 'needs') return 'needs';
+  if (jarvis.kind === 'done' || jarvis.kind === 'idle') return 'idle';
+  return 'busy';
+}
+
+/** What the bar says: what it needs from you, else the start of its latest
+ *  answer, else what it is doing. */
+export function jarvisLine(jarvis: AgentView): string {
+  if (jarvis.permission) {
+    const { title } = describeToolInput(jarvis.permission.toolName, jarvis.permission.toolInput);
+    const what = title.replace(/^Quiere\s+/i, '');
+    return `Necesito su permiso, señor: ${what.charAt(0).toLowerCase()}${what.slice(1)}.`;
+  }
+  if (jarvis.kind === 'needs' && jarvis.yourTurn) return jarvis.yourTurn;
+  if (jarvis.kind === 'needs' && jarvis.asksInTerminal) {
+    return 'Le pregunto algo en mi conversación, señor.';
+  }
+  return (
+    jarvis.lastReplyHead ??
+    (jarvis.kind === 'idle' ? 'A su disposición, señor.' : jarvis.statusText)
+  );
+}
+
+/**
+ * The one thing the visor is about, or none: a permission it holds, or what
+ * its finished turn left for you. Each shows once: dismissing it leaves it in
+ * the bar, and the next one comes up again.
+ */
+export function visorKey(jarvis: AgentView | undefined): string | undefined {
+  if (!jarvis || jarvis.kind !== 'needs') return undefined;
+  if (jarvis.permission) return `permiso:${jarvis.permission.requestId}`;
+  if (jarvis.yourTurnId) return `turno:${jarvis.yourTurnId}`;
+  return undefined;
+}
+
+/** What led to the ask, for the visor: the start of its answer up to its
+ *  «Te toca:», when that is not the ask itself. */
+export function visorContext(replyHead: string | undefined, ask: string): string | undefined {
+  const before = replyHead
+    ?.split(/te toca:/i)[0]
+    .replace(/…$/, '')
+    .trim();
+  return before && !ask.includes(before) ? before : undefined;
+}
+
+const lastSegment = (p: string) => p.split(/[\\/]/).filter(Boolean).pop()?.toLowerCase() ?? '';
+
+/** Where to call Jarvis: the folder most of the office works in, else the
+ *  first one the office knows. */
+export function jarvisHome<D extends { path: string }>(
+  directories: readonly D[],
+  views: readonly AgentView[],
+): D | undefined {
+  const count = new Map<string, number>();
+  for (const v of views)
+    if (v.dir) count.set(v.dir.toLowerCase(), (count.get(v.dir.toLowerCase()) ?? 0) + 1);
+  let best: D | undefined;
+  let bestCount = -1;
+  for (const d of directories) {
+    const n = count.get(lastSegment(d.path)) ?? 0;
+    if (n > bestCount) {
+      best = d;
+      bestCount = n;
+    }
+  }
+  return best;
+}

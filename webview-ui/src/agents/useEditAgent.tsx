@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Button } from '../components/ui/Button.js';
 import { Modal } from '../components/ui/Modal.js';
 import { TextInput } from '../components/ui/TextInput.js';
+import { findJarvis } from '../jarvis/jarvisRules.js';
 import { ClawdColorPicker } from '../launch/ClawdColorPicker.js';
 import type { AgentView } from '../views/agentViews.js';
 import { useWorkspaces } from '../workspaces/workspaceStore.js';
@@ -182,6 +183,7 @@ export function useEditAgent(views: readonly AgentView[]): {
               workspaces={workspaces.workspaces}
               candidates={teamCandidates(views, draft.id)}
               disabled={!draft.canSetRun}
+              jarvisTaken={(findJarvis(views)?.id ?? draft.id) !== draft.id}
               onChange={(scope, picked) => setDraft({ ...draft, scope, picked })}
             />
             <p className="m-0 text-2xs text-text-muted">

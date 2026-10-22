@@ -102,8 +102,11 @@ export class SupervisorRelay {
         const waiting = message.status === 'waiting';
         const before = this.waiting.get(id);
         this.waiting.set(id, waiting);
-        // The first status seen (a restart) is the state, not an event.
-        if (waiting && before === false) {
+        // The first status seen (a restart) is the state, not an event —
+        // except for an agent a supervisor just launched, whose first turn
+        // may end before the office saw it start (lanzar_agente).
+        const launched = before === undefined && this.justLaunched(id);
+        if (waiting && (before === false || launched)) {
           this.schedule(() => this.turnEnded(id), this.deps.settleMs ?? SETTLE_MS);
         }
         return;
@@ -145,6 +148,11 @@ export class SupervisorRelay {
         ? `«${who}» pregunta y espera respuesta:\n${questions}`
         : `«${who}» hace una pregunta con opciones y espera respuesta.`,
     );
+  }
+
+  private justLaunched(id: number): boolean {
+    const agent = this.deps.store.get(id);
+    return agent ? this.deps.registry.takeFirstTurn(agent.sessionId) : false;
   }
 
   private agentIdFor(sessionId: string): number | undefined {

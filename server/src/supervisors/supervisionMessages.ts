@@ -17,8 +17,9 @@ export function broadcastSupervision(store: AgentStateStore): void {
 
 /**
  * `supervisionTeam`: the members (session ids) of a "workspace" or "agents"
- * supervisor. Ignored for anyone else ("all" is computed by the office).
- * Returns true when the team changed.
+ * supervisor, and for a workspace the folder names whose agents land in it
+ * (where it may launch agents). Ignored for anyone else ("all" is computed by
+ * the office). Returns true when the team changed.
  */
 export function applySupervisionTeam(
   store: AgentStateStore,
@@ -28,6 +29,12 @@ export function applySupervisionTeam(
   const supervisor = store.get(Number(msg.supervisorId));
   const scope = supervisor?.supervision;
   if (!supervisor || !scope || scope.kind === 'all' || !Array.isArray(msg.members)) return false;
+  if (scope.kind === 'workspace' && Array.isArray(msg.folders)) {
+    const folders = msg.folders
+      .filter((f): f is string => typeof f === 'string' && f.trim() !== '')
+      .slice(0, 100);
+    registry.folders.set(supervisor.sessionId, folders);
+  }
   const members = msg.members.filter((m): m is string => typeof m === 'string').slice(0, 200);
   if (!registry.teams.set(supervisor.sessionId, members)) return false;
   broadcastSupervision(store);

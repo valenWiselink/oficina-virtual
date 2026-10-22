@@ -3,8 +3,9 @@
  * can show one group at a time. Pure rules here (tested); the store that
  * remembers them lives in workspaceStore.ts.
  *
- * An agent belongs to its manual assignment ("Mover a…"), else to the first
- * workspace whose folders include the folder it works in, else to none.
+ * An agent belongs to its manual assignment ("Mover a…"), else to the
+ * workspace of the supervisor that opened it (lanzar_agente), else to the
+ * first workspace whose folders include the folder it works in, else to none.
  * "Todos" (ALL) is not a workspace: it shows everyone.
  */
 
@@ -29,6 +30,8 @@ export interface WorkspaceState {
 export interface Placeable {
   key: string;
   dir?: string;
+  /** The workspace of the supervisor that opened it, if one did. */
+  home?: string;
 }
 
 const sameFolder = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -37,9 +40,19 @@ const sameFolder = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 export function workspaceOf(agent: Placeable, state: WorkspaceState): string | null {
   const manual = state.assignments[agent.key];
   if (manual && state.workspaces.some((w) => w.id === manual)) return manual;
+  if (agent.home && state.workspaces.some((w) => w.id === agent.home)) return agent.home;
   if (!agent.dir) return null;
   const byFolder = state.workspaces.find((w) => w.folders.some((f) => sameFolder(f, agent.dir!)));
   return byFolder?.id ?? null;
+}
+
+/** The folder names whose agents land in a workspace by themselves: its own
+ *  folders that no workspace before it claims first. */
+export function ownFolders(state: WorkspaceState, workspaceId: string): string[] {
+  const at = state.workspaces.findIndex((w) => w.id === workspaceId);
+  if (at < 0) return [];
+  const earlier = state.workspaces.slice(0, at).flatMap((w) => w.folders);
+  return state.workspaces[at].folders.filter((f) => !earlier.some((e) => sameFolder(e, f)));
 }
 
 /** The agents a workspace shows (ALL: everyone). */

@@ -33,10 +33,12 @@ import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
 import { hooksConsentRequest } from './providers/hook/consentGate.js';
 import { claudeProvider, hookProviderById, hookProviders } from './providers/index.js';
+import { liveJarvis, ONE_JARVIS } from './supervisors/jarvis.js';
 import { parseScope } from './supervisors/supervision.js';
 import { applySupervisionTeam, broadcastSupervision } from './supervisors/supervisionMessages.js';
 import { adoptIntoOffice } from './terminal/adoptSession.js';
-import { setBackgroundAgents, stopBackground } from './terminal/backgroundSessions.js';
+import { setBackgroundAgents } from './terminal/backgroundSessions.js';
+import { closeOfficeAgent } from './terminal/closeAgent.js';
 import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { launchAgent } from './terminal/standaloneAgentLauncher.js';
@@ -160,6 +162,12 @@ export function handleClientMessage(
       // the browser drawer (a shell running as the operator -- privileged, like
       // every message past the read-only gate above).
       if (!runtime || !ctx.ptyManager) break;
+      // One Jarvis per office: a second supervisor of everyone is refused.
+      const supervision = parseScope(msg.supervision) ?? undefined;
+      if (supervision?.kind === 'all' && liveJarvis(store) !== undefined) {
+        send({ type: 'agentLaunchFailed', directoryPath: msg.directoryPath, reason: ONE_JARVIS });
+        break;
+      }
       // Permission posture is a persisted per-host setting, never a per-launch
       // field: the client sends where to launch, plus the name and colour
       // chosen in the launch dialog. No directoryPath falls back to the server
@@ -174,7 +182,7 @@ export function handleClientMessage(
           prompt: launchPrompt(msg),
           model: cleanModel(msg.model),
           effort: cleanEffort(msg.effort),
-          supervision: parseScope(msg.supervision) ?? undefined,
+          supervision,
         },
       ).then((id) => {
         // Born a supervisor: every office learns who it watches over.
@@ -229,6 +237,11 @@ export function handleClientMessage(
         answer(false, 'No entendí a quién tiene que supervisar');
         break;
       }
+      const jarvis = liveJarvis(store);
+      if (scope?.kind === 'all' && jarvis !== undefined && jarvis !== id) {
+        answer(false, ONE_JARVIS);
+        break;
+      }
       void setSupervision(
         { store, runtime, ptyManager: ctx.ptyManager, provider: claudeProvider },
         id,
@@ -254,31 +267,9 @@ export function handleClientMessage(
       applySupervisionTeam(store, msg);
       break;
 
-    case 'closeAgent': {
-      // Two shapes now: a PTY-backed agent we launched (kill the process -- the
-      // counterpart of VS Code's terminalRef.dispose()), or an external agent we
-      // merely observed (dismiss the file so the scanner doesn't re-adopt it,
-      // then remove). removeAgent fires agentRemoved, which httpServer maps to
-      // an agentClosed broadcast.
-      const id = msg.id as number;
-      const agent = store.get(id);
-      if (agent?.bgId && runtime) {
-        // A background session would outlive its terminal: closing the agent
-        // stops it and takes it off Claude Code's list (the transcript stays).
-        agent.bgLeaving = true;
-        runtime.resumableSessions?.remove(agent.sessionId);
-        void stopBackground(agent.bgId, agent.cwd);
-      }
-      if (agent && runtime) {
-        // dispose() is a no-op for agents with no terminal, so this is safe for
-        // both shapes. The PTY's onExit handler does the store cleanup for
-        // PTY-backed agents; do it here too so external agents (and a PTY that
-        // never exits) are still removed promptly.
-        ctx.ptyManager?.dispose(id);
-        runtime.closeAgent(id);
-      }
+    case 'closeAgent':
+      closeOfficeAgent(ctx, msg.id as number);
       break;
-    }
 
     case 'adoptIntoOffice': {
       // Close a session in its outside terminal and resume it in the office.

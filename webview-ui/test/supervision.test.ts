@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isSupervisor,
+  JARVIS_NAME,
+  nicknameForScope,
   sameTeam,
   teamCandidates,
   workspaceTeam,
@@ -41,5 +43,15 @@ describe('supervision teams', () => {
     expect(isSupervisor({ supervision: { kind: 'none' } })).toBe(false);
     expect(sameTeam([sid(2), sid(3)], [sid(3), sid(2)])).toBe(true);
     expect(sameTeam([sid(2)], [sid(2), sid(3)])).toBe(false);
+  });
+});
+
+describe('Jarvis', () => {
+  it('names an unnamed supervisor of everyone, and only that one', () => {
+    expect(nicknameForScope('', { kind: 'all' })).toBe(JARVIS_NAME);
+    expect(nicknameForScope('  ', { kind: 'all' })).toBe(JARVIS_NAME);
+    expect(nicknameForScope('Viernes', { kind: 'all' })).toBe('Viernes');
+    expect(nicknameForScope(JARVIS_NAME, { kind: 'none' })).toBe('');
+    expect(nicknameForScope('Pagos', { kind: 'agents' })).toBe('Pagos');
   });
 });

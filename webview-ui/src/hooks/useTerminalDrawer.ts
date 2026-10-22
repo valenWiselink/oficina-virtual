@@ -19,6 +19,7 @@ import { isVerticalDock, type TerminalDock } from './useTerminalDock.js';
 
 /** A character not (yet) in the office — the mug shot falls back to palette 0. */
 const DEFAULT_APPEARANCE: AgentAppearance = { palette: 0, hueShift: 0 };
+const NEVER_HIDDEN = (): boolean => false;
 
 interface TerminalDrawerInputs {
   /** Agent ids with a live server-side PTY, in open order (control plane). */
@@ -28,6 +29,10 @@ interface TerminalDrawerInputs {
   kindOf: (agentId: number) => AgentKind | undefined;
   /** The edge the panel docks to; it decides which way it sizes and drags. */
   dock: TerminalDock;
+  /** A terminal kept off the panel unless asked for by name (Jarvis's: it has
+   *  no tab). Never shown on its own: not when it appears, not as the
+   *  fallback; `reveal` still opens it. */
+  isHidden?: (agentId: number) => boolean;
 }
 
 export interface TerminalDrawerController {
@@ -100,6 +105,7 @@ export function useTerminalDrawer({
   getOfficeState,
   kindOf,
   dock,
+  isHidden = NEVER_HIDDEN,
 }: TerminalDrawerInputs): TerminalDrawerController {
   const [activeAgentId, setActiveAgentId] = useState<number | null>(null);
   const [lastOpened, setLastOpened] = useState<{ agentId: number; seq: number } | null>(null);
@@ -127,7 +133,7 @@ export function useTerminalDrawer({
   const shownAgentId =
     activeAgentId !== null && terminalAgentIds.includes(activeAgentId)
       ? activeAgentId
-      : (terminalAgentIds[0] ?? null);
+      : (terminalAgentIds.find((id) => !isHidden(id)) ?? null);
 
   // Reveal a newly-opened terminal. Launching is async — the toolbar sends
   // launchAgent and the server answers with terminalSessionOpened once the PTY
@@ -136,14 +142,16 @@ export function useTerminalDrawer({
   // reload, when webviewReady re-announces the live sessions.
   const knownIdsRef = useRef<number[]>([]);
   useEffect(() => {
-    const added = terminalAgentIds.filter((id) => !knownIdsRef.current.includes(id));
+    const added = terminalAgentIds.filter(
+      (id) => !knownIdsRef.current.includes(id) && !isHidden(id),
+    );
     knownIdsRef.current = terminalAgentIds;
     if (added.length === 0) return;
     const newest = added[added.length - 1];
     setActiveAgentId(newest);
     setIsOpen(true);
     setLastOpened((prev) => ({ agentId: newest, seq: (prev?.seq ?? 0) + 1 }));
-  }, [terminalAgentIds]);
+  }, [terminalAgentIds, isHidden]);
 
   const reveal = useCallback(
     (agentId: number) => {
