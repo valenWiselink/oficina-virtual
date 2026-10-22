@@ -4,8 +4,10 @@ import type { EarsReply } from './whisperWorker.js';
 
 /**
  * Jarvis's ears, in the office: the microphone (it stops by itself after you
- * stop talking), and Whisper in a worker (whisperWorker.ts) turning it into
- * text. Nothing leaves this PC; the model is downloaded once.
+ * stop talking), then the office writes it down with whisper.cpp on the
+ * graphics card (server/src/voice/gpuEars.ts). When it cannot (no NVIDIA
+ * card, still installing, it failed), Whisper in a worker (whisperWorker.ts)
+ * does it here. Nothing leaves this PC; the models are downloaded once.
  */
 
 export type EarsPhase = 'idle' | 'preparing' | 'listening' | 'transcribing';
@@ -20,13 +22,20 @@ export interface EarsState {
 }
 
 const SAMPLE_RATE = 16_000;
+/** What is listened to as the room's noise before you speak. */
+const NOISE_MS = 250;
+/** Kept around the voice when the silence is cut. */
+const VOICE_PAD_MS = 300;
 
 /** Voice activity, frame by frame: started talking, and how long the quiet
  *  after it has lasted. Pure, so it is tested. */
 export class SpeechGate {
   private floor = 0;
-  private frames = 0;
   started = false;
+  /** When the voice began and last sounded (ms from the start), to cut the
+   *  silence around it: Whisper invents words in silence. */
+  firstVoiceMs = 0;
+  lastVoiceMs = 0;
   private quietMs = 0;
   private elapsedMs = 0;
   private readonly silenceMs: number;
@@ -42,12 +51,16 @@ export class SpeechGate {
   /** Feed one frame's loudness (RMS) and length; returns whether to stop. */
   feed(rms: number, ms: number): 'more' | 'done' | 'nothing' {
     this.elapsedMs += ms;
-    this.frames++;
-    // The room's noise, from the first quarter second.
-    if (this.frames <= 5) this.floor = Math.max(this.floor, rms);
+    // The room's noise, from the first quarter second (frames are ~8 ms).
+    if (this.elapsedMs <= NOISE_MS) {
+      this.floor = Math.max(this.floor, rms);
+      return 'more';
+    }
     const threshold = Math.max(0.012, this.floor * 2.5);
     if (rms > threshold) {
+      if (!this.started) this.firstVoiceMs = this.elapsedMs - ms;
       this.started = true;
+      this.lastVoiceMs = this.elapsedMs;
       this.quietMs = 0;
     } else if (this.started) {
       this.quietMs += ms;
@@ -70,10 +83,46 @@ const PHANTOMS = [
   /suscr[ií]bete/i,
 ];
 
-/** The text worth sending to Jarvis, or nothing. */
-export function heardText(raw: string): string | undefined {
-  const text = raw.replace(/\s+/g, ' ').trim();
+/** A phrase said this many times in a row is Whisper stuck in a loop. */
+const LOOP_REPEATS = 4;
+const LOOP_MAX_WORDS = 6;
+/** Nobody says more than this many characters per second. */
+const CHARS_PER_SECOND = 25;
+
+const plain = (word: string) => word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+
+/** «sí, sí, sí, sí…» (or any phrase of up to 6 words, 4 times or more) said once. */
+export function withoutLoops(text: string): string {
+  const words = text.split(' ');
+  const keys = words.map(plain);
+  const out: string[] = [];
+  let i = 0;
+  while (i < words.length) {
+    let skipped = false;
+    for (let n = 1; n <= LOOP_MAX_WORDS && !skipped; n++) {
+      const same = (k: number) =>
+        keys.slice(i, i + n).every((w, j) => w !== '' && w === keys[i + k * n + j]);
+      let times = 1;
+      while (i + (times + 1) * n <= words.length && same(times)) times++;
+      if (times >= LOOP_REPEATS) {
+        // The last one keeps the punctuation that closes the phrase.
+        out.push(...words.slice(i + (times - 1) * n, i + times * n));
+        i += times * n;
+        skipped = true;
+      }
+    }
+    if (!skipped) out.push(words[i++]);
+  }
+  return out.join(' ');
+}
+
+/** The text worth sending to Jarvis, or nothing: no phantoms, no loops, and
+ *  no more than `seconds` of talk can hold. */
+export function heardText(raw: string, seconds = 30): string | undefined {
+  let text = withoutLoops(raw.replace(/\s+/g, ' ').trim());
   if (text.length < 2 || PHANTOMS.some((p) => p.test(text))) return undefined;
+  const max = Math.max(80, Math.round(seconds * CHARS_PER_SECOND));
+  if (text.length > max) text = `${text.slice(0, max).replace(/\s+\S*$/, '')}…`;
   return text;
 }
 
@@ -115,6 +164,31 @@ function transcribe(audio: Float32Array): Promise<string> {
   });
 }
 
+/** 16-bit little-endian PCM, base64: what the office's whisper.cpp reads. */
+export function pcm16Base64(audio: Float32Array): string {
+  const bytes = new Uint8Array(audio.length * 2);
+  const view = new DataView(bytes.buffer);
+  for (let i = 0; i < audio.length; i++) {
+    const s = Math.max(-1, Math.min(1, audio[i]));
+    view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+/** Someone that may write it down first (the office's whisper.cpp,
+ *  officeEars.ts): the text — '' when it heard no voice — or undefined when
+ *  it could not. */
+export type OfficeEars = (audio: Float32Array) => Promise<string | undefined>;
+
+/** What you said as text: the office first, this page's Whisper if it cannot. */
+async function writeDown(audio: Float32Array, office?: OfficeEars): Promise<string> {
+  const text = office ? await office(audio).catch(() => undefined) : undefined;
+  return text ?? transcribe(audio);
+}
+
 /** The worklet that hands the microphone's samples to the page. */
 const RECORDER = `class JarvisRec extends AudioWorkletProcessor {
   process(inputs) { const ch = inputs[0] && inputs[0][0]; if (ch) this.port.postMessage(ch.slice(0)); return true; }
@@ -126,6 +200,14 @@ let stopNow: (() => void) | undefined;
 /** Stop listening now (a click on the microphone again). */
 export function stopListening(): void {
   stopNow?.();
+}
+
+/** The stretch with your voice, and a little around it. */
+export function voiceOnly(audio: Float32Array, gate: SpeechGate): Float32Array {
+  const at = (ms: number) => Math.round((ms / 1000) * SAMPLE_RATE);
+  const from = Math.max(0, at(gate.firstVoiceMs - VOICE_PAD_MS));
+  const to = Math.min(audio.length, at(gate.lastVoiceMs + VOICE_PAD_MS));
+  return to > from ? audio.slice(from, to) : audio;
 }
 
 /** Record until you stop talking; null if you said nothing. */
@@ -170,7 +252,7 @@ async function record(): Promise<Float32Array | null> {
       audio.set(c, at);
       at += c.length;
     }
-    return audio;
+    return voiceOnly(audio, gate);
   } finally {
     stopNow = undefined;
     for (const t of stream.getTracks()) t.stop();
@@ -183,7 +265,10 @@ async function record(): Promise<Float32Array | null> {
  * Listen once: record what you say, write it down, and hand the text to
  * `onText`. Says why in the state when it could not.
  */
-export async function listenOnce(onText: (text: string) => void): Promise<void> {
+export async function listenOnce(
+  onText: (text: string) => void,
+  office?: OfficeEars,
+): Promise<void> {
   if (state.phase === 'listening') return stopListening();
   if (state.phase !== 'idle') return;
   set({ phase: 'listening', error: undefined, heard: undefined });
@@ -194,7 +279,7 @@ export async function listenOnce(onText: (text: string) => void): Promise<void> 
       return;
     }
     set({ phase: 'transcribing' });
-    const text = heardText(await transcribe(audio));
+    const text = heardText(await writeDown(audio, office), audio.length / SAMPLE_RATE);
     set({ phase: 'idle', heard: text, error: text ? undefined : 'No entendí lo que dijiste.' });
     if (text) onText(text);
   } catch (err) {

@@ -3,17 +3,19 @@ import { useEffect } from 'react';
 import { sendToAgent } from '../terminal/agentInput.js';
 import { listenOnce } from './jarvisEars.js';
 import { stopJarvis } from './jarvisVoice.js';
+import { officeEars } from './officeEars.js';
 
 /** What you say reaches Jarvis marked as spoken (its role reads «[Voz]»). */
 export const VOICE_MARK = '[Voz]';
 
 /**
  * Talk to Jarvis: it stops speaking (you talked over it), listens until you
- * stop, and gets what you said. A second press stops listening.
+ * stop, and gets what you said (written by the office when it can). A
+ * second press stops listening.
  */
 export function talkToJarvis(jarvisId: number): void {
   stopJarvis();
-  void listenOnce((text) => void sendToAgent(jarvisId, `${VOICE_MARK} ${text}`));
+  void listenOnce((text) => void sendToAgent(jarvisId, `${VOICE_MARK} ${text}`), officeEars);
 }
 
 /** Alt+J talks to Jarvis from anywhere in the office (again: stop listening). */

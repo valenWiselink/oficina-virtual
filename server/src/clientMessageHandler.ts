@@ -612,7 +612,9 @@ export function handleClientMessage(
     case 'requestJarvisVoice':
     case 'setJarvisVoice':
     case 'jarvisSay':
-      // Jarvis's voice: its settings and its words as audio (voice/).
+    case 'jarvisHear':
+      // Jarvis's voice and ears: its settings, its words as audio, and what
+      // you said as text (voice/).
       handleVoiceMessage(msg, send, store);
       break;
 

@@ -52,6 +52,7 @@ import { setRecapCallback } from './transcriptParser.js';
 import { setRecordTap } from './transcriptTaps.js';
 import { uninstallStatusLine } from './usageLimits/statusLineInstaller.js';
 import { UsageLimitsWatch } from './usageLimits/usageLimitsWatch.js';
+import { gpuEars } from './voice/gpuEars.js';
 import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
 
 // ── Argument parsing ──────────────────────────────────────────
@@ -500,6 +501,9 @@ async function main(): Promise<void> {
       })
       .then(() => jarvisKeeper?.start())
       .catch((err: unknown) => console.error(`[Pixel Agents] Jarvis keeper: ${String(err)}`));
+    // Jarvis's ears on the graphics card, warm if already installed (the
+    // first dictation installs them).
+    void gpuEars.prepare(false);
 
     // Start scanning for external sessions (Claude running in user's terminal)
     const cwd = process.cwd();
@@ -537,6 +541,7 @@ async function main(): Promise<void> {
       // The terminals die here, their sessions do not: keep them resumable,
       // and keep what the surviving ones still ask in their terminal.
       jarvisKeeper?.stop();
+      gpuEars.stop();
       runtime.resumableSessions?.freeze();
       terminalAsks.freeze();
       await ptyManager.disposeAll();

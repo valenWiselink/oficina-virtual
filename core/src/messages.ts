@@ -76,6 +76,7 @@ export type ServerMessage =
   | JarvisVoiceStatus
   | JarvisVoice
   | JarvisVoiceFailed
+  | JarvisHeard
   | AgentDiagnostics;
 
 export type ClientMessage =
@@ -125,7 +126,8 @@ export type ClientMessage =
   | RequestWeekRecap
   | RequestJarvisVoice
   | SetJarvisVoice
-  | JarvisSay;
+  | JarvisSay
+  | JarvisHear;
 
 export interface ProviderCapabilities {
   type: 'providerCapabilities';
@@ -760,7 +762,6 @@ export interface JarvisVoice {
   mime: string;
   audio: string;
   text: string;
-  /** Said once when ElevenLabs could not and Fish spoke instead (for the bar). */
   notice?: string;
 }
 
@@ -769,6 +770,13 @@ export interface JarvisVoiceFailed {
   key: string;
   reason: string;
   notice?: string;
+}
+
+export interface JarvisHeard {
+  type: 'jarvisHeard';
+  id: number;
+  text?: string;
+  local?: boolean;
 }
 
 export interface AgentDiagnostics {
@@ -797,19 +805,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_400;
-  supervision?: AnonymousSchema_401;
+  effort?: AnonymousSchema_406;
+  supervision?: AnonymousSchema_407;
 }
 
-export type AnonymousSchema_400 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_406 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_401 {
-  kind: AnonymousSchema_402;
+export interface AnonymousSchema_407 {
+  kind: AnonymousSchema_408;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_402 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_408 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -858,16 +866,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_427;
+  scope: AnonymousSchema_433;
 }
 
-export interface AnonymousSchema_427 {
-  kind: AnonymousSchema_428;
+export interface AnonymousSchema_433 {
+  kind: AnonymousSchema_434;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_428 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_434 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';
@@ -1068,4 +1076,10 @@ export interface JarvisSay {
   key: string;
   id?: number;
   text?: string;
+}
+
+export interface JarvisHear {
+  type: 'jarvisHear';
+  id: number;
+  audio: string;
 }

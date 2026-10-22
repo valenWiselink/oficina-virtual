@@ -123,3 +123,60 @@ describe('what it heard', () => {
     expect(heardText('Jarvis,  ¿cómo viene Coral?')).toBe('Jarvis, ¿cómo viene Coral?');
   });
 });
+
+describe('what goes to the office', () => {
+  it('is 16-bit little-endian PCM in base64, clipped', async () => {
+    const { pcm16Base64 } = await import('../src/jarvis/jarvisEars.js');
+    const bytes = Buffer.from(pcm16Base64(new Float32Array([0, 1, -1, 2, 0.5])), 'base64');
+    expect(bytes.length).toBe(10);
+    expect([0, 2, 4, 6, 8].map((i) => bytes.readInt16LE(i))).toEqual([
+      0, 32767, -32768, 32767, 16383,
+    ]);
+  });
+});
+
+describe('Whisper stuck in a loop never reaches Jarvis', () => {
+  it('says a repeated word or phrase once', async () => {
+    const { heardText, withoutLoops } = await import('../src/jarvis/jarvisEars.js');
+    const loop = `Listo, ya probé. ${'si, '.repeat(250)}si.`;
+    expect(heardText(loop, 4)).toBe('Listo, ya probé. si.');
+    expect(withoutLoops('dale dale dale dale dale, Coral')).toBe('dale, Coral');
+    expect(withoutLoops('ya está ya está ya está ya está. Seguí')).toBe('ya está. Seguí');
+    // Said three times is still how people talk.
+    expect(withoutLoops('no, no, no, eso no')).toBe('no, no, no, eso no');
+  });
+
+  it('cuts what is longer than the time you talked could hold', async () => {
+    const { heardText } = await import('../src/jarvis/jarvisEars.js');
+    const long = Array.from({ length: 40 }, (_, i) => `palabra${i}`).join(' ');
+    const text = heardText(long, 3) ?? '';
+    expect(text.length).toBeLessThanOrEqual(81);
+    expect(text.endsWith('…')).toBe(true);
+  });
+});
+
+describe('the silence around your voice', () => {
+  const frame = 1000 / 125;
+  it('is measured over the first quarter second and cut before sending', async () => {
+    const { SpeechGate, voiceOnly } = await import('../src/jarvis/jarvisEars.js');
+    const gate = new SpeechGate(1200, 7000);
+    const feed = (rms: number, ms: number) => {
+      for (let t = 0; t < ms; t += frame) gate.feed(rms, frame);
+    };
+    feed(0.002, 1000); // the room
+    feed(0.08, 2000); // you talk
+    feed(0.002, 1200); // the quiet that stops it
+    expect(gate.firstVoiceMs).toBeCloseTo(1000, -2);
+    expect(gate.lastVoiceMs).toBeCloseTo(3000, -2);
+    const audio = voiceOnly(new Float32Array(16_000 * 4.2), gate);
+    expect(audio.length / 16_000).toBeCloseTo(2.6, 1); // 2 s + 0.3 s on each side
+  });
+
+  it('a voice from the very start does not raise the noise floor', async () => {
+    const { SpeechGate } = await import('../src/jarvis/jarvisEars.js');
+    const gate = new SpeechGate(1200, 7000);
+    for (let t = 0; t < 250; t += frame) gate.feed(0.002, frame);
+    for (let t = 0; t < 500; t += frame) gate.feed(0.05, frame);
+    expect(gate.started).toBe(true);
+  });
+});

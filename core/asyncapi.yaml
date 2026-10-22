@@ -158,6 +158,7 @@ components:
         - $ref: '#/components/schemas/JarvisVoiceStatus'
         - $ref: '#/components/schemas/JarvisVoice'
         - $ref: '#/components/schemas/JarvisVoiceFailed'
+        - $ref: '#/components/schemas/JarvisHeard'
         # Diagnostics
         - $ref: '#/components/schemas/AgentDiagnostics'
       discriminator: type
@@ -211,6 +212,7 @@ components:
         - $ref: '#/components/schemas/RequestJarvisVoice'
         - $ref: '#/components/schemas/SetJarvisVoice'
         - $ref: '#/components/schemas/JarvisSay'
+        - $ref: '#/components/schemas/JarvisHear'
       discriminator: type
 
     # ── Server message variants ────────────────────────────────────
@@ -2570,6 +2572,9 @@ components:
           type: string
         text:
           type: string
+        notice:
+          type: string
+          description: Said once when ElevenLabs could not and Fish spoke instead (for the bar).
 
     JarvisVoiceFailed:
       description: Why jarvisSay got no audio (in Spanish).
@@ -2583,6 +2588,27 @@ components:
           type: string
         reason:
           type: string
+        notice:
+          type: string
+
+    JarvisHeard:
+      description: |
+        What you said, written down by the office (whisper.cpp on the graphics
+        card), for the jarvisHear with the same `id`. `text` is '' when it
+        heard no voice; `local` means it could not and the page's own Whisper
+        has to.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: jarvisHeard
+        id:
+          type: integer
+        text:
+          type: string
+        local:
+          type: boolean
 
     RequestJarvisVoice:
       description: Ask for Jarvis's voice settings (answered with jarvisVoiceStatus).
@@ -2632,6 +2658,21 @@ components:
         id:
           type: integer
         text:
+          type: string
+
+    JarvisHear:
+      description: |
+        Write down what you said: 16-bit 16 kHz mono PCM, base64 (up to 30 s).
+        Answered with jarvisHeard carrying the same `id`.
+      type: object
+      additionalProperties: false
+      required: [type, id, audio]
+      properties:
+        type:
+          const: jarvisHear
+        id:
+          type: integer
+        audio:
           type: string
 
     PickFolder:

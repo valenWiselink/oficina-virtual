@@ -3,11 +3,13 @@
  * "say this" (the latest answer of Jarvis, or a test phrase). The audio goes
  * back only to the office that asked, as base64 mp3. When ElevenLabs cannot
  * (no key, no credit) Jarvis does not go mute: it speaks with Fish, and the
- * bar is told once.
+ * bar is told once. And "write down what I said" (jarvisHear), with
+ * whisper.cpp on the graphics card when it is there (gpuEars.ts).
  */
 
 import type { AgentStateStore } from '../agentStateStore.js';
 import { liveJarvis } from '../supervisors/jarvis.js';
+import { gpuEars, hearingPrompt } from './gpuEars.js';
 import { SpeechCache, speechText, type Synthesized } from './speech.js';
 import {
   changeVoiceSettings,
@@ -41,6 +43,8 @@ const outage = new OutageNotice();
 
 const cache = new SpeechCache();
 const TEST_MAX_CHARS = 300;
+/** 30 s of 16-bit 16 kHz audio (the page stops listening at 30 s). */
+const HEAR_MAX_BYTES = 30 * 16_000 * 2 + 4096;
 
 /** Handles a voice message; false when `msg` is not one. */
 export function handleVoiceMessage(
@@ -77,6 +81,25 @@ export function handleVoiceMessage(
             : { type: 'jarvisVoiceFailed', key, reason: r.reason, notice: r.notice },
         ),
       );
+      return true;
+    }
+    case 'jarvisHear': {
+      const id = typeof msg.id === 'number' ? msg.id : 0;
+      const audio = typeof msg.audio === 'string' ? Buffer.from(msg.audio, 'base64') : undefined;
+      if (!audio?.length || audio.length > HEAR_MAX_BYTES) {
+        send({ type: 'jarvisHeard', id, local: true });
+        return true;
+      }
+      const prompt = hearingPrompt([...store.values()].map((a) => a.nickname));
+      void gpuEars
+        .hear(audio, prompt)
+        .then((text) =>
+          send(
+            text === undefined
+              ? { type: 'jarvisHeard', id, local: true }
+              : { type: 'jarvisHeard', id, text },
+          ),
+        );
       return true;
     }
     default:
