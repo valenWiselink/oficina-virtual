@@ -1,21 +1,87 @@
 import { describe, expect, it } from 'vitest';
 
 import { heardText, SpeechGate } from '../src/jarvis/jarvisEars.js';
-import { shouldSpeak } from '../src/jarvis/jarvisRules.js';
+import { ANSWER_LAG_MS, speechStep, type SpeechWatch } from '../src/jarvis/jarvisRules.js';
 
 describe('when Jarvis speaks', () => {
-  const now = { id: 1, busy: false, head: 'Hecho, señor.', asksPermission: false };
+  type Now = { busy: boolean; head?: string; asksPermission?: boolean; id?: number };
+  /** Feed renders in order; returns at which ones it spoke. */
+  function run(steps: Array<[number, Now]>): number[] {
+    let watch: SpeechWatch = { busy: false };
+    const spoke: number[] = [];
+    for (const [at, now] of steps) {
+      const r = speechStep(watch, { id: 1, asksPermission: false, ...now }, at);
+      watch = r.next;
+      if (r.speak) spoke.push(at);
+    }
+    return spoke;
+  }
 
   it('at the end of a turn with a new answer', () => {
-    expect(shouldSpeak({ id: 1, busy: true, headAtStart: 'Antes.' }, now)).toBe(true);
+    expect(
+      run([
+        [0, { busy: false, head: 'Antes.' }],
+        [10, { busy: true, head: 'Antes.' }],
+        [20, { busy: false, head: 'Hecho, señor.' }],
+      ]),
+    ).toEqual([20]);
   });
 
-  it('not on page load, nor for the answer it already had, nor mid-turn', () => {
-    expect(shouldSpeak({ busy: false }, now)).toBe(false);
-    expect(shouldSpeak({ id: 1, busy: true, headAtStart: 'Hecho, señor.' }, now)).toBe(false);
-    expect(shouldSpeak({ id: 1, busy: true }, { ...now, busy: true })).toBe(false);
-    expect(shouldSpeak({ id: 1, busy: true }, { ...now, asksPermission: true })).toBe(false);
-    expect(shouldSpeak({ id: 2, busy: true }, now)).toBe(false);
+  it('when the answer arrives after the end of the turn (the hook is faster)', () => {
+    expect(
+      run([
+        [0, { busy: false, head: 'Antes.' }],
+        [10, { busy: true, head: 'Antes.' }],
+        [20, { busy: false, head: 'Antes.' }], // Stop: the transcript is not read yet
+        [1500, { busy: false, head: 'Hecho, señor.' }], // now it is
+        [1600, { busy: false, head: 'Hecho, señor.' }],
+      ]),
+    ).toEqual([1500]);
+  });
+
+  it('a text written mid-turn counts only when the turn ends', () => {
+    expect(
+      run([
+        [0, { busy: false, head: 'Antes.' }],
+        [10, { busy: true, head: 'Antes.' }],
+        [20, { busy: true, head: 'Reviso, señor.' }],
+        [30, { busy: false, head: 'Reviso, señor.' }],
+      ]),
+    ).toEqual([30]);
+  });
+
+  it('not on page load, an old answer, mid-turn, a permission or a late stray text', () => {
+    expect(run([[0, { busy: false, head: 'Hecho.' }]])).toEqual([]);
+    expect(
+      run([
+        [0, { busy: false, head: 'Hecho.' }],
+        [10, { busy: true, head: 'Hecho.' }],
+        [20, { busy: false, head: 'Hecho.' }],
+      ]),
+    ).toEqual([]);
+    expect(
+      run([
+        [0, { busy: false, head: 'A.' }],
+        [10, { busy: true, head: 'A.' }],
+        [20, { busy: false, head: 'B.', asksPermission: true }],
+      ]),
+    ).toEqual([]);
+    expect(
+      run([
+        [0, { busy: false, head: 'A.' }],
+        [10, { busy: true, head: 'A.' }],
+        [20, { busy: false, head: 'A.' }],
+        [20 + ANSWER_LAG_MS + 1, { busy: false, head: 'B.' }],
+      ]),
+    ).toEqual([]);
+  });
+
+  it('not when another Jarvis takes its place', () => {
+    let watch: SpeechWatch = { id: 1, busy: true, headAtStart: 'A.' };
+    const r = speechStep(watch, { id: 2, busy: false, head: 'B.', asksPermission: false }, 5);
+    watch = r.next;
+    expect(r.speak).toBe(false);
+    expect(watch).toEqual({ id: 2, busy: false, headAtStart: 'B.' });
   });
 });
 

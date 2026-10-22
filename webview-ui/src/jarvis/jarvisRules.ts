@@ -113,16 +113,51 @@ export function jarvisHome<D extends { path: string }>(
 /** Kinds where it is in the middle of a turn. */
 export const BUSY_KINDS: ReadonlySet<AgentKind> = new Set(['work', 'think', 'meet', 'research']);
 
+/** What the speech trigger remembers between renders. */
+export interface SpeechWatch {
+  id?: number;
+  busy: boolean;
+  /** Its answer when the current (or the last) turn started. */
+  headAtStart?: string;
+  /** When its last turn ended while its new answer was not read yet (ms). */
+  endedAt?: number;
+}
+
+/** How long after a turn ends its answer may still arrive. */
+export const ANSWER_LAG_MS = 15_000;
+
 /**
- * Jarvis speaks when a turn of its ends with something new to say: busy, then
- * not, with an answer other than the one it had when it started. Not on page
- * load, not for an answer already heard, not mid-turn for a permission.
+ * One step of «should Jarvis say its answer now»: a turn of its ended and its
+ * answer is new. The end of a turn comes from a hook, at once; the answer is
+ * read from the transcript a moment later (measured 2026-10-22: the first
+ * version waited for neither and never spoke). So an ended turn keeps waiting
+ * for a new answer, up to ANSWER_LAG_MS. Never on page load, never an answer
+ * already heard, never mid-turn for a permission.
  */
-export function shouldSpeak(
-  before: { id?: number; busy: boolean; headAtStart?: string },
+export function speechStep(
+  prev: SpeechWatch,
   now: { id?: number; busy: boolean; head?: string; asksPermission: boolean },
-): boolean {
-  if (now.id === undefined || before.id !== now.id) return false;
-  if (!before.busy || now.busy || now.asksPermission) return false;
-  return !!now.head && now.head !== before.headAtStart;
+  at: number,
+): { next: SpeechWatch; speak: boolean } {
+  if (now.id === undefined || prev.id !== now.id) {
+    return { next: { id: now.id, busy: now.busy, headAtStart: now.head }, speak: false };
+  }
+  if (now.busy) {
+    const headAtStart = prev.busy ? prev.headAtStart : now.head;
+    return { next: { id: now.id, busy: true, headAtStart }, speak: false };
+  }
+  const endedAt = prev.busy ? at : prev.endedAt;
+  const waiting = endedAt !== undefined && at - endedAt <= ANSWER_LAG_MS;
+  if (waiting && !now.asksPermission && !!now.head && now.head !== prev.headAtStart) {
+    return { next: { id: now.id, busy: false, headAtStart: now.head }, speak: true };
+  }
+  return {
+    next: {
+      id: now.id,
+      busy: false,
+      headAtStart: prev.headAtStart,
+      endedAt: waiting ? endedAt : undefined,
+    },
+    speak: false,
+  };
 }
