@@ -10,7 +10,7 @@ directories:
 extraMetadata:
   name: oficina-virtual
   main: dist-desktop/main.js
-  version: 1.0.23
+  version: 1.0.24
 files:
   - dist-desktop/**
   - dist/**
