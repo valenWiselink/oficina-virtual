@@ -107,7 +107,21 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   In the webview it has no avatar (`webview-ui/src/jarvis/`): App takes it out
   of every view (`withoutJarvis`) and of the terminal tabs (`isHidden` in
   useTerminalDrawer), and shows it as `JarvisBar` (foot of the office) and
-  `JarvisVisor` (middle of the screen, when it needs you).
+  `JarvisVisor` (middle of the screen, when it needs you or speaks).
+  Always there: `jarvisKeeper.ts` (+ `jarvisWiring.ts`) starts it with the
+  office, opens a clean conversation every morning and relaunches it when its
+  role changed (the registry keeps each supervisor's `roleHash` in
+  `supervisores/roles.json`); its memory is `~/.pixel-agents/jarvis/estado.json`.
+- `voice/` — Jarvis's voice: settings and keys stay server-side
+  (`~/.pixel-agents/jarvis/voz.json`, never sent to the page), `speech.ts`
+  (what is said aloud, Fish Audio `s2.1-pro-free` or ElevenLabs Flash over
+  HTTP; `OFICINA_FISH_URL`/`OFICINA_ELEVEN_URL` point them at a mock),
+  messages `jarvisSay` → `jarvisVoice` (base64 mp3, to the asking office).
+  Its ears are in the webview: `jarvis/jarvisEars.ts` records until silence,
+  `jarvis/whisperWorker.ts` runs Whisper with Transformers.js (WebGPU, else
+  WASM; the ONNX runtime files ship with the office, the model downloads from
+  Hugging Face once). Test with Edge headless and
+  `--use-file-for-fake-audio-capture=<wav>%noloop`.
 - `serverBoot.ts` — this run's id. Agent ids restart at 1 on every start, so
   `/ws` greets with `serverHello` (the page reloads on a new run) and the
   terminal socket refuses a `?boot=` from another run.

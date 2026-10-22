@@ -150,8 +150,21 @@ Ayuda).
   (VS Code, la app de escritorio) les escribe con los mensajes entre sesiones de
   Claude Code. Lleva una bitácora en `~/.pixel-agents/jarvis/bitacora.md` con lo
   que abrió, pasó y cerró y lo que le pediste recordar, así una conversación nueva
-  retoma donde quedó la anterior. Por ahora se le habla escribiendo; la voz viene
-  después.
+  retoma donde quedó la anterior.
+  - **Siempre está**: arranca solo con la oficina en la carpeta donde trabajó la
+    última vez (salvo que lo hayas cerrado a mano: vuelve cuando lo llamás), cada
+    mañana desde las 6 empieza una conversación limpia leyendo su bitácora, y
+    cuando una actualización le trae un rol nuevo retoma la misma conversación
+    con ese rol.
+  - **Habla** (Ajustes → Jarvis → Voz de Jarvis): con Fish Audio (gratis hasta el
+    30/11/2026) o ElevenLabs (gasta créditos de tu plan). La clave queda en esta
+    PC, en `~/.pixel-agents/jarvis/voz.json`, y la página nunca la ve. Lee lo que
+    contesta sin código, links ni markdown, con subtítulos en el medio de la
+    pantalla; el parlante de la barra lo silencia y Esc lo calla.
+  - **Escucha**: el micrófono de la barra o **Alt+J**. Graba hasta que hacés
+    silencio y lo pasa a texto en esta PC con Whisper (en la placa de video si
+    hay WebGPU; la primera vez baja el modelo, unos cientos de MB); le llega como
+    «[Voz] …». Si le hablás mientras habla, se calla.
 - Las rutas de archivos en la terminal se abren con un clic en el Explorador.
 - **Agentes que sobreviven a reinicios** (Ajustes → Agentes, prendido por
   defecto): cada agente corre como sesión en segundo plano de Claude Code y la

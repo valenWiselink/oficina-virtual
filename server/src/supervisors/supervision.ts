@@ -12,7 +12,7 @@
  * token of its own, and its role prompt).
  */
 
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -218,6 +218,38 @@ export class SupervisorRegistry {
     return this.tokenMap;
   }
 
+  /** Session id → roleHash of the role it was launched with, on disk. */
+  private roleMap: Map<string, string> | undefined;
+
+  private get roles(): Map<string, string> {
+    if (!this.roleMap) {
+      this.roleMap = new Map();
+      try {
+        const saved = JSON.parse(
+          fs.readFileSync(path.join(this.filesDir, 'roles.json'), 'utf-8'),
+        ) as Record<string, unknown>;
+        for (const [session, hash] of Object.entries(saved)) {
+          if (typeof hash === 'string') this.roleMap.set(session, hash);
+        }
+      } catch {
+        /* none yet */
+      }
+    }
+    return this.roleMap;
+  }
+
+  private saveRoles(): void {
+    try {
+      fs.mkdirSync(this.filesDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(this.filesDir, 'roles.json'),
+        JSON.stringify(Object.fromEntries(this.roles), null, 2),
+      );
+    } catch (err) {
+      console.error(`[Pixel Agents] Could not save supervisor roles: ${String(err)}`);
+    }
+  }
+
   private saveTokens(): void {
     try {
       fs.mkdirSync(this.filesDir, { recursive: true });
@@ -365,7 +397,10 @@ export class SupervisorRegistry {
     const mcpPath = path.join(this.filesDir, `${sessionId}.mcp.json`);
     const promptPath = path.join(this.filesDir, `${sessionId}.rol.md`);
     fs.writeFileSync(mcpPath, mcpConfig(url, token));
-    fs.writeFileSync(promptPath, supervisorPrompt(scope));
+    const prompt = supervisorPrompt(scope);
+    fs.writeFileSync(promptPath, prompt);
+    this.roles.set(sessionId, roleHash(prompt));
+    this.saveRoles();
     return [
       '--mcp-config',
       mcpPath,
@@ -385,6 +420,18 @@ export class SupervisorRegistry {
       if (owner === provisionalId) this.tokens.set(token, sessionId);
     }
     this.saveTokens();
+    const role = this.roles.get(provisionalId);
+    if (role !== undefined) {
+      this.roles.delete(provisionalId);
+      this.roles.set(sessionId, role);
+      this.saveRoles();
+    }
+  }
+
+  /** Which role a supervisor session was launched with (roleHash), if known:
+   *  an office update may bring a newer one (jarvisKeeper relaunches Jarvis). */
+  roleOf(sessionId: string): string | undefined {
+    return this.roles.get(sessionId);
   }
 
   /** No longer a supervisor: its token and files go (and what it launched
@@ -392,12 +439,18 @@ export class SupervisorRegistry {
   forget(sessionId: string): void {
     for (const [token, owner] of this.tokens) if (owner === sessionId) this.tokens.delete(token);
     this.saveTokens();
+    if (this.roles.delete(sessionId)) this.saveRoles();
     this.folders.remove(sessionId);
     this.launched.remove(sessionId);
     for (const ext of ['mcp.json', 'rol.md']) {
       fs.rmSync(path.join(this.filesDir, `${sessionId}.${ext}`), { force: true });
     }
   }
+}
+
+/** A short fingerprint of a role's text: tells an old role from the current one. */
+export function roleHash(prompt: string): string {
+  return createHash('sha256').update(prompt).digest('hex').slice(0, 16);
 }
 
 let shared: SupervisorRegistry | undefined;

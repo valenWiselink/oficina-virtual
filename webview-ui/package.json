@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.1",
     "@material-symbols/font-700": "^0.46.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "0.15.0",

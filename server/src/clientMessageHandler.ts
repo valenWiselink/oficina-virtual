@@ -35,6 +35,7 @@ import { hooksConsentRequest } from './providers/hook/consentGate.js';
 import { claudeProvider, hookProviderById, hookProviders } from './providers/index.js';
 import { setSpanishTerminal } from './spinnerSettings.js';
 import { liveJarvis, ONE_JARVIS } from './supervisors/jarvis.js';
+import { noteJarvisChoice } from './supervisors/jarvisKeeper.js';
 import { parseScope } from './supervisors/supervision.js';
 import { applySupervisionTeam, broadcastSupervision } from './supervisors/supervisionMessages.js';
 import { adoptIntoOffice } from './terminal/adoptSession.js';
@@ -44,6 +45,7 @@ import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { launchAgent } from './terminal/standaloneAgentLauncher.js';
 import { ruleStatus, setRuleInClaudeMd } from './teTocaRule.js';
+import { handleVoiceMessage } from './voice/voiceMessages.js';
 import { weekRecap } from './weekRecap.js';
 
 type WsSend = (message: Record<string, unknown>) => void;
@@ -171,6 +173,13 @@ export function handleClientMessage(
         send({ type: 'agentLaunchFailed', directoryPath: msg.directoryPath, reason: ONE_JARVIS });
         break;
       }
+      // Calling Jarvis: from now on it starts on its own, in this folder.
+      if (supervision?.kind === 'all') {
+        noteJarvisChoice(
+          true,
+          typeof msg.directoryPath === 'string' ? msg.directoryPath : undefined,
+        );
+      }
       // Permission posture is a persisted per-host setting, never a per-launch
       // field: the client sends where to launch, plus the name and colour
       // chosen in the launch dialog. No directoryPath falls back to the server
@@ -271,6 +280,8 @@ export function handleClientMessage(
       break;
 
     case 'closeAgent':
+      // Closing Jarvis by hand: it does not start on its own until called again.
+      if (liveJarvis(store) === msg.id) noteJarvisChoice(false);
       closeOfficeAgent(ctx, msg.id as number);
       break;
 
@@ -596,6 +607,13 @@ export function handleClientMessage(
         suggestions: () =>
           collectDirectorySuggestions(claudeProvider, shownHostDirectoriesFor(ctx)),
       });
+      break;
+
+    case 'requestJarvisVoice':
+    case 'setJarvisVoice':
+    case 'jarvisSay':
+      // Jarvis's voice: its settings and its words as audio (voice/).
+      handleVoiceMessage(msg, send, store);
       break;
 
     default:
