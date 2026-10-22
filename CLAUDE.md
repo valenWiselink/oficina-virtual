@@ -90,7 +90,14 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
 - `workflowWatch.ts` — workflow runs (`<session>/subagents/workflows/<run>/journal.jsonl`)
   announced as sub-agents, so juntas show in the graph.
 - `agentIdentity.ts` — name, branch, ticket, tasks, "te toca" (an explicit
-  `Te toca:` line, else PR links), background work.
+  `Te toca:` line, else PR links), background work (its end is a
+  `<task-notification>`, also when it only arrives queued mid-turn as a
+  `queue-operation`, or a TaskStop that stops it or finds it gone).
+- `transcriptMove.ts` — a session that moved folder (a worktree) writes its
+  conversation elsewhere: a hook's `transcript_path` that is newer than (or
+  instead of) the followed file makes the office follow it
+  (`agentRuntime.followTranscript`); the dedupe hands the found file over
+  before dropping a duplicate.
 - `teTocaRule.ts` — the rule that makes agents write that line: office agents
   get it by `--append-system-prompt-file` unless the global CLAUDE.md has it
   (one such flag per launch: a supervisor's role file wins); the welcome and
@@ -98,7 +105,13 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
 - `supervisors/` — supervisor agents: `supervision.ts` (who watches whom,
   launch files), `supervisorRelay.ts` (what reaches them as `[Oficina]`
   messages), `supervisorMcp.ts` + `supervisorTools.ts` (their tools at
-  `POST /mcp`, one token each), `supervisorGuard.ts` (what they may approve).
+  `POST /mcp`, one token each), `supervisorGuard.ts` (what they may approve;
+  an `askable` refusal — external tool not on production nor deleting, a
+  write outside the folder, an unknown tool — Jarvis may approve on Valentín's
+  word: `valentinConsent.ts`. The office shows him that permission in the
+  visor first, then only his latest line in Jarvis's chat after it counts, if
+  it is a plain yes and an Enter from the office window vouches for it
+  (`terminal/windowInput.ts`); risky ones stay his, with the button).
   The supervisor of everyone is Jarvis (`jarvis.ts`: role + notebook in
   `~/.pixel-agents/jarvis/bitacora.md`; `jarvisTools.ts`: open, close and hand
   over agents, folders, notebook). Its launches go through `launchAgent`, its
@@ -124,6 +137,8 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   The page says its answers in line (`jarvis/speechQueue.ts`): a new one
   waits for the one it is saying; Esc, «Callar» or talking to it empties the
   line; at most 2 wait, and one that waited 60 s without starting is dropped.
+  Its speed is the player's (`playbackRate`, same pitch; 1,2× by default,
+  Ajustes → Jarvis → Velocidad), so it works for any engine.
   Its ears are in the webview: `jarvis/jarvisEars.ts` records until silence,
   `jarvis/whisperWorker.ts` runs Whisper with Transformers.js (WebGPU, else
   WASM; the ONNX runtime files ship with the office, the model downloads from

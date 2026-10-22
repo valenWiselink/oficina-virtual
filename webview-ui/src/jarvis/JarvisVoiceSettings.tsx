@@ -4,7 +4,13 @@ import { Choices } from '../agents/Choices.js';
 import { Button } from '../components/ui/Button.js';
 import { TextInput } from '../components/ui/TextInput.js';
 import { transport } from '../transport/index.js';
-import { requestJarvisVoice, sayTest, useJarvisVoice } from './jarvisVoice.js';
+import {
+  requestJarvisVoice,
+  sayTest,
+  setJarvisSpeed,
+  SPEEDS,
+  useJarvisVoice,
+} from './jarvisVoice.js';
 
 const ENGINES = [
   { value: 'off', label: 'Sin voz' },
@@ -14,6 +20,12 @@ const ENGINES = [
 
 const TEST_PHRASE = 'Buenas tardes, señor. Todo en orden en la oficina.';
 
+/** «1,2×», as it is written here. */
+const SPEED_CHOICES = SPEEDS.map((s) => ({
+  value: String(s),
+  label: `${String(s).replace('.', ',')}×`,
+}));
+
 /**
  * Ajustes → Jarvis → Voz: which engine speaks for Jarvis, its key and its
  * voice. The key goes to the office and stays there (it is never shown back:
@@ -22,7 +34,7 @@ const TEST_PHRASE = 'Buenas tardes, señor. Todo en orden en la oficina.';
  * credit), Jarvis speaks with Fish instead.
  */
 export function JarvisVoiceSettings() {
-  const { status, error } = useJarvisVoice();
+  const { status, error, speed } = useJarvisVoice();
   const [key, setKey] = useState('');
   const [voice, setVoice] = useState('');
   useEffect(() => requestJarvisVoice(), []);
@@ -104,6 +116,12 @@ export function JarvisVoiceSettings() {
               Usar
             </Button>
           </form>
+          <Choices
+            legend="Velocidad"
+            choices={SPEED_CHOICES}
+            value={String(speed)}
+            onChange={(value) => setJarvisSpeed(Number(value ?? 1))}
+          />
           <div className="flex items-center gap-8">
             <Button size="md" disabled={!keySet} onClick={() => sayTest(TEST_PHRASE)}>
               Probar

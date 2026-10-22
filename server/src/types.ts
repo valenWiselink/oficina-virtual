@@ -134,6 +134,9 @@ export interface AgentState {
    *  the record it came from (so "done" can be marked per answer). `prAsk`
    *  is the one PR it is only about; `merged` says that PR got merged (the
    *  ask is done) and whether the office told the agent (mergedAsk.ts). */
+  /** Jarvis only: another agent's permission it is asking Valentín about
+   *  (valentinConsent.ts); the visor shows it with Aprobar and Rechazar. */
+  asksValentin?: string;
   yourTurn?: {
     text: string;
     id: string;

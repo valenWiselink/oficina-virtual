@@ -303,6 +303,47 @@ describe('background work', () => {
     });
     expect(identityMessage(1, agent).backgroundTasks).toBe(0);
   });
+
+  it('ends with a report that arrived mid-turn (only queued, never a user record)', () => {
+    const agent = blank();
+    observeIdentity(agent, launch('t4', { command: 'sleep 60', run_in_background: true }));
+    observeIdentity(agent, launched('t4', 'b4'));
+    expect(identityMessage(1, agent).backgroundTasks).toBe(1);
+    const report = `<task-notification>
+<task-id>b4</task-id>
+<tool-use-id>t4</tool-use-id>
+<status>completed</status>`;
+    expect(
+      observeIdentity(agent, { type: 'queue-operation', operation: 'enqueue', content: report }),
+    ).toBe(true);
+    observeIdentity(agent, { type: 'queue-operation', operation: 'remove' });
+    observeIdentity(agent, {
+      type: 'attachment',
+      attachment: { type: 'queued_command', prompt: report },
+    });
+    expect(identityMessage(1, agent).backgroundTasks).toBe(0);
+    // The same report as a user record later changes nothing.
+    expect(observeIdentity(agent, notified('t4'))).toBe(false);
+  });
+
+  it('a TaskStop that finds the task already gone ends it too', () => {
+    const agent = blank();
+    observeIdentity(agent, launch('t5', { command: 'npm run dev', run_in_background: true }));
+    observeIdentity(agent, launched('t5', 'b5'));
+    observeIdentity(agent, {
+      type: 'user',
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'x',
+            content: '<tool_use_error>No task found with ID: b5</tool_use_error>',
+          },
+        ],
+      },
+    });
+    expect(identityMessage(1, agent).backgroundTasks).toBe(0);
+  });
 });
 
 describe('effort', () => {

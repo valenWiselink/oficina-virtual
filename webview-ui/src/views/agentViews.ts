@@ -84,6 +84,8 @@ export interface AgentView {
   supervisedBy: number[];
   /** Session of the supervisor that opened it (lanzar_agente), if one did. */
   launchedBy?: string;
+  /** Jarvis only: the permission of another agent it is asking you about. */
+  asksPermission?: string;
   /** That supervisor's workspace: the agent belongs there unless it is moved
    *  by hand (workspaceRules). */
   home?: string;
@@ -452,6 +454,7 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
         supervision: identity?.supervision,
         supervisedBy: identity?.supervisedBy ?? [],
         launchedBy: identity?.launchedBy,
+        asksPermission: identity?.asksPermission,
         subagents: subs,
         hasTerminal: input.terminalAgentIds.includes(id),
         permission,

@@ -239,6 +239,8 @@ export class AgentRuntime {
           (agent) => this.registerAgent(agent.sessionId, agent.id),
         );
       },
+      onTranscriptMoved: (agentId, transcriptPath) =>
+        this.followTranscript(agentId, transcriptPath),
       onSessionClear: (agentId, newSessionId, newTranscriptPath) => {
         if (newTranscriptPath) {
           this.knownJsonlFiles.add(newTranscriptPath);
@@ -303,6 +305,18 @@ export class AgentRuntime {
         }
       },
     });
+  }
+
+  /** The agent kept of a duplicated session (sessionDedupe.ts). */
+  private keptTwinOf(
+    agent: AgentState,
+    doomed: readonly number[],
+  ): { id: number; agent: AgentState } | undefined {
+    for (const [id, other] of this.store.entries()) {
+      if (doomed.includes(id) || other.leadAgentId !== undefined) continue;
+      if (other.sessionId === agent.sessionId) return { id, agent: other };
+    }
+    return undefined;
   }
 
   /** Register adapter-specific lifecycle callbacks. */
@@ -478,13 +492,50 @@ export class AgentRuntime {
     );
   }
 
+  /**
+   * Follow an agent's conversation in the file Claude now writes it to
+   * (transcriptMove.ts): stop waiting for the old one and read the new one.
+   */
+  followTranscript(agentId: number, file: string): void {
+    const poll = this.jsonlPollTimers.get(agentId);
+    if (poll) clearInterval(poll);
+    this.jsonlPollTimers.delete(agentId);
+    this.knownJsonlFiles.add(file);
+    reassignAgentToFile(
+      agentId,
+      file,
+      this.store,
+      this.fileWatchers,
+      this.pollingTimers,
+      this.waitingTimers,
+      this.permissionTimers,
+      () => this.store.persist(),
+    );
+  }
+
   /** Start stale external agent check (removes agents whose JSONL files are deleted). */
   startStaleCheck(): void {
     if (this.staleCheckTimer) return;
     // One session, one agent: drop a second agent following the same session.
     this.dedupeTimer = setInterval(() => {
-      for (const id of duplicateSessionAgents(this.store)) {
+      const doomed = duplicateSessionAgents(this.store);
+      for (const id of doomed) {
         const agent = this.store.get(id);
+        // The one kept may be waiting for a file that is not there (its
+        // session moved folder) while this one found the real one: hand it
+        // over before dropping this one.
+        const kept = agent && this.keptTwinOf(agent, doomed);
+        if (
+          agent &&
+          kept &&
+          !fs.existsSync(kept.agent.jsonlFile) &&
+          fs.existsSync(agent.jsonlFile)
+        ) {
+          console.log(
+            `[Pixel Agents] Agent ${kept.id} follows the conversation Agent ${id} found (${agent.jsonlFile})`,
+          );
+          this.followTranscript(kept.id, agent.jsonlFile);
+        }
         console.warn(
           `[Pixel Agents] Agent ${id} duplicates session ${agent?.sessionId?.slice(0, 8)} ` +
             `(${agent?.jsonlFile}); removing it`,

@@ -170,6 +170,15 @@ export function chatItemsOf(record: Rec): ChatItem[] {
     return text ? [userItem(id, text, at)] : [];
   }
 
+  // What you sent while it was working is absorbed into its turn: only this
+  // attachment records it, no user record follows.
+  if (record.type === 'attachment') {
+    const queued = record.attachment as Rec | undefined;
+    if (queued?.type !== 'queued_command' || typeof queued.prompt !== 'string') return [];
+    const text = userText(queued.prompt);
+    return text ? [userItem(id, text, at)] : [];
+  }
+
   if (record.type !== 'assistant' || !Array.isArray(content)) return [];
   const items: ChatItem[] = [];
   (content as Rec[]).forEach((block, i) => {

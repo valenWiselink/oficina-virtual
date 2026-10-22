@@ -316,6 +316,7 @@ export interface AgentIdentity {
   sessionId?: string;
   yourTurn?: string;
   yourTurnId?: string;
+  asksPermission?: string;
   yourTurnAt?: number;
   yourTurnUrl?: string;
   yourTurnMerged?: MergedAsk;
@@ -805,19 +806,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_406;
-  supervision?: AnonymousSchema_407;
+  effort?: AnonymousSchema_407;
+  supervision?: AnonymousSchema_408;
 }
 
-export type AnonymousSchema_406 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_407 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_407 {
-  kind: AnonymousSchema_408;
+export interface AnonymousSchema_408 {
+  kind: AnonymousSchema_409;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_408 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_409 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -866,16 +867,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_433;
+  scope: AnonymousSchema_434;
 }
 
-export interface AnonymousSchema_433 {
-  kind: AnonymousSchema_434;
+export interface AnonymousSchema_434 {
+  kind: AnonymousSchema_435;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_434 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_435 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

@@ -7,7 +7,13 @@ import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
 import { ChoiceReplies } from '../views/CardExtras.js';
 import { JarvisVoiceBars } from './JarvisRing.js';
-import { jarvisLine, visorContext, visorKey } from './jarvisRules.js';
+import {
+  askedLine,
+  type AskedPermission,
+  jarvisLine,
+  visorContext,
+  visorKey,
+} from './jarvisRules.js';
 import { stopJarvis, useJarvisVoice } from './jarvisVoice.js';
 import { talkToJarvis } from './talk.js';
 
@@ -16,19 +22,24 @@ import { talkToJarvis } from './talk.js';
  * when it needs you — what it asks, in large type, with the buttons to answer
  * («Después» or Esc put it away; it stays in the bar, and the next thing it
  * needs brings it back) — and while it speaks, with what it says as subtitles.
+ * When it asks you about another agent's permission, that permission is here
+ * with Aprobar and Rechazar (or you tell Jarvis yes: valentinConsent.ts).
  */
 export function JarvisVisor({
   jarvis,
+  asked,
   actions,
   onAnswer,
 }: {
   jarvis: AgentView | undefined;
+  /** Another agent's permission it is asking you about (askedPermission). */
+  asked?: AskedPermission;
   actions: BoardActions;
   /** «Contestar»: write to it in the bar. */
   onAnswer: () => void;
 }) {
   const { speaking } = useJarvisVoice();
-  const key = visorKey(jarvis);
+  const key = visorKey(jarvis, asked);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const needs = key !== undefined && !dismissed.has(key);
   const shown = !!jarvis && (needs || !!speaking);
@@ -52,13 +63,13 @@ export function JarvisVisor({
     if (key !== undefined) setDismissed((d) => new Set(d).add(key));
   };
   const turnId = jarvis.yourTurnId;
-  const command =
-    needs && jarvis.permission
-      ? describeToolInput(jarvis.permission.toolName, jarvis.permission.toolInput).sections[0]
-      : undefined;
-  const line = needs ? jarvisLine(jarvis) : (speaking?.text ?? '');
-  const context =
-    needs && !jarvis.permission ? visorContext(jarvis.lastReplyHead, line) : undefined;
+  const ask = needs && asked && key === `pide:${asked.permission.requestId}` ? asked : undefined;
+  const permission = ask?.permission ?? (needs ? jarvis.permission : undefined);
+  const command = permission
+    ? describeToolInput(permission.toolName, permission.toolInput).sections[0]
+    : undefined;
+  const line = ask ? askedLine(ask) : needs ? jarvisLine(jarvis) : (speaking?.text ?? '');
+  const context = needs && !permission ? visorContext(jarvis.lastReplyHead, line) : undefined;
 
   return (
     <>
@@ -81,13 +92,26 @@ export function JarvisVisor({
           </pre>
         )}
         <div className="flex flex-wrap items-center justify-center gap-8">
-          {needs && jarvis.permission && actions.onAllow && actions.onDeny ? (
-            <ApproveButtons
-              permission={jarvis.permission}
-              onAllow={actions.onAllow}
-              onDeny={actions.onDeny}
-              size="md"
-            />
+          {permission && actions.onAllow && actions.onDeny ? (
+            <>
+              <ApproveButtons
+                permission={permission}
+                onAllow={actions.onAllow}
+                onDeny={actions.onDeny}
+                size="md"
+              />
+              {ask && (
+                <Button
+                  size="md"
+                  onClick={() => {
+                    stopJarvis();
+                    talkToJarvis(jarvis.id);
+                  }}
+                >
+                  Contestar hablando
+                </Button>
+              )}
+            </>
           ) : (
             <>
               {needs && (

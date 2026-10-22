@@ -10,22 +10,27 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as path from 'path';
 import { z } from 'zod';
 
+import { readChat } from '../agentChat.js';
 import { cleanEffort, cleanModel } from '../agentEdits.js';
-import { runningBackground, spokenName } from '../agentIdentity.js';
+import { identityMessage, runningBackground, spokenName } from '../agentIdentity.js';
 import type { AgentRuntime } from '../agentRuntime.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
 import { listDirectories, normalizeDirectoryPath, validateDirectoryPath } from '../directories.js';
 import { collectDirectorySuggestions } from '../directorySuggestions.js';
 import { hostDirectory } from '../hostDirectory.js';
+import type { PendingPermission } from '../permissionBroker.js';
 import { claudeProvider } from '../providers/index.js';
 import { closeOfficeAgent } from '../terminal/closeAgent.js';
 import { handOffText, sendToTerminal } from '../terminal/handOff.js';
 import type { PtySessionManager } from '../terminal/ptySessionManager.js';
 import { launchAgent } from '../terminal/standaloneAgentLauncher.js';
+import { windowEnters } from '../terminal/windowInput.js';
 import type { AgentState } from '../types.js';
 import { Notebook } from './jarvis.js';
-import { SupervisorTools, type ToolDeps } from './supervisorTools.js';
+import { describeRequest } from './supervisorRelay.js';
+import { SupervisorTools, type ToolDeps, VALENTIN_DECIDES } from './supervisorTools.js';
+import type { HumanLine } from './valentinConsent.js';
 
 /** The same limit as the launch dialog's name field. */
 const NICKNAME_MAX = 32;
@@ -59,6 +64,65 @@ export class JarvisTools extends SupervisorTools {
   ) {
     super(jarvis, supervisorId);
     this.notebook = jarvis.notebook ?? new Notebook();
+  }
+
+  /**
+   * A permission the office keeps for Valentín: what is risky he approves
+   * himself; the rest he may approve in words, once the office showed it to
+   * him and checked that his yes is his (valentinConsent.ts).
+   */
+  protected override refused(
+    request: PendingPermission,
+    agent: AgentState,
+    verdict: { reason: string; askable?: boolean },
+  ): string {
+    const desk = this.jarvis.consent;
+    if (!verdict.askable || !desk) {
+      return `${VALENTIN_DECIDES} (${verdict.reason}). Esto lo aprueba él mismo, con el botón de la oficina o en la terminal: no le pidas un sí de palabra. El permiso sigue pendiente.`;
+    }
+    const consent = desk.check(
+      request.requestId,
+      this.valentinLines(),
+      windowEnters(this.supervisorId),
+    );
+    if (consent.ok) {
+      this.showToValentin(undefined);
+      return this.allow(request, agent, ' con el sí de Valentín');
+    }
+    if (!consent.showAgain) {
+      return `${consent.reason} El permiso sigue pendiente: si te dice que sí, volvé a llamar a aprobar_permiso; si dice que no, rechazar_permiso; o que use los botones.`;
+    }
+    desk.show(request.requestId);
+    this.showToValentin(request.requestId);
+    return `Esto lo decide Valentín (${verdict.reason}), y te lo puede autorizar de palabra. La oficina ya le muestra este permiso en el medio de la pantalla, con Aprobar y Rechazar. Preguntáselo en una línea «Te toca:»: que «${spokenName(agent)}» quiere ${describeRequest(request.toolName, request.toolInput)}, y tu recomendación. Si te contesta que sí, por voz o en tu chat, volvé a llamar a aprobar_permiso con este mismo id: la oficina verifica que el sí sea suyo.`;
+  }
+
+  override rechazarPermiso(requestId: string, motivo?: string): string {
+    const answer = super.rechazarPermiso(requestId, motivo);
+    if (this.jarvis.consent?.shownRequest() === requestId.trim()) {
+      this.jarvis.consent.done(requestId.trim());
+      this.showToValentin(undefined);
+    }
+    return answer;
+  }
+
+  /** Valentín's lines in Jarvis's own chat (typed or spoken), oldest first. */
+  private valentinLines(): HumanLine[] {
+    const me = this.jarvis.store.get(this.supervisorId);
+    if (!me?.jsonlFile) return [];
+    return readChat(me.jsonlFile).flatMap((item) =>
+      item.role === 'user' && item.at !== undefined
+        ? [{ id: item.id, at: item.at, text: item.text }]
+        : [],
+    );
+  }
+
+  /** What the visor shows Valentín: this permission, or none. */
+  private showToValentin(requestId: string | undefined): void {
+    const me = this.jarvis.store.get(this.supervisorId);
+    if (!me || me.asksValentin === requestId) return;
+    me.asksValentin = requestId;
+    this.jarvis.store.broadcast(identityMessage(this.supervisorId, me));
   }
 
   protected override outsideNote(): string {

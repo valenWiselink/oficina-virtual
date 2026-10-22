@@ -31,6 +31,7 @@ import { broadcastSupervision } from './supervisionMessages.js';
 import { supervisorMayApprove } from './supervisorGuard.js';
 import { launchFolder, type LaunchPlaces, teamState } from './supervisorLaunch.js';
 import { describeRequest } from './supervisorRelay.js';
+import type { ConsentDesk } from './valentinConsent.js';
 
 /** An agent launch as the office runs it (jarvisPowers wires it). */
 export interface AgentLaunch {
@@ -62,6 +63,8 @@ export interface ToolDeps {
   close?: (id: number) => boolean;
   /** Where an agent can be opened: the office's folders and recent ones. */
   folders?: () => Array<{ name: string; path: string }>;
+  /** Valentín's word on permissions (Jarvis only; valentinConsent.ts). */
+  consent?: ConsentDesk;
 }
 
 const HEAD_CHARS = 160;
@@ -162,10 +165,24 @@ export class SupervisorTools {
       request.toolInput,
       request.cwd ?? agent.cwd,
     );
-    if (!verdict.ok) return `${VALENTIN_DECIDES} (${verdict.reason}). El permiso sigue pendiente.`;
+    if (!verdict.ok) return this.refused(request, agent, verdict);
+    return this.allow(request, agent);
+  }
+
+  /** Approve it in the office; `how` says on whose word. */
+  protected allow(request: PendingPermission, agent: AgentState, how = ''): string {
     return this.deps.broker?.decide(request.requestId, { behavior: 'allow' })
-      ? `Aprobado: «${spokenName(agent)}» puede seguir con ${describeRequest(request.toolName, request.toolInput)}.`
+      ? `Aprobado${how}: «${spokenName(agent)}» puede seguir con ${describeRequest(request.toolName, request.toolInput)}.`
       : 'Ese permiso ya no está pendiente (se respondió o venció).';
+  }
+
+  /** What the supervisor hears when the office keeps a permission for Valentín. */
+  protected refused(
+    _request: PendingPermission,
+    _agent: AgentState,
+    verdict: { reason: string; askable?: boolean },
+  ): string {
+    return `${VALENTIN_DECIDES} (${verdict.reason}). El permiso sigue pendiente.`;
   }
 
   rechazarPermiso(requestId: string, motivo?: string): string {

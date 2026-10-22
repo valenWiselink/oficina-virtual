@@ -136,3 +136,31 @@ describe('who wrote a line', () => {
     expect(toolLine('SendMessage', { to: 'oficina-coral' })).toBe('Le escribió a «oficina-coral»');
   });
 });
+
+describe('what you sent while it was working', () => {
+  const queued = (uuid: string, prompt: string) => ({
+    type: 'attachment',
+    uuid,
+    timestamp: '2026-10-22T20:00:00.000Z',
+    attachment: { type: 'queued_command', prompt },
+  });
+
+  it('is yours, though only an attachment records it', () => {
+    expect(chatItemsOf(queued('q1', '[Voz] sí, dale'))).toEqual([
+      {
+        id: 'q1',
+        role: 'user',
+        voice: true,
+        text: 'sí, dale',
+        at: Date.parse('2026-10-22T20:00:00.000Z'),
+      },
+    ]);
+  });
+
+  it('but not a background report queued the same way', () => {
+    expect(chatItemsOf(queued('q2', '<task-notification>\n<task-id>b1</task-id>'))).toEqual([]);
+    expect(chatItemsOf({ type: 'attachment', uuid: 'q3', attachment: { type: 'other' } })).toEqual(
+      [],
+    );
+  });
+});

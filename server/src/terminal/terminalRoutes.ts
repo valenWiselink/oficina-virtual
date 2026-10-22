@@ -29,6 +29,7 @@ import {
 import { bootOfRequest, SERVER_BOOT_ID } from '../serverBoot.js';
 import { isAllowedWebSocketOrigin, standaloneHandshakeVerdict } from '../wsAuth.js';
 import type { PtySessionManager } from './ptySessionManager.js';
+import { noteWindowInput } from './windowInput.js';
 
 export interface TerminalRoutesOptions {
   token: string;
@@ -139,6 +140,7 @@ export function registerTerminalRoutes(app: FastifyInstance, options: TerminalRo
         const frame = parseClientFrame(raw.toString());
         if (!frame) return; // Malformed/unknown frames are ignored, never thrown on.
         if (frame.type === 'input') {
+          noteWindowInput(agentId, frame.data);
           session.write(frame.data);
         } else {
           session.resize(frame.cols, frame.rows);

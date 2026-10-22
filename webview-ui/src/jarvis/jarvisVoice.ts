@@ -27,6 +27,8 @@ export interface JarvisVoiceState {
   status?: JarvisVoiceStatus;
   /** Silenced in this window (the bar's speaker button). */
   muted: boolean;
+  /** How fast it speaks in this window (the player's rate, same pitch). */
+  speed: number;
   /** What it is saying now, for the subtitles. */
   speaking?: { key: string; text: string };
   /** Why the last attempt said nothing (shown in Ajustes). */
@@ -34,6 +36,20 @@ export interface JarvisVoiceState {
 }
 
 const MUTED_KEY = 'oficina.jarvis.mudo';
+const SPEED_KEY = 'oficina.jarvis.velocidad';
+
+/** Faster than the engines speak (asked 2026-10-22: «habla muy lento»). */
+export const DEFAULT_SPEED = 1.2;
+export const SPEEDS = [1, 1.1, 1.2, 1.35, 1.5] as const;
+
+function readSpeed(): number {
+  try {
+    const saved = Number(localStorage.getItem(SPEED_KEY));
+    return saved >= 0.5 && saved <= 2 ? saved : DEFAULT_SPEED;
+  } catch {
+    return DEFAULT_SPEED;
+  }
+}
 
 function readMuted(): boolean {
   try {
@@ -43,7 +59,7 @@ function readMuted(): boolean {
   }
 }
 
-let state: JarvisVoiceState = { muted: readMuted() };
+let state: JarvisVoiceState = { muted: readMuted(), speed: readSpeed() };
 const listeners = new Set<() => void>();
 let audio: HTMLAudioElement | undefined;
 let line: SpeechQueue = emptyQueue();
@@ -81,8 +97,16 @@ function next(): boolean {
   return !!u;
 }
 
+/** Faster or slower without changing the voice's pitch (works for any engine). */
+function paced(a: HTMLAudioElement, speed: number): void {
+  a.preservesPitch = true;
+  a.defaultPlaybackRate = speed;
+  a.playbackRate = speed;
+}
+
 function play(u: Utterance): void {
   const a = new Audio(u.src);
+  paced(a, state.speed);
   audio = a;
   set({ speaking: { key: u.key, text: u.text ?? '' }, error: undefined });
   const done = () => {
@@ -145,6 +169,17 @@ export function setJarvisMuted(muted: boolean): void {
   }
   if (muted) stopJarvis();
   set({ muted });
+}
+
+/** How fast it speaks from now on, also what it is saying now. */
+export function setJarvisSpeed(speed: number): void {
+  try {
+    localStorage.setItem(SPEED_KEY, String(speed));
+  } catch {
+    // Not kept: it applies to this window until it reloads.
+  }
+  if (audio) paced(audio, speed);
+  set({ speed });
 }
 
 /** Ask the office for its voice settings (once per window). */

@@ -7,11 +7,35 @@
  * It is an allowlist of tools plus a denylist of commands: an unknown tool, an
  * MCP tool or a command that matches anything risky is refused. False refusals
  * only mean the permission goes to Valentín, which is the safe side.
+ *
+ * A refusal is `askable` when Valentín may say yes to it in words, to Jarvis
+ * (valentinConsent.ts): an external tool that does not touch production or
+ * delete, a write outside the folder, a tool not listed here. What is risky
+ * (RISKY, production, deleting) he approves himself, with the button or in the
+ * terminal.
  */
 
 import * as path from 'path';
 
-export type GuardVerdict = { ok: true } | { ok: false; reason: string };
+export type GuardVerdict = { ok: true } | { ok: false; reason: string; askable?: boolean };
+
+/** An MCP server that is production (`mariadb_prod`, `mongodb_production`). */
+const MCP_PRODUCTION = /(^|[_-])(prod|production|produccion)([_-]|$)/i;
+/** An MCP tool that deletes, publishes or deploys. */
+const MCP_DESTRUCTIVE =
+  /(delete|drop|remove|trash|destroy|purge|truncate|wipe|erase|kill|deploy|publish|merge)/i;
+
+/** What an MCP tool may get from Valentín's word. */
+function mcpVerdict(toolName: string): GuardVerdict {
+  const [, server = '', tool = ''] = toolName.match(/^mcp__(.+?)__(.+)$/) ?? [];
+  if (MCP_PRODUCTION.test(server)) {
+    return { ok: false, reason: 'usa una herramienta externa (MCP) de producción' };
+  }
+  if (MCP_DESTRUCTIVE.test(tool)) {
+    return { ok: false, reason: 'usa una herramienta externa (MCP) que borra o publica' };
+  }
+  return { ok: false, reason: 'usa una herramienta externa (MCP)', askable: true };
+}
 
 /** Reading and planning tools: nothing changes. */
 const READ_ONLY = new Set([
@@ -113,17 +137,17 @@ export function supervisorMayApprove(
   input: Record<string, unknown>,
   cwd?: string,
 ): GuardVerdict {
-  if (toolName.startsWith('mcp__')) {
-    return { ok: false, reason: 'usa una herramienta externa (MCP)' };
-  }
+  if (toolName.startsWith('mcp__')) return mcpVerdict(toolName);
   if (READ_ONLY.has(toolName)) return { ok: true };
 
   if (FILE_WRITES.has(toolName)) {
     const file = input.file_path ?? input.notebook_path;
     if (typeof file !== 'string' || !cwd) {
-      return { ok: false, reason: 'no sé dónde escribe' };
+      return { ok: false, reason: 'no sé dónde escribe', askable: true };
     }
-    return inside(cwd, file) ? { ok: true } : { ok: false, reason: 'escribe fuera de su carpeta' };
+    return inside(cwd, file)
+      ? { ok: true }
+      : { ok: false, reason: 'escribe fuera de su carpeta', askable: true };
   }
 
   if (SHELLS.has(toolName)) {
@@ -133,14 +157,18 @@ export function supervisorMayApprove(
       if (rule.pattern.test(command)) return { ok: false, reason: rule.reason };
     }
     if (WRITES_TO.test(command)) {
-      if (!cwd) return { ok: false, reason: 'escribe y no sé en qué carpeta trabaja' };
+      if (!cwd) {
+        return { ok: false, reason: 'escribe y no sé en qué carpeta trabaja', askable: true };
+      }
       for (const match of command.matchAll(ABSOLUTE_PATH)) {
         if (DISCARD.test(match[1])) continue;
-        if (!inside(cwd, match[1])) return { ok: false, reason: 'escribe fuera de su carpeta' };
+        if (!inside(cwd, match[1])) {
+          return { ok: false, reason: 'escribe fuera de su carpeta', askable: true };
+        }
       }
     }
     return { ok: true };
   }
 
-  return { ok: false, reason: `«${toolName}» no está entre lo que puede aprobar` };
+  return { ok: false, reason: `«${toolName}» no está entre lo que puede aprobar`, askable: true };
 }

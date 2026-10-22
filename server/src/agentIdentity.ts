@@ -111,7 +111,8 @@ const ALWAYS_BACKGROUND = new Set(['Workflow']);
  * tool_use flagged run_in_background (or a Workflow), and ends with the
  * <task-notification> Claude Code writes when it completes, fails or is
  * killed — that record names the launching tool_use id — or with a TaskStop
- * of its task id. Returns true when the set changed.
+ * of its task id (also one that finds it already gone). Returns true when the
+ * set changed.
  */
 function observeBackground(agent: AgentState, record: Record<string, unknown>): boolean {
   if (record.isSidechain === true) return false;
@@ -130,6 +131,17 @@ function observeBackground(agent: AgentState, record: Record<string, unknown>): 
       bg.set(block.id, { label: label.slice(0, 80), at });
       changed = true;
     }
+  }
+  // A report that arrives mid-turn is only queued (and then absorbed as an
+  // attachment): no user record ever carries it. Every report is queued
+  // first, so this sees all of them («Oficina-virtual», 2026-10-22, stayed
+  // «esperando un proceso de fondo» two hours after it ended).
+  if (
+    record.type === 'queue-operation' &&
+    record.operation === 'enqueue' &&
+    typeof record.content === 'string'
+  ) {
+    return backgroundEnded(agent, undefined, record.content) || changed;
   }
   if (record.type !== 'user') return changed;
   for (const { launch, text } of userTexts(content)) {
@@ -159,7 +171,7 @@ function backgroundEnded(agent: AgentState, launch: string | undefined, text: st
   if (launch && started) ids.set(started[1], launch);
   const done = text.match(/<task-notification>[\s\S]*?<tool-use-id>([^<]+)<\/tool-use-id>/);
   if (done) return bg.delete(done[1]);
-  const stopped = text.match(/stopped task: (\w+)/);
+  const stopped = text.match(/(?:stopped task|No task found with ID): (\w+)/);
   const stoppedLaunch = stopped ? ids.get(stopped[1]) : undefined;
   return stoppedLaunch ? bg.delete(stoppedLaunch) : false;
 }
@@ -419,6 +431,7 @@ export function identityMessage(id: number, agent: AgentState): Record<string, u
     repo,
     area,
     tasks: agent.tasks ?? [],
+    asksPermission: agent.asksValentin,
     yourTurn: agent.yourTurn?.text,
     yourTurnId: agent.yourTurn?.id,
     yourTurnAt: agent.yourTurn?.at,

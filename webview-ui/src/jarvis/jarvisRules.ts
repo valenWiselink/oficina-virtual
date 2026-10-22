@@ -1,3 +1,4 @@
+import type { PermissionPending } from '../../../core/src/messages.js';
 import { describeToolInput } from '../permissions/describeToolInput.js';
 import type { AgentKind, AgentView } from '../views/agentViews.js';
 
@@ -65,12 +66,44 @@ export function jarvisLine(jarvis: AgentView): string {
   );
 }
 
+/** Another agent's permission Jarvis asks you about, and that agent. */
+export interface AskedPermission {
+  agent: AgentView;
+  permission: PermissionPending;
+}
+
+/** The permission Jarvis is asking you about (the office shows it; you may
+ *  also say yes to Jarvis), while it is still pending. */
+export function askedPermission(
+  jarvis: AgentView | undefined,
+  views: readonly AgentView[],
+): AskedPermission | undefined {
+  const id = jarvis?.asksPermission;
+  if (!id) return undefined;
+  for (const v of views) {
+    if (v.permission?.requestId === id) return { agent: v, permission: v.permission };
+  }
+  return undefined;
+}
+
+/** What the visor says about it, in Jarvis's words. */
+export function askedLine({ agent, permission }: AskedPermission): string {
+  const { title } = describeToolInput(permission.toolName, permission.toolInput);
+  const what = title.replace(/^Quiere\s+/i, '');
+  return `«${agent.name}» quiere ${what.charAt(0).toLowerCase()}${what.slice(1)}. ¿Lo autorizo, señor?`;
+}
+
 /**
- * The one thing the visor is about, or none: a permission it holds, or what
- * its finished turn left for you. Each shows once: dismissing it leaves it in
- * the bar, and the next one comes up again.
+ * The one thing the visor is about, or none: another agent's permission it
+ * asks you about, a permission it holds, or what its finished turn left for
+ * you. Each shows once: dismissing it leaves it in the bar, and the next one
+ * comes up again.
  */
-export function visorKey(jarvis: AgentView | undefined): string | undefined {
+export function visorKey(
+  jarvis: AgentView | undefined,
+  asked?: AskedPermission,
+): string | undefined {
+  if (jarvis && asked) return `pide:${asked.permission.requestId}`;
   if (!jarvis || jarvis.kind !== 'needs') return undefined;
   if (jarvis.permission) return `permiso:${jarvis.permission.requestId}`;
   if (jarvis.yourTurnId) return `turno:${jarvis.yourTurnId}`;

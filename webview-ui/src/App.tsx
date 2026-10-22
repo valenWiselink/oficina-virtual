@@ -34,7 +34,7 @@ import { useTerminalDock } from './hooks/useTerminalDock.js';
 import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { markYourTurnDone } from './identity/yourTurnStore.js';
 import { JarvisBar } from './jarvis/JarvisBar.js';
-import { findJarvis, jarvisHome, withoutJarvis } from './jarvis/jarvisRules.js';
+import { askedPermission, findJarvis, jarvisHome, withoutJarvis } from './jarvis/jarvisRules.js';
 import { JarvisVisor } from './jarvis/JarvisVisor.js';
 import { useTalkShortcut } from './jarvis/talk.js';
 import { useJarvisSpeech } from './jarvis/useJarvisSpeech.js';
@@ -557,6 +557,7 @@ function App() {
         {!isDebugMode && (
           <JarvisVisor
             jarvis={jarvis}
+            asked={askedPermission(jarvis, agentViews)}
             actions={agentActions}
             onAnswer={() => setJarvisFocus((n) => n + 1)}
           />

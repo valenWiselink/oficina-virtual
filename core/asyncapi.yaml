@@ -663,6 +663,12 @@ components:
         yourTurnId:
           type: string
           description: Record the yourTurn came from, to mark it done per answer.
+        asksPermission:
+          type: string
+          description: |
+            Jarvis only: the request id of another agent's permission it is
+            asking Valentín about (the visor shows it with Aprobar and
+            Rechazar; he may also say yes to Jarvis).
         yourTurnAt:
           type: number
           description: When that answer was written (ms since epoch, from the record).

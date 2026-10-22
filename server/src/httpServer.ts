@@ -23,6 +23,7 @@ import { SERVER_BOOT_ID } from './serverBoot.js';
 import { jarvisPowers } from './supervisors/jarvisTools.js';
 import { supervisors } from './supervisors/supervision.js';
 import { registerSupervisorMcp } from './supervisors/supervisorMcp.js';
+import { ConsentDesk } from './supervisors/valentinConsent.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { registerTerminalRoutes } from './terminal/terminalRoutes.js';
 import type { AgentState } from './types.js';
@@ -125,6 +126,8 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
   // Supervisor agents' tools (standalone): each supervisor has a token of its
   // own. The supervisor of everyone (Jarvis) also opens and closes agents.
   if (!options.embedded) {
+    // One per office: what Valentín was shown and which of his yeses were used.
+    const consent = new ConsentDesk();
     registerSupervisorMcp(
       app,
       {
@@ -132,6 +135,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
         registry: supervisors(),
         broker: options.permissionBroker,
         terminalOf: (id) => options.ptyManager?.get(id),
+        consent,
         ...jarvisPowers(options),
       },
       allowedHostnames,

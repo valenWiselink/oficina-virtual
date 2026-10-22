@@ -8,6 +8,7 @@ import { HookEventOrder } from './hookEventOrder.js';
 import type { SessionRouter } from './sessionRouter.js';
 import { getInlineTeammates, hasInlineTeammates } from './teamUtils.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
+import { transcriptMoved } from './transcriptMove.js';
 import type { AgentState } from './types.js';
 
 const debug = process.env.PIXEL_AGENTS_DEBUG !== '0';
@@ -47,6 +48,9 @@ interface SessionLifecycleCallbacks {
   ) => void;
   /** Called when a session is resumed (--resume). Clears dismissals so the file can be re-adopted. */
   onSessionResume?: (transcriptPath: string) => void;
+  /** Called when a known agent's hooks report its conversation in another
+   *  file than the one followed (transcriptMove.ts): follow that one. */
+  onTranscriptMoved?: (agentId: number, transcriptPath: string) => void;
   /** Called when a session ends (exit/logout). */
   onSessionEnd?: (agentId: number, reason: string) => void;
   /** Called when an Agent Teams teammate is detected via SubagentStart hook.
@@ -320,6 +324,14 @@ export class HookEventHandler {
 
     const agent = this.agents.get(agentId);
     if (!agent) return;
+
+    const reported = typeof event.transcript_path === 'string' ? event.transcript_path : undefined;
+    if (agent.leadAgentId === undefined && transcriptMoved(agent.jsonlFile, reported)) {
+      console.log(
+        `[Pixel Agents] Hook: Agent ${agentId} - its conversation is in ${reported}, not ${agent.jsonlFile}; following it`,
+      );
+      this.lifecycleCallbacks.onTranscriptMoved?.(agentId, reported!);
+    }
 
     agent.hookDelivered = true;
     if (!this.order.admit(agentId, event)) {
