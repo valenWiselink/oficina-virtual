@@ -2,11 +2,24 @@ import { useSyncExternalStore } from 'react';
 
 import type { JarvisVoiceStatus } from '../../../core/src/messages.js';
 import { transport } from '../transport/index.js';
+import {
+  arrived,
+  emptyQueue,
+  expiresAt,
+  failed,
+  finished,
+  inLine,
+  nextUp,
+  queued,
+  type SpeechQueue,
+  type Utterance,
+} from './speechQueue.js';
 
 /**
  * Jarvis's mouth, in the office: its voice settings as the office has them,
  * whether you silenced it here, and what it is saying right now. The audio is
- * made by the office (server/src/voice/) and played in this window.
+ * made by the office (server/src/voice/) and played in this window, one
+ * answer after the other (speechQueue.ts).
  */
 
 export interface JarvisVoiceState {
@@ -33,7 +46,8 @@ function readMuted(): boolean {
 let state: JarvisVoiceState = { muted: readMuted() };
 const listeners = new Set<() => void>();
 let audio: HTMLAudioElement | undefined;
-let wanted: string | undefined;
+let line: SpeechQueue = emptyQueue();
+let expiry: ReturnType<typeof setTimeout> | undefined;
 let seq = 0;
 
 function set(change: Partial<JarvisVoiceState>): void {
@@ -45,24 +59,38 @@ transport.onMessage((msg) => {
   if (msg.type === 'jarvisVoiceStatus') {
     set({ status: msg, error: msg.error });
   } else if (msg.type === 'jarvisVoice') {
-    if (msg.key !== wanted) return;
-    play(msg.key, msg.text, `data:${msg.mime};base64,${msg.audio}`);
+    line = arrived(line, msg.key, `data:${msg.mime};base64,${msg.audio}`, msg.text);
+    next();
   } else if (msg.type === 'jarvisVoiceFailed') {
-    if (msg.key !== wanted) return;
-    wanted = undefined;
+    if (!inLine(line, msg.key)) return;
+    line = failed(line, msg.key);
     set({ error: msg.reason });
+    next();
   }
 });
 
-function play(key: string, text: string, src: string): void {
-  stopJarvis();
-  const a = new Audio(src);
+/** Say what comes next in line, if its turn came; true when it started. */
+function next(): boolean {
+  clearTimeout(expiry);
+  const { queue, play: u } = nextUp(line, Date.now());
+  line = queue;
+  if (u) play(u);
+  // The first in line may never get its audio: let it go when it is too old.
+  const until = expiresAt(line);
+  if (until !== undefined) expiry = setTimeout(next, Math.max(0, until - Date.now()) + 50);
+  return !!u;
+}
+
+function play(u: Utterance): void {
+  const a = new Audio(u.src);
   audio = a;
-  set({ speaking: { key, text }, error: undefined });
+  set({ speaking: { key: u.key, text: u.text ?? '' }, error: undefined });
   const done = () => {
     if (audio !== a) return;
     audio = undefined;
-    set({ speaking: undefined });
+    line = finished(line, u.key);
+    // Straight into the next one, without the subtitles blinking in between.
+    if (!next()) set({ speaking: undefined });
   };
   a.onended = done;
   a.onerror = done;
@@ -74,27 +102,33 @@ function play(key: string, text: string, src: string): void {
   });
 }
 
+function ask(key: string, what: { id: number } | { text: string }): void {
+  line = queued(line, { key, at: Date.now() });
+  transport.send({ type: 'jarvisSay', key, ...what });
+}
+
 /** It speaks if a voice is set and you did not silence it here. */
 export function voiceOn(s: JarvisVoiceState = state): boolean {
   return !!s.status && s.status.engine !== 'off' && !s.muted;
 }
 
-/** Say Jarvis's latest answer (agent `id`). */
+/** Say Jarvis's latest answer (agent `id`), after what it is saying now. */
 export function sayLatest(id: number): void {
   if (!voiceOn()) return;
-  wanted = `respuesta-${id}-${++seq}`;
-  transport.send({ type: 'jarvisSay', key: wanted, id });
+  ask(`respuesta-${id}-${++seq}`, { id });
 }
 
-/** Say a test phrase (Ajustes → Probar), muted or not. */
+/** Say a test phrase (Ajustes → Probar) right away, muted or not. */
 export function sayTest(text: string): void {
-  wanted = `prueba-${++seq}`;
-  transport.send({ type: 'jarvisSay', key: wanted, text });
+  stopJarvis();
+  ask(`prueba-${++seq}`, { text });
 }
 
-/** Quiet now: what it was saying stops (Esc, «Callar», talking to it). */
+/** Quiet now: what it was saying stops and nothing in line is said (Esc,
+ *  «Callar», talking to it). */
 export function stopJarvis(): void {
-  wanted = undefined;
+  line = emptyQueue();
+  clearTimeout(expiry);
   if (audio) {
     const a = audio;
     audio = undefined;

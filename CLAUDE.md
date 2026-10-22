@@ -121,11 +121,15 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   (what is said aloud, Fish Audio `s2.1-pro-free` or ElevenLabs Flash over
   HTTP; `OFICINA_FISH_URL`/`OFICINA_ELEVEN_URL` point them at a mock),
   messages `jarvisSay` → `jarvisVoice` (base64 mp3, to the asking office).
+  The page says its answers in line (`jarvis/speechQueue.ts`): a new one
+  waits for the one it is saying; Esc, «Callar» or talking to it empties the
+  line; at most 2 wait, and one that waited 60 s without starting is dropped.
   Its ears are in the webview: `jarvis/jarvisEars.ts` records until silence,
   `jarvis/whisperWorker.ts` runs Whisper with Transformers.js (WebGPU, else
   WASM; the ONNX runtime files ship with the office, the model downloads from
   Hugging Face once). Test with Edge headless and
-  `--use-file-for-fake-audio-capture=<wav>%noloop`.
+  `--use-file-for-fake-audio-capture=<wav>%noloop`, always with `--mute-audio`
+  (headless Edge plays through the PC's speakers).
 - `serverBoot.ts` — this run's id. Agent ids restart at 1 on every start, so
   `/ws` greets with `serverHello` (the page reloads on a new run) and the
   terminal socket refuses a `?boot=` from another run.
