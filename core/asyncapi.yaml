@@ -624,6 +624,12 @@ components:
           items:
             type: integer
           description: Ids of the live supervisors watching over this agent (absent = none).
+        launchedBy:
+          type: string
+          description: |
+            Session id of the supervisor that opened it (lanzar_agente): the
+            office keeps it in that supervisor's workspace unless it is moved
+            by hand.
         repo:
           type: string
           description: Main repository folder (also for a git worktree).

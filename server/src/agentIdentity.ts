@@ -415,6 +415,7 @@ export function identityMessage(id: number, agent: AgentState): Record<string, u
     canSetRun: agent.officeTerminal ? true : undefined,
     supervision: agent.supervision,
     supervisedBy: supervisedBy.length > 0 ? supervisedBy : undefined,
+    launchedBy: supervisors().launcherOf(agent.sessionId),
     repo,
     area,
     tasks: agent.tasks ?? [],

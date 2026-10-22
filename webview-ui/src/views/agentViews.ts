@@ -80,6 +80,11 @@ export interface AgentView {
   supervision?: SupervisionScope;
   /** Ids of the supervisors watching over it (empty = none). */
   supervisedBy: number[];
+  /** Session of the supervisor that opened it (lanzar_agente), if one did. */
+  launchedBy?: string;
+  /** That supervisor's workspace: the agent belongs there unless it is moved
+   *  by hand (workspaceRules). */
+  home?: string;
   /** Their names, for the card ("Lo supervisa «Jefa»"). */
   supervisorNames: string[];
   /** For a supervisor: how many agents it watches over right now. */
@@ -428,6 +433,7 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
         canSetRun: identity?.canSetRun === true,
         supervision: identity?.supervision,
         supervisedBy: identity?.supervisedBy ?? [],
+        launchedBy: identity?.launchedBy,
         subagents: subs,
         hasTerminal: input.terminalAgentIds.includes(id),
         permission,
@@ -455,18 +461,22 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
   return withSupervisionNames(views);
 }
 
-/** Who watches over each agent, by name, and how many each supervisor has.
+/** Who watches over each agent, by name, how many each supervisor has, and
+ *  the workspace of the supervisor that opened it (its home).
  *  A supervised agent that needs something waits on its supervisor, not on
  *  you: it leaves "Te necesita" (and the arrow to "Vos") for the supervisor
  *  alone — asked for 2026-10-20 ("que se me acerque solo el supervisor"). */
 export function withSupervisionNames(views: AgentView[]): AgentView[] {
   const byId = new Map(views.map((v) => [v.id, v]));
+  const byKey = new Map(views.map((v) => [v.key, v]));
   return views.map((v) => {
     const supervisorNames = v.supervisedBy.flatMap((id) => byId.get(id)?.name ?? []);
     const teamSize = views.filter((o) => o.supervisedBy.includes(v.id)).length;
+    const opener = v.launchedBy ? byKey.get(v.launchedBy)?.supervision : undefined;
+    const home = opener?.kind === 'workspace' ? opener.workspaceId : undefined;
     const boss =
       v.kind === 'needs' ? v.supervisedBy.map((id) => byId.get(id)).find(Boolean) : undefined;
-    if (!boss) return { ...v, supervisorNames, teamSize };
+    if (!boss) return { ...v, supervisorNames, teamSize, home };
     return {
       ...v,
       kind: 'work',
@@ -474,6 +484,7 @@ export function withSupervisionNames(views: AgentView[]): AgentView[] {
       askingSupervisor: { id: boss.id, name: boss.name },
       supervisorNames,
       teamSize,
+      home,
     };
   });
 }

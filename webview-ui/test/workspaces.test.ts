@@ -37,6 +37,13 @@ describe('workspaceOf', () => {
     expect(workspaceOf(agent(4, 'k4'), s)).toBeNull();
   });
 
+  it('puts an agent its supervisor opened in that workspace, unless moved by hand', () => {
+    const s = state({ assignments: { k2: 'per' } });
+    expect(workspaceOf({ key: 'k1', dir: 'webapp', home: 'per' }, s)).toBe('per');
+    expect(workspaceOf({ key: 'k2', dir: 'webapp', home: 'wl' }, s)).toBe('per');
+    expect(workspaceOf({ key: 'k3', dir: 'webapp', home: 'borrado' }, s)).toBe('wl');
+  });
+
   it('ignores an assignment to a workspace that no longer exists', () => {
     expect(workspaceOf(agent(1, 'k1', 'webapp'), state({ assignments: { k1: 'borrado' } }))).toBe(
       'wl',

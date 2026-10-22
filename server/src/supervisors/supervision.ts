@@ -72,7 +72,8 @@ export function scopeWords(scope: SupervisionScope): string {
 /** Where a team supervisor may launch agents, in words (supervisorLaunch.ts
  *  decides; the supervisor of everyone is Jarvis, with its own rules). */
 function launchWhere(scope: SupervisionScope): string {
-  if (scope.kind === 'workspace') return `una de las carpetas del espacio «${scope.name}»`;
+  if (scope.kind === 'workspace')
+    return `la tuya, la de alguien de tu equipo o una de las del espacio «${scope.name}»`;
   return 'la tuya o la de uno de tus agentes';
 }
 
@@ -316,6 +317,16 @@ export class SupervisorRegistry {
   /** Once, for the first status seen of a session a supervisor just launched. */
   takeFirstTurn(sessionId: string): boolean {
     return this.firstTurn.delete(sessionId);
+  }
+
+  /** The session of the supervisor that opened this one (lanzar_agente), if
+   *  any: the browser keeps it in that supervisor's workspace. */
+  launcherOf(sessionId: string): string | undefined {
+    if (!sessionId) return undefined;
+    for (const [supervisor, launched] of Object.entries(this.launched.all())) {
+      if (launched.includes(sessionId)) return supervisor;
+    }
+    return undefined;
   }
 
   /** The live supervisors (agent ids) a session is supervised by. */

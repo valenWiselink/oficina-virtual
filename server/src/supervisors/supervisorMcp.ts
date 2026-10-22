@@ -31,11 +31,13 @@ function registerTeamLaunchTools(server: McpServer, tools: SupervisorTools): voi
     'lanzar_agente',
     {
       description:
-        'Abre un agente nuevo de la oficina (una sesión propia de Claude Code, no un subagente) con su primera tarea. Entra a tu equipo y la oficina te avisa cuando pida algo o termine. Sólo en carpetas de lo que supervisás (para un espacio, una de sus carpetas) y con un tope de agentes abiertos por vos andando a la vez.',
+        'Abre un agente nuevo de la oficina (una sesión propia de Claude Code, no un subagente) con su primera tarea. Entra a tu equipo y la oficina te avisa cuando pida algo o termine. Sólo donde trabajan vos o tu equipo (o en una carpeta de tu espacio, si tiene) y con un tope de agentes abiertos por vos andando a la vez.',
       inputSchema: {
         carpeta: z
           .string()
-          .describe('Dónde trabaja: el nombre de una carpeta de tu espacio o su ruta completa'),
+          .describe(
+            'Dónde trabaja: el nombre de la carpeta (la tuya o la de alguien de tu equipo) o su ruta completa',
+          ),
         tarea: z
           .string()
           .describe('Su primer mensaje: qué hacer, en qué repo o ticket y qué entregar'),

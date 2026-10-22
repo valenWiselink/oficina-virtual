@@ -231,6 +231,20 @@ describe('withSupervisionNames: only the supervisor comes to you', () => {
     expect(boss.teamSize).toBe(1);
   });
 
+  it('an agent a workspace supervisor opened lives in that workspace', () => {
+    const [, opened, other] = withSupervisionNames([
+      v({
+        id: 10,
+        key: 's-jefa',
+        supervision: { kind: 'workspace', workspaceId: 'esp-1', name: 'Desarrollo' },
+      }),
+      v({ id: 2, key: 's-2', launchedBy: 's-jefa' }),
+      v({ id: 3, key: 's-3', launchedBy: 's-jarvis' }),
+    ]);
+    expect(opened.home).toBe('esp-1');
+    expect(other.home).toBeUndefined();
+  });
+
   it('with its supervisor gone, it comes to you again', () => {
     const [worker] = withSupervisionNames([v({ id: 2, kind: 'needs', supervisedBy: [10] })]);
     expect(worker.kind).toBe('needs');

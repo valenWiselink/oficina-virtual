@@ -66,8 +66,11 @@ describe('launchFolder', () => {
   it('refuses what would land outside the workspace, saying where it can', () => {
     const out = launchFolder(dirs.ajena, places());
     expect(out.ok).toBe(false);
-    expect(!out.ok && out.reason).toContain('«ajena» no es una carpeta de tu espacio «Wiselink»');
-    expect(!out.ok && out.reason).toContain('Las carpetas de tu espacio: development, webapp');
+    expect(!out.ok && out.reason).toContain(
+      '«ajena» no es una carpeta de tu espacio «Wiselink» ni de tu equipo',
+    );
+    expect(!out.ok && out.reason).toContain(`Podés abrir en: ${dirs.dev}`);
+    expect(!out.ok && out.reason).toContain('carpetas de tu espacio: development, webapp');
     expect(launchFolder('ajena', places()).ok).toBe(false);
   });
 
@@ -77,11 +80,14 @@ describe('launchFolder', () => {
     expect(launchFolder('  ', places()).ok).toBe(false);
   });
 
-  it('waits for the browser to say the workspace folders, and says when there are none', () => {
-    const unknown = launchFolder(dirs.dev, places({ workspaceFolders: undefined }));
-    expect(!unknown.ok && unknown.reason).toContain('Todavía no sé qué carpetas tiene tu espacio');
-    const empty = launchFolder(dirs.dev, places({ workspaceFolders: [] }));
-    expect(!empty.ok && empty.reason).toContain('no tiene carpetas propias');
+  it('in a workspace made by hand (no folders) takes where it or its team works', () => {
+    for (const workspaceFolders of [undefined, []]) {
+      const byHand = places({ workspaceFolders });
+      expect(launchFolder(dirs.dev, byHand)).toEqual({ ok: true, path: dirs.dev });
+      expect(launchFolder('development', byHand)).toEqual({ ok: true, path: dirs.dev });
+      const out = launchFolder(dirs.webapp, byHand);
+      expect(!out.ok && out.reason).toContain('no es una carpeta de tu espacio');
+    }
   });
 
   it('keeps a hand-picked team to its own folders, and "all" to the office’s', () => {
@@ -234,6 +240,9 @@ describe('lanzar_agente and cerrar_agente', () => {
     ]);
     expect(registry.teamOf(store.get(10)!)).toEqual(['s1', 's20']);
     expect(registry.supervisorsOf('s20')).toEqual([10]);
+    // The office remembers who opened it: the browser keeps it in that space.
+    expect(registry.launcherOf('s20')).toBe('s10');
+    expect(registry.launcherOf('s1')).toBeUndefined();
     expect(tools.equipo()).toContain('«Tests web» (id 20) · trabajando');
   });
 
@@ -340,10 +349,20 @@ describe('lanzar_agente and cerrar_agente', () => {
     expect(written.get(10)).not.toContain('Pagos');
   });
 
+  it('opens in its own folder when its workspace has no folders (made by hand)', async () => {
+    const { registry, tools, launches } = office();
+    registry.folders.set('s10', []);
+    expect(await tools.lanzarAgente(request({ carpeta: 'development' }))).toContain('Listo');
+    expect(launches[0].directoryPath).toBe(dirs.dev);
+    expect(await tools.lanzarAgente(request({ apodo: 'Otro', carpeta: dirs.webapp }))).toContain(
+      'ni de tu equipo',
+    );
+  });
+
   it('tells the supervisor about both tools in its role', () => {
     const role = supervisorPrompt(workspace);
     expect(role).toContain('`lanzar_agente`');
     expect(role).toContain('`cerrar_agente`');
-    expect(role).toContain('una de las carpetas del espacio «Wiselink»');
+    expect(role).toContain('o una de las del espacio «Wiselink»');
   });
 });

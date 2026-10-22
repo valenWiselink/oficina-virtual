@@ -33,7 +33,8 @@ const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 export interface LaunchPlaces {
   scope: SupervisionScope;
   /** Workspace scope: the folder names whose agents land in its workspace, as
-   *  the browser sent them (undefined: not sent yet). */
+   *  the browser sent them (undefined: not sent yet; most workspaces have none
+   *  and are made by hand with "Mover a…"). */
   workspaceFolders?: readonly string[];
   /** Full paths of the supervisor's own folder and its team's. */
   teamFolders: readonly string[];
@@ -66,49 +67,44 @@ function unique(paths: readonly string[]): string[] {
 /** Why a full path is out of the supervisor's scope, or undefined when it is in. */
 function outOfScope(dirPath: string, places: LaunchPlaces): string | undefined {
   const scope = places.scope;
-  if (scope.kind === 'workspace') {
-    const folders = places.workspaceFolders;
-    if (!folders) {
-      return 'Todavía no sé qué carpetas tiene tu espacio: la ventana de la oficina tiene que estar abierta para que me las pase. Probá de nuevo en un rato.';
-    }
-    if (folders.length === 0) {
-      return `Tu espacio «${scope.name}» no tiene carpetas propias: pedile a Valentín que le agregue la carpeta (Espacios → Editar).`;
-    }
-    return folders.some((f) => sameName(f, folderName(dirPath)))
-      ? undefined
-      : `«${folderName(dirPath)}» no es una carpeta de tu espacio «${scope.name}».`;
-  }
-  const allowed =
-    scope.kind === 'agents' ? places.teamFolders : [...places.teamFolders, ...places.knownFolders];
   const key = normalizeDirectoryPath(dirPath);
-  return allowed.some((p) => normalizeDirectoryPath(p) === key)
+  const isAny = (paths: readonly string[]) => paths.some((p) => normalizeDirectoryPath(p) === key);
+  // Where it or its team already works is always in scope: what it opens
+  // there stays on its team (the office remembers who opened it).
+  if (isAny(places.teamFolders)) return undefined;
+  if (scope.kind === 'workspace') {
+    return (places.workspaceFolders ?? []).some((f) => sameName(f, folderName(dirPath)))
+      ? undefined
+      : `«${folderName(dirPath)}» no es una carpeta de tu espacio «${scope.name}» ni de tu equipo.`;
+  }
+  if (scope.kind === 'agents') return 'Sólo podés abrir agentes donde trabajan vos o tus agentes.';
+  return isAny(places.knownFolders)
     ? undefined
-    : scope.kind === 'agents'
-      ? 'Sólo podés lanzar donde trabajan vos o tus agentes.'
-      : 'Esa carpeta no la conoce la oficina (ningún agente trabajó ahí ni es una de sus carpetas).';
+    : 'Esa carpeta no la conoce la oficina (ningún agente trabajó ahí ni es una de sus carpetas).';
 }
 
 /** Where it may launch, in words, for a refusal. */
 export function placesText(places: LaunchPlaces): string {
-  if (places.scope.kind === 'workspace') {
-    const folders = places.workspaceFolders ?? [];
-    return folders.length > 0 ? `Las carpetas de tu espacio: ${folders.join(', ')}.` : '';
-  }
   const paths = unique(
-    places.scope.kind === 'agents'
-      ? places.teamFolders
-      : [...places.teamFolders, ...places.knownFolders],
+    places.scope.kind === 'all'
+      ? [...places.teamFolders, ...places.knownFolders]
+      : places.teamFolders,
   );
-  if (paths.length === 0) return '';
-  const shown = paths.slice(0, PLACES_SHOWN).join(', ');
-  return `Podés lanzar en: ${shown}${paths.length > PLACES_SHOWN ? '…' : ''}.`;
+  const named = places.scope.kind === 'workspace' ? (places.workspaceFolders ?? []) : [];
+  const parts = [
+    paths.length > 0
+      ? `Podés abrir en: ${paths.slice(0, PLACES_SHOWN).join(', ')}${paths.length > PLACES_SHOWN ? '…' : ''}.`
+      : '',
+    named.length > 0 ? `También en las carpetas de tu espacio: ${named.join(', ')}.` : '',
+  ];
+  return parts.filter(Boolean).join(' ');
 }
 
 /**
  * The folder to launch in: a full path, or a folder's name resolved against
- * the folders the office knows. It must exist and be one where the new agent
- * lands in the supervisor's own scope (its workspace's folders, its team's
- * folders, or any folder the office knows for "all").
+ * the folders the office knows. It must exist and be in the supervisor's own
+ * scope: where it or its team works, or (a workspace) one of its folders, or
+ * (for "all") any folder the office knows.
  */
 export function launchFolder(requested: string, places: LaunchPlaces): FolderVerdict {
   const raw = requested.trim().replace(/^«|»$/g, '');
