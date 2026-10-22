@@ -77,7 +77,26 @@ export function JarvisBar({
       className="shrink-0 border-t border-border bg-bg-dark flex flex-col"
     >
       {open && (
-        <div className="relative overflow-hidden h-[min(420px,45vh)] min-h-0 flex border-b border-border bg-bg">
+        <div className="relative overflow-hidden h-[min(440px,48vh)] min-h-0 flex flex-col border-b border-border bg-bg">
+          {/* It has no card: what a card offers (terminal, Editar, ✕) lives here.
+              Editar relaunches it with its current role. */}
+          <div className="shrink-0 flex flex-wrap items-center justify-end gap-4 px-12 py-6 border-b border-border">
+            {actions.onOpenTerminal && (
+              <Button size="sm" variant="ghost" onClick={() => actions.onOpenTerminal?.(jarvis.id)}>
+                Ver su terminal
+              </Button>
+            )}
+            {actions.onEdit && (
+              <Button size="sm" variant="ghost" onClick={() => actions.onEdit?.(jarvis.id)}>
+                Editar
+              </Button>
+            )}
+            {actions.onClose && (
+              <Button size="sm" variant="ghost" onClick={() => actions.onClose?.(jarvis.id)}>
+                Cerrar a Jarvis
+              </Button>
+            )}
+          </div>
           <div className="relative flex-1 min-w-0 min-h-0">
             <ChatPane
               view={jarvis}
