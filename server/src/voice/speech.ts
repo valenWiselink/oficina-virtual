@@ -10,6 +10,7 @@ import { createHash } from 'crypto';
 import {
   ELEVEN_DEFAULT_VOICE,
   ELEVEN_MODEL,
+  FISH_DEFAULT_VOICE,
   FISH_MODEL,
   type VoiceSettings,
 } from './voiceSettings.js';
@@ -42,8 +43,8 @@ export function speechText(raw: string, max = SPOKEN_MAX_CHARS): string {
 export type Synthesized = { ok: true; audio: Buffer; mime: string } | { ok: false; reason: string };
 type Fetch = typeof fetch;
 
-const FISH_URL = () => process.env.OFICINA_FISH_URL ?? 'https://api.fish.audio';
-const ELEVEN_URL = () => process.env.OFICINA_ELEVEN_URL ?? 'https://api.elevenlabs.io';
+export const FISH_URL = () => process.env.OFICINA_FISH_URL ?? 'https://api.fish.audio';
+export const ELEVEN_URL = () => process.env.OFICINA_ELEVEN_URL ?? 'https://api.elevenlabs.io';
 
 /** Why the service said no, in words for Valentín. */
 function refusal(service: string, status: number): string {
@@ -54,6 +55,14 @@ function refusal(service: string, status: number): string {
   return `${service} respondió ${status}`;
 }
 
+/** The same, reading the answer: a spent quota comes back as a 401 too. */
+export async function refusedBy(service: string, res: Response): Promise<string> {
+  const body = await res.text().catch(() => '');
+  if (/quota_exceeded|insufficient|credits?/i.test(body))
+    return `${service} dice que no hay crédito`;
+  return refusal(service, res.status);
+}
+
 async function call(
   service: string,
   doFetch: Fetch,
@@ -62,7 +71,7 @@ async function call(
 ): Promise<Synthesized> {
   try {
     const res = await doFetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
-    if (!res.ok) return { ok: false, reason: refusal(service, res.status) };
+    if (!res.ok) return { ok: false, reason: await refusedBy(service, res) };
     const audio = Buffer.from(await res.arrayBuffer());
     if (audio.length === 0) return { ok: false, reason: `${service} no devolvió audio` };
     return { ok: true, audio, mime: 'audio/mpeg' };
@@ -97,7 +106,7 @@ export function synthesize(
         text,
         format: 'mp3',
         latency: 'balanced',
-        ...(settings.fishVoice ? { reference_id: settings.fishVoice } : {}),
+        reference_id: settings.fishVoice ?? FISH_DEFAULT_VOICE,
       }),
     });
   }

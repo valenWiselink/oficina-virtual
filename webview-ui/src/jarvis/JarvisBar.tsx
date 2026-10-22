@@ -8,6 +8,7 @@ import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
 import { ChoiceReplies } from '../views/CardExtras.js';
 import { useJarvisEars } from './jarvisEars.js';
+import { dismissJarvisNotice, useJarvisNotice } from './jarvisNotice.js';
 import { JarvisRing } from './JarvisRing.js';
 import { jarvisLine, jarvisMood } from './jarvisRules.js';
 import { requestJarvisVoice, setJarvisMuted, useJarvisVoice } from './jarvisVoice.js';
@@ -38,6 +39,7 @@ export function JarvisBar({
   const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
   const voice = useJarvisVoice();
   const ears = useJarvisEars();
+  const notice = useJarvisNotice();
   useEffect(() => requestJarvisVoice(), []);
 
   useEffect(() => {
@@ -231,6 +233,14 @@ export function JarvisBar({
           <p className="m-0 basis-full text-2xs text-danger" role="status">
             No le llegó: su terminal no está conectada. Probá de nuevo en un momento.
           </p>
+        )}
+        {notice && (
+          <div className="basis-full flex items-center gap-8" role="status">
+            <p className="m-0 flex-1 min-w-0 text-2xs text-warning">{notice}</p>
+            <Button size="sm" variant="ghost" onClick={dismissJarvisNotice}>
+              Entendido
+            </Button>
+          </div>
         )}
         {earsLine && (
           <p

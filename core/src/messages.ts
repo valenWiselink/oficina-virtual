@@ -760,12 +760,15 @@ export interface JarvisVoice {
   mime: string;
   audio: string;
   text: string;
+  /** Said once when ElevenLabs could not and Fish spoke instead (for the bar). */
+  notice?: string;
 }
 
 export interface JarvisVoiceFailed {
   type: 'jarvisVoiceFailed';
   key: string;
   reason: string;
+  notice?: string;
 }
 
 export interface AgentDiagnostics {

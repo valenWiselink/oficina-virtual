@@ -16,7 +16,7 @@ export type VoiceEngine = 'off' | 'fish' | 'elevenlabs';
 export interface VoiceSettings {
   engine: VoiceEngine;
   fishKey?: string;
-  /** A Fish Audio voice (reference_id); empty = its default voice. */
+  /** A Fish Audio voice (reference_id); empty = FISH_DEFAULT_VOICE. */
   fishVoice?: string;
   elevenKey?: string;
   elevenVoice?: string;
@@ -28,8 +28,10 @@ export interface VoiceSettings {
 export const FISH_MODEL = 's2.1-pro-free';
 /** ElevenLabs' fastest model that speaks Spanish. */
 export const ELEVEN_MODEL = 'eleven_flash_v2_5';
-/** Diego (Argentine, conversational): a voice any account can use. */
-export const ELEVEN_DEFAULT_VOICE = '5da4nOCHLuswM3TyAUSo';
+/** Edoardo (Latin American, deep and measured; Valentín's choice, 2026-10-22). */
+export const ELEVEN_DEFAULT_VOICE = 'YqZLNYWZm98oKaaLZkUA';
+/** Marcus: the Fish voice Jarvis falls back to when ElevenLabs cannot speak. */
+export const FISH_DEFAULT_VOICE = '93dc4e3a1a494d58ad0f50f712b8b152';
 
 /** Where it lives (resolved on use: tests move the home directory). */
 const settingsFile = () => path.join(os.homedir(), SERVER_JSON_DIR, 'jarvis', 'voz.json');

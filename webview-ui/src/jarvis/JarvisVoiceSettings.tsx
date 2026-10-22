@@ -18,7 +18,8 @@ const TEST_PHRASE = 'Buenas tardes, señor. Todo en orden en la oficina.';
  * Ajustes → Jarvis → Voz: which engine speaks for Jarvis, its key and its
  * voice. The key goes to the office and stays there (it is never shown back:
  * only «guardada»). Fish Audio's free model is free through 30/11/2026;
- * ElevenLabs spends the credits of your plan.
+ * ElevenLabs spends the credits of your plan; when it cannot (no key, no
+ * credit), Jarvis speaks with Fish instead.
  */
 export function JarvisVoiceSettings() {
   const { status, error } = useJarvisVoice();
@@ -48,7 +49,7 @@ export function JarvisVoiceSettings() {
           <p className="m-0 text-xs text-text-2">
             {fish
               ? 'Gratis hasta el 30/11/2026 (modelo s2.1-pro-free). La clave se crea en fish.audio, en la sección de API.'
-              : 'Gasta créditos de tu plan de ElevenLabs (modelo Flash, el más barato que habla castellano).'}
+              : 'Gasta créditos de tu plan de ElevenLabs (modelo Flash, el más barato que habla castellano). Si ElevenLabs no puede (sin crédito o sin clave), Jarvis habla con Fish.'}
           </p>
           <form
             className="flex items-center gap-6"
@@ -94,9 +95,7 @@ export function JarvisVoiceSettings() {
               autoComplete="off"
               className="flex-1 min-w-0"
               placeholder={
-                fish
-                  ? 'Id de la voz (vacío: la de siempre)'
-                  : 'Id de la voz (vacío: Diego, argentino)'
+                fish ? 'Id de la voz (vacío: Marcus)' : 'Id de la voz (vacío: Edoardo, latino)'
               }
               value={voice}
               onChange={(e) => setVoice(e.target.value)}
