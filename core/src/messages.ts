@@ -71,6 +71,9 @@ export type ServerMessage =
   | PrStatuses
   | AgentChat
   | AgentChatAppend
+  | JarvisVoiceStatus
+  | JarvisVoice
+  | JarvisVoiceFailed
   | AgentDiagnostics;
 
 export type ClientMessage =
@@ -115,7 +118,10 @@ export type ClientMessage =
   | PickFolder
   | OpenPath
   | RequestDiagnostics
-  | WriteDaySummary;
+  | WriteDaySummary
+  | RequestJarvisVoice
+  | SetJarvisVoice
+  | JarvisSay;
 
 export interface ProviderCapabilities {
   type: 'providerCapabilities';
@@ -712,6 +718,31 @@ export interface AgentChatAppend {
   items: ChatItem[];
 }
 
+export interface JarvisVoiceStatus {
+  type: 'jarvisVoiceStatus';
+  engine: string;
+  fishKeySet: boolean;
+  fishVoice?: string;
+  elevenKeySet: boolean;
+  elevenVoice?: string;
+  elevenModel?: string;
+  error?: string;
+}
+
+export interface JarvisVoice {
+  type: 'jarvisVoice';
+  key: string;
+  mime: string;
+  audio: string;
+  text: string;
+}
+
+export interface JarvisVoiceFailed {
+  type: 'jarvisVoiceFailed';
+  key: string;
+  reason: string;
+}
+
 export interface AgentDiagnostics {
   type: 'agentDiagnostics';
   agents: Record<string, any>[];
@@ -738,19 +769,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_372;
-  supervision?: AnonymousSchema_373;
+  effort?: AnonymousSchema_388;
+  supervision?: AnonymousSchema_389;
 }
 
-export type AnonymousSchema_372 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_388 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_373 {
-  kind: AnonymousSchema_374;
+export interface AnonymousSchema_389 {
+  kind: AnonymousSchema_390;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_374 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_390 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -799,16 +830,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_399;
+  scope: AnonymousSchema_415;
 }
 
-export interface AnonymousSchema_399 {
-  kind: AnonymousSchema_400;
+export interface AnonymousSchema_415 {
+  kind: AnonymousSchema_416;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_400 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_416 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';
@@ -978,4 +1009,25 @@ export interface DayAchievements {
 export interface DayPr {
   title: string;
   state?: PrState;
+}
+
+export interface RequestJarvisVoice {
+  type: 'requestJarvisVoice';
+}
+
+export interface SetJarvisVoice {
+  type: 'setJarvisVoice';
+  engine?: string;
+  fishKey?: string;
+  fishVoice?: string;
+  elevenKey?: string;
+  elevenVoice?: string;
+  elevenModel?: string;
+}
+
+export interface JarvisSay {
+  type: 'jarvisSay';
+  key: string;
+  id?: number;
+  text?: string;
 }

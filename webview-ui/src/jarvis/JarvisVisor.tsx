@@ -8,12 +8,14 @@ import type { BoardActions } from '../views/BoardCard.js';
 import { ChoiceReplies } from '../views/CardExtras.js';
 import { JarvisVoiceBars } from './JarvisRing.js';
 import { jarvisLine, visorContext, visorKey } from './jarvisRules.js';
+import { stopJarvis, useJarvisVoice } from './jarvisVoice.js';
+import { talkToJarvis } from './talk.js';
 
 /**
- * Jarvis in the middle of the screen, only when it needs you (option D of
- * the 2026-10-22 canvas): what it asks, in large type, with the buttons to
- * answer. «Después» or Esc puts it away (it stays in the bar); the next thing
- * it needs brings it back. With a voice it will also show while it speaks.
+ * Jarvis in the middle of the screen (option D of the 2026-10-22 canvas):
+ * when it needs you — what it asks, in large type, with the buttons to answer
+ * («Después» or Esc put it away; it stays in the bar, and the next thing it
+ * needs brings it back) — and while it speaks, with what it says as subtitles.
  */
 export function JarvisVisor({
   jarvis,
@@ -25,29 +27,38 @@ export function JarvisVisor({
   /** «Contestar»: write to it in the bar. */
   onAnswer: () => void;
 }) {
+  const { speaking } = useJarvisVoice();
   const key = visorKey(jarvis);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
-  const shown = key !== undefined && !dismissed.has(key);
+  const needs = key !== undefined && !dismissed.has(key);
+  const shown = !!jarvis && (needs || !!speaking);
 
   useEffect(() => {
-    if (!shown || key === undefined) return;
-    // Esc only puts the visor away: the terminal still gets it (Claude Code
-    // uses Esc to interrupt), so nothing is stopped here.
+    if (!shown) return;
+    // Esc quiets it and puts the visor away. The terminal still gets the key
+    // (Claude Code uses Esc to interrupt), so nothing is stopped here.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDismissed((d) => new Set(d).add(key));
+      if (e.key !== 'Escape') return;
+      stopJarvis();
+      if (key !== undefined) setDismissed((d) => new Set(d).add(key));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [shown, key]);
 
-  if (!shown || !jarvis || key === undefined) return null;
-  const dismiss = () => setDismissed((d) => new Set(d).add(key));
+  if (!shown || !jarvis) return null;
+  const dismiss = () => {
+    stopJarvis();
+    if (key !== undefined) setDismissed((d) => new Set(d).add(key));
+  };
   const turnId = jarvis.yourTurnId;
-  const command = jarvis.permission
-    ? describeToolInput(jarvis.permission.toolName, jarvis.permission.toolInput).sections[0]
-    : undefined;
-  const line = jarvisLine(jarvis);
-  const context = jarvis.permission ? undefined : visorContext(jarvis.lastReplyHead, line);
+  const command =
+    needs && jarvis.permission
+      ? describeToolInput(jarvis.permission.toolName, jarvis.permission.toolInput).sections[0]
+      : undefined;
+  const line = needs ? jarvisLine(jarvis) : (speaking?.text ?? '');
+  const context =
+    needs && !jarvis.permission ? visorContext(jarvis.lastReplyHead, line) : undefined;
 
   return (
     <>
@@ -55,7 +66,7 @@ export function JarvisVisor({
       <section
         role="dialog"
         aria-modal="false"
-        aria-label="Jarvis le habla"
+        aria-label={needs ? 'Jarvis le habla' : 'Jarvis está hablando'}
         // Above the toolbar at the foot of the office, never over it.
         className="absolute left-1/2 -translate-x-1/2 bottom-88 z-40 w-[min(720px,calc(100%-32px))] box-border soft-panel bg-bg! rounded-2xl px-24 py-20 flex flex-col items-center gap-14 text-center"
       >
@@ -70,7 +81,7 @@ export function JarvisVisor({
           </pre>
         )}
         <div className="flex flex-wrap items-center justify-center gap-8">
-          {jarvis.permission && actions.onAllow && actions.onDeny ? (
+          {needs && jarvis.permission && actions.onAllow && actions.onDeny ? (
             <ApproveButtons
               permission={jarvis.permission}
               onAllow={actions.onAllow}
@@ -79,23 +90,34 @@ export function JarvisVisor({
             />
           ) : (
             <>
-              <ChoiceReplies
-                view={jarvis}
-                onSent={() => {
-                  if (turnId) actions.onYourTurnDone?.(turnId);
-                }}
-              />
+              {needs && (
+                <ChoiceReplies
+                  view={jarvis}
+                  onSent={() => {
+                    if (turnId) actions.onYourTurnDone?.(turnId);
+                  }}
+                />
+              )}
               <Button
                 size="md"
                 variant="accent"
                 onClick={() => {
                   dismiss();
+                  talkToJarvis(jarvis.id);
+                }}
+              >
+                Contestar hablando
+              </Button>
+              <Button
+                size="md"
+                onClick={() => {
+                  dismiss();
                   onAnswer();
                 }}
               >
-                Contestar
+                Escribirle
               </Button>
-              {turnId && actions.onYourTurnDone && (
+              {needs && turnId && actions.onYourTurnDone && (
                 <Button size="md" onClick={() => actions.onYourTurnDone?.(turnId)}>
                   Hecho
                 </Button>
@@ -103,10 +125,12 @@ export function JarvisVisor({
             </>
           )}
           <Button size="md" variant="ghost" onClick={dismiss}>
-            Después
+            {needs ? 'Después' : 'Callar'}
           </Button>
         </div>
-        <div className="text-2xs text-text-2">Esc para cerrarlo · sigue en la barra de abajo</div>
+        <div className="text-2xs text-text-2">
+          Esc para {needs ? 'cerrarlo · sigue en la barra de abajo' : 'callarlo'}
+        </div>
       </section>
     </>
   );

@@ -35,6 +35,8 @@ import { markYourTurnDone } from './identity/yourTurnStore.js';
 import { JarvisBar } from './jarvis/JarvisBar.js';
 import { findJarvis, jarvisHome, withoutJarvis } from './jarvis/jarvisRules.js';
 import { JarvisVisor } from './jarvis/JarvisVisor.js';
+import { useTalkShortcut } from './jarvis/talk.js';
+import { useJarvisSpeech } from './jarvis/useJarvisSpeech.js';
 import { useLaunchDialog } from './launch/LaunchDialog.js';
 import type { TakenLook } from './launch/launchMemory.js';
 import { UsageLimitsMeter } from './limits/UsageLimitsMeter.js';
@@ -250,6 +252,9 @@ function App() {
   const jarvis = findJarvis(agentViews);
   hasJarvisRef.current = jarvis !== undefined;
   const officeViews = withoutJarvis(agentViews, jarvis);
+  // Its voice: it speaks when a turn of its ends; Alt+J talks to it.
+  useJarvisSpeech(jarvis);
+  useTalkShortcut(officeReadOnly ? undefined : jarvis?.id);
   const workspaceState = useWorkspaces();
   const { requestEdit, editDialog } = useEditAgent(agentViews);
   useSupervisionSync(agentViews, workspaceState);

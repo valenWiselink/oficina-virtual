@@ -44,6 +44,7 @@ import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { launchAgent } from './terminal/standaloneAgentLauncher.js';
 import { ruleStatus, setRuleInClaudeMd } from './teTocaRule.js';
+import { handleVoiceMessage } from './voice/voiceMessages.js';
 
 type WsSend = (message: Record<string, unknown>) => void;
 
@@ -585,6 +586,13 @@ export function handleClientMessage(
         suggestions: () =>
           collectDirectorySuggestions(claudeProvider, shownHostDirectoriesFor(ctx)),
       });
+      break;
+
+    case 'requestJarvisVoice':
+    case 'setJarvisVoice':
+    case 'jarvisSay':
+      // Jarvis's voice: its settings and its words as audio (voice/).
+      handleVoiceMessage(msg, send, store);
       break;
 
     default:

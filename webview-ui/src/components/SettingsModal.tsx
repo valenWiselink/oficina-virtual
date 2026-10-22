@@ -5,6 +5,7 @@ import { setBackgroundAgents, useBackgroundAgents } from '../agents/backgroundAg
 import { APP_THEME_CHOICES, setAppThemeChoice, useAppThemeChoice } from '../effects/appTheme.js';
 import { setCalm, useCalmMode } from '../effects/calmMode.js';
 import { TERMINAL_DOCKS, type TerminalDock } from '../hooks/useTerminalDock.js';
+import { JarvisVoiceSettings } from '../jarvis/JarvisVoiceSettings.js';
 import { chooseSoundMode, SOUND_MODES, useSoundMode } from '../notificationSound.js';
 import { TeTocaRuleSetting } from '../onboarding/TeTocaRuleSetting.js';
 import { transport } from '../transport/index.js';
@@ -157,6 +158,9 @@ export function SettingsModal({
           checked={bypassPermissions}
           onChange={onToggleBypassPermissions}
         />
+      </Section>
+      <Section title="Jarvis">
+        <JarvisVoiceSettings />
       </Section>
       <Section title="Avanzado">
         <Switch

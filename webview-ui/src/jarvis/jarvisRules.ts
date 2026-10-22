@@ -1,5 +1,5 @@
 import { describeToolInput } from '../permissions/describeToolInput.js';
-import type { AgentView } from '../views/agentViews.js';
+import type { AgentKind, AgentView } from '../views/agentViews.js';
 
 /**
  * Jarvis has no avatar (asked for 2026-10-22: "sin avatar, sin presencia,
@@ -108,4 +108,21 @@ export function jarvisHome<D extends { path: string }>(
     }
   }
   return best;
+}
+
+/** Kinds where it is in the middle of a turn. */
+export const BUSY_KINDS: ReadonlySet<AgentKind> = new Set(['work', 'think', 'meet', 'research']);
+
+/**
+ * Jarvis speaks when a turn of its ends with something new to say: busy, then
+ * not, with an answer other than the one it had when it started. Not on page
+ * load, not for an answer already heard, not mid-turn for a permission.
+ */
+export function shouldSpeak(
+  before: { id?: number; busy: boolean; headAtStart?: string },
+  now: { id?: number; busy: boolean; head?: string; asksPermission: boolean },
+): boolean {
+  if (now.id === undefined || before.id !== now.id) return false;
+  if (!before.busy || now.busy || now.asksPermission) return false;
+  return !!now.head && now.head !== before.headAtStart;
 }

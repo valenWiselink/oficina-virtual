@@ -153,6 +153,9 @@ components:
         - $ref: '#/components/schemas/PrStatuses'
         - $ref: '#/components/schemas/AgentChat'
         - $ref: '#/components/schemas/AgentChatAppend'
+        - $ref: '#/components/schemas/JarvisVoiceStatus'
+        - $ref: '#/components/schemas/JarvisVoice'
+        - $ref: '#/components/schemas/JarvisVoiceFailed'
         # Diagnostics
         - $ref: '#/components/schemas/AgentDiagnostics'
       discriminator: type
@@ -201,6 +204,9 @@ components:
         - $ref: '#/components/schemas/OpenPath'
         - $ref: '#/components/schemas/RequestDiagnostics'
         - $ref: '#/components/schemas/WriteDaySummary'
+        - $ref: '#/components/schemas/RequestJarvisVoice'
+        - $ref: '#/components/schemas/SetJarvisVoice'
+        - $ref: '#/components/schemas/JarvisSay'
       discriminator: type
 
     # ── Server message variants ────────────────────────────────────
@@ -2421,6 +2427,114 @@ components:
         type:
           const: removeDirectory
         path:
+          type: string
+
+    JarvisVoiceStatus:
+      description: |
+        Jarvis's voice as set in Ajustes, to the office that asked or changed
+        it: the engine (off, fish or elevenlabs) and its voice. Keys are never
+        sent, only whether one is saved. `error`: why a change was refused.
+      type: object
+      additionalProperties: false
+      required: [type, engine, fishKeySet, elevenKeySet]
+      properties:
+        type:
+          const: jarvisVoiceStatus
+        engine:
+          type: string
+        fishKeySet:
+          type: boolean
+        fishVoice:
+          type: string
+        elevenKeySet:
+          type: boolean
+        elevenVoice:
+          type: string
+        elevenModel:
+          type: string
+        error:
+          type: string
+
+    JarvisVoice:
+      description: |
+        What Jarvis says, as audio (base64), to the office that asked with
+        jarvisSay. `text` is what is said, for the subtitles.
+      type: object
+      additionalProperties: false
+      required: [type, key, mime, audio, text]
+      properties:
+        type:
+          const: jarvisVoice
+        key:
+          type: string
+        mime:
+          type: string
+        audio:
+          type: string
+        text:
+          type: string
+
+    JarvisVoiceFailed:
+      description: Why jarvisSay got no audio (in Spanish).
+      type: object
+      additionalProperties: false
+      required: [type, key, reason]
+      properties:
+        type:
+          const: jarvisVoiceFailed
+        key:
+          type: string
+        reason:
+          type: string
+
+    RequestJarvisVoice:
+      description: Ask for Jarvis's voice settings (answered with jarvisVoiceStatus).
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          const: requestJarvisVoice
+
+    SetJarvisVoice:
+      description: |
+        Change Jarvis's voice (Ajustes): only the fields sent change; an empty
+        string clears a key or a voice. Answered with jarvisVoiceStatus.
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          const: setJarvisVoice
+        engine:
+          type: string
+        fishKey:
+          type: string
+        fishVoice:
+          type: string
+        elevenKey:
+          type: string
+        elevenVoice:
+          type: string
+        elevenModel:
+          type: string
+
+    JarvisSay:
+      description: |
+        Say Jarvis's latest answer out loud (`id`: its agent id), or a test
+        phrase (`text`). Answered with jarvisVoice or jarvisVoiceFailed,
+        carrying the same `key`.
+      type: object
+      additionalProperties: false
+      required: [type, key]
+      properties:
+        type:
+          const: jarvisSay
+        key:
+          type: string
+        id:
+          type: integer
+        text:
           type: string
 
     PickFolder:

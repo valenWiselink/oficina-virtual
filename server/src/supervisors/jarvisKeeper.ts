@@ -27,9 +27,10 @@ export interface JarvisState {
   day?: string;
 }
 
-const STATE_FILE = path.join(os.homedir(), SERVER_JSON_DIR, 'jarvis', 'estado.json');
+/** Where it lives (resolved on use: tests move the home directory). */
+const stateFile = () => path.join(os.homedir(), SERVER_JSON_DIR, 'jarvis', 'estado.json');
 
-export function readJarvisState(file = STATE_FILE): JarvisState {
+export function readJarvisState(file = stateFile()): JarvisState {
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
     return {
@@ -42,7 +43,7 @@ export function readJarvisState(file = STATE_FILE): JarvisState {
   }
 }
 
-export function updateJarvisState(change: JarvisState, file = STATE_FILE): JarvisState {
+export function updateJarvisState(change: JarvisState, file = stateFile()): JarvisState {
   const next = { ...readJarvisState(file), ...change };
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -187,6 +188,6 @@ export class JarvisKeeper {
 
 /** You called Jarvis (it will start on its own from now on), or closed it
  *  (it will not until you call it again). */
-export function noteJarvisChoice(auto: boolean, folder?: string, stateFile?: string): void {
-  updateJarvisState(folder ? { auto, folder } : { auto }, stateFile);
+export function noteJarvisChoice(auto: boolean, folder?: string, file?: string): void {
+  updateJarvisState(folder ? { auto, folder } : { auto }, file);
 }
