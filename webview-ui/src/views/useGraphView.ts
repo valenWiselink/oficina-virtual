@@ -1,5 +1,6 @@
 import { type RefObject, useEffect, useRef, useState } from 'react';
 
+import type { Insets } from '../components/cardBar.js';
 import { useAppTheme } from '../effects/appTheme.js';
 import { useCalmMode } from '../effects/calmMode.js';
 import { useDayTint } from '../effects/dayTint.js';
@@ -24,9 +25,14 @@ import { useGraphSelection } from './useGraphSelection.js';
 export function useGraphView(
   views: AgentView[],
   actions: BoardActions,
-  canvasRef: RefObject<HTMLCanvasElement | null>,
-  rootRef: RefObject<HTMLDivElement | null>,
+  box: {
+    canvasRef: RefObject<HTMLCanvasElement | null>;
+    rootRef: RefObject<HTMLDivElement | null>;
+    /** What the strip of tabs covers of the canvas. */
+    under: Insets;
+  },
 ) {
+  const { canvasRef, rootRef } = box;
   const lifeRef = useRef(officeLife);
   const sel = useGraphSelection(views, actions, lifeRef.current);
   const hover = useGraphHover(views);
@@ -38,6 +44,7 @@ export function useGraphView(
   const look = { calm: useCalmMode(), tint: useDayTint(), theme: useAppTheme() };
   const controls = useGraphCanvas(canvasRef, {
     ...look,
+    inset: box.under,
     views,
     selected: sel.marked,
     life: lifeRef.current,

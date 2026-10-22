@@ -5,6 +5,8 @@ import {
   edgeArrow,
   FIT_ZOOM_MAX,
   fitCamera,
+  fromFrame,
+  intoFrame,
   isVisible,
   panBy,
   toScreen,
@@ -57,5 +59,15 @@ describe('graphCamera', () => {
     expect(right.angle).toBeCloseTo(0);
     const above = edgeArrow(cam, view, { x: 400, y: -900 }, 20);
     expect(above.y).toBeCloseTo(20);
+  });
+});
+
+describe('frames (the part of the view the strip of tabs leaves uncovered)', () => {
+  it('seen from a frame, screen points count from its corner; and back', () => {
+    const cam = { x: 100, y: 50, zoom: 2 };
+    const p = { x: 300, y: 200 };
+    const s = toScreen(cam, p);
+    expect(toScreen(intoFrame(cam, { x: 72, y: 10 }), p)).toEqual({ x: s.x - 72, y: s.y - 10 });
+    expect(fromFrame(intoFrame(cam, { x: 72, y: 10 }), { x: 72, y: 10 })).toEqual(cam);
   });
 });

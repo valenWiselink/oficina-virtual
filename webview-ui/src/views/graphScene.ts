@@ -13,6 +13,8 @@ import {
   type Bounds,
   type Camera,
   edgeArrow,
+  type Frame,
+  intoFrame,
   isVisible,
   type Pt,
   toScreen,
@@ -79,6 +81,9 @@ export interface SceneFrame {
   now: number;
   cam: Camera;
   view: ViewSize;
+  /** The part of the view the strip of tabs leaves uncovered (the arrows
+   *  toward who is off-screen go on its border); absent: all of it. */
+  frame?: Frame;
   /** Decorative effects off (calm mode or the slow-PC brake). */
   calm: boolean;
   /** Close-up cards under each agent (zoomed in). */
@@ -677,8 +682,10 @@ function drawOffscreenWaits(
   for (const v of needing) {
     const n = nodes.get(`a${v.id}`);
     if (!n || isVisible(f.cam, f.view, n, -n.r * f.cam.zoom)) continue;
-    const at = edgeArrow(f.cam, f.view, n, 22);
-    out.push({ id: v.id, box: drawEdgeArrow(ctx, th, at, clip(v.name, NAME_CHARS)) });
+    const fr = f.frame ?? { x: 0, y: 0, ...f.view };
+    const at = edgeArrow(intoFrame(f.cam, fr), fr, n, 22);
+    const shifted = { ...at, x: at.x + fr.x, y: at.y + fr.y };
+    out.push({ id: v.id, box: drawEdgeArrow(ctx, th, shifted, clip(v.name, NAME_CHARS)) });
   }
   return out;
 }

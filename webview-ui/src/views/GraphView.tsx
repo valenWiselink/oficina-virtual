@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 
+import { type Insets, NO_INSETS } from '../components/cardBar.js';
 import type { AgentView } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
 import {
@@ -34,12 +35,22 @@ type GraphState = ReturnType<typeof useGraphView>;
  * what it asks grows into «Aprobar · Rechazar · Ver» (or «Hecho · Abrir PR»).
  * Opening an agent elsewhere (Alt+N, Ctrl+K, a terminal tab) selects it here
  * too, and "Seguir" keeps the camera on it. With the focus on the graph its
- * keys work ("?" lists them).
+ * keys work ("?" lists them). The canvas goes on under the see-through strip
+ * of tabs (`under`); everything else stays in this box, clear of it.
  */
-export function GraphView({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
+export function GraphView({
+  views,
+  actions,
+  under = NO_INSETS,
+}: {
+  views: AgentView[];
+  actions: BoardActions;
+  /** How far the strip of tabs lies over each side of this box. */
+  under?: Insets;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const g = useGraphView(views, actions, canvasRef, rootRef);
+  const g = useGraphView(views, actions, { canvasRef, rootRef, under });
   return (
     <div
       ref={rootRef}
@@ -50,7 +61,13 @@ export function GraphView({ views, actions }: { views: AgentView[]; actions: Boa
       <canvas
         ref={canvasRef}
         tabIndex={0}
-        className="absolute inset-0 w-full h-full touch-none outline-none focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
+        className="absolute touch-none outline-none focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
+        style={{
+          left: -under.left,
+          top: -under.top,
+          width: `calc(100% + ${under.left + under.right}px)`,
+          height: `calc(100% + ${under.top + under.bottom}px)`,
+        }}
         role="application"
         aria-roledescription="grafo"
         aria-label={`Grafo de agentes (apretá ? para ver los atajos): ${views.map((v) => `${v.name}, ${v.statusText}`).join('; ')}`}

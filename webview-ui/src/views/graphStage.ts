@@ -1,3 +1,4 @@
+import { type Insets, NO_INSETS } from '../components/cardBar.js';
 import { liveFileLinks } from '../office/behaviors/fileLinksStore.js';
 import type { AgentView } from './agentViews.js';
 import { GAZE_HOLD_MS } from './clawdGaze.js';
@@ -5,13 +6,13 @@ import type { ClawdLife } from './clawdLife.js';
 import {
   type Bounds,
   type Camera,
-  centerOn,
-  fitCamera,
+  type Frame,
   isVisible,
   panBy,
   type Pt,
   toScreen,
   toWorld,
+  type ViewSize,
 } from './graphCamera.js';
 import { type GraphTheme, readTheme } from './graphDraw.js';
 import { drawMinimap, MINIMAP, minimapToWorld } from './graphExtras.js';
@@ -87,6 +88,10 @@ export interface GraphInputs {
   onMeeting?: (leadId: number | null) => void;
   /** The camera started (id) or stopped (null) going along with an agent. */
   onFollow?: (id: number | null) => void;
+  /** What the see-through strip of tabs covers at each side of the canvas:
+   *  the graph goes on under it, but centring, fitting, the minimap and what
+   *  the page places keep to the rest (the graph's box). */
+  inset?: Insets;
 }
 
 /** What the page can ask of the graph (buttons, keys, overlays). */
@@ -95,7 +100,7 @@ export interface GraphControls {
   fitAll: () => void;
   panBy: (dx: number, dy: number) => void;
   /** Where an agent (or one of its members) is on screen: centre and radius
-   *  in CSS px, or null when it is not on the graph. */
+   *  in CSS px from the graph's box, or null when it is not on the graph. */
   screenOf: (id: number, member?: number) => { x: number; y: number; r: number } | null;
   /** Where an agent's request pill (on its line to "Vos") is on screen. */
   pillOf: (id: number) => Box | null;
@@ -230,6 +235,7 @@ export class GraphStage implements PointerHost {
       this.stageColor = this.readStage();
     }
     this.rig.calm = inp.calm;
+    this.rig.inset = inp.inset ?? NO_INSETS;
   }
 
   frame(now: number): void {
@@ -248,11 +254,11 @@ export class GraphStage implements PointerHost {
     const held = this.held?.node;
     const edges = edgesOf(inp.views).filter((e) => e.a !== held && e.b !== held);
     stepGraph(this.nodes, edges, dt, { w: WORLD.w, h: WORLD.h, margin: 48 }, held);
-    // Fit above the toolbar, which floats over the bottom of the canvas.
-    const { w, h } = this.rig.view;
+    // Fit above the toolbar, which floats over the bottom of the office.
+    const fit = this.rig.frame();
     const followed =
       this.rig.following !== null ? this.nodes.get(`a${this.rig.following}`) : undefined;
-    this.rig.step(this.out?.content ?? null, { w, h: h - TOOLBAR_CLEARANCE_PX }, followed);
+    this.rig.step(this.out?.content ?? null, { ...fit, h: fit.h - TOOLBAR_CLEARANCE_PX }, followed);
     this.draw(inp, now);
     inp.onFrame?.();
   }
@@ -263,7 +269,8 @@ export class GraphStage implements PointerHost {
     const cam = this.rig.cam;
     if (!this.detail && cam.zoom >= DETAIL_ON) this.detail = true;
     else if (this.detail && cam.zoom < DETAIL_OFF) this.detail = false;
-    const f = { dpr: this.dpr, t: this.t, now: wall, cam, view: this.rig.view };
+    const space = { view: this.rig.view, frame: this.rig.frame() };
+    const f = { dpr: this.dpr, t: this.t, now: wall, cam, ...space };
     const scene = {
       ...f,
       calm: inp.calm || this.slow,
@@ -286,7 +293,7 @@ export class GraphStage implements PointerHost {
       this.th,
       this.out,
       cam,
-      this.rig.view,
+      space,
       inp.views,
       this.nodes,
     );
@@ -359,7 +366,7 @@ export class GraphStage implements PointerHost {
     const box = this.minimap ?? this.lastMinimap;
     if (!box || !this.out) return;
     const world = minimapToWorld(box, this.out.content, p.x, p.y);
-    this.rig.moveTo(centerOn(this.rig.cam, world, this.rig.view));
+    this.rig.moveTo(this.rig.centered(world));
   }
 
   hold(grab: Grab, p: Pt): void {
@@ -449,7 +456,7 @@ export class GraphStage implements PointerHost {
     this.rig.follow(null);
     const pad = m.r + MEETING_ROOM;
     const bounds = { minX: m.x - pad, minY: m.y - pad, maxX: m.x + pad, maxY: m.y + pad };
-    this.rig.go(fitCamera(bounds, this.rig.view, 40));
+    this.rig.fitTo(bounds, 40);
     this.meeting = { id: m.id, back };
     this.inputs().onMeeting?.(m.id);
     return true;
@@ -483,12 +490,19 @@ export class GraphStage implements PointerHost {
   }
 
   longPress(target: GraphTarget | null, p: Pt): void {
-    this.inputs().onMenu?.(target, p);
+    this.inputs().onMenu?.(target, this.toPage(p));
   }
 
-  /** A right click at p (screen px). */
+  /** A right click at p (canvas px). */
   menuAt(p: Pt): void {
-    this.inputs().onMenu?.(this.targetAt(p), p);
+    this.inputs().onMenu?.(this.targetAt(p), this.toPage(p));
+  }
+
+  /** A canvas point as the page places things: from the graph's box (the
+   *  canvas but what the strip covers). */
+  private toPage(p: Pt): Pt {
+    const f = this.rig.frame();
+    return { x: p.x - f.x, y: p.y - f.y };
   }
 
   /** "Vos" opens the most urgent wait (as Alt+N); a double click centres it;
@@ -535,27 +549,28 @@ export class GraphStage implements PointerHost {
       pillOf: (id) => {
         const box = this.out?.pills.find((x) => x.id === id)?.box;
         if (!box) return null;
-        const at = toScreen(this.rig.cam, box);
+        const at = this.toPage(toScreen(this.rig.cam, box));
         const z = this.rig.cam.zoom;
         return { x: at.x, y: at.y, w: box.w * z, h: box.h * z };
       },
       screenOf: (id, member) => {
         const n = this.nodes.get(member !== undefined ? `s${member}` : `a${id}`);
         if (!n) return null;
-        const at = toScreen(this.rig.cam, n);
+        const at = this.toPage(toScreen(this.rig.cam, n));
         return { x: at.x, y: at.y, r: n.r * this.rig.cam.zoom };
       },
     };
   }
 }
 
-/** The minimap shows only when part of the graph is out of view. */
+/** The minimap shows only when part of the graph is out of view; it goes in
+ *  the corner of the frame (clear of the strip of tabs). */
 function drawMinimapIfNeeded(
   ctx: CanvasRenderingContext2D,
   th: GraphTheme,
   out: SceneOut,
   cam: Camera,
-  view: { w: number; h: number },
+  { view, frame }: { view: ViewSize; frame: Frame },
   views: AgentView[],
   nodes: Map<string, SimNode>,
 ): Box | null {
@@ -565,9 +580,9 @@ function drawMinimapIfNeeded(
     isVisible(cam, view, { x: c.maxX, y: c.maxY });
   if (allInView) return null;
   const box = {
-    x: view.w - MINIMAP.w - MINIMAP.margin,
+    x: frame.x + frame.w - MINIMAP.w - MINIMAP.margin,
     // Above the zoom buttons and the filter by state.
-    y: view.h - MINIMAP.h - 128,
+    y: frame.y + frame.h - MINIMAP.h - 128,
     w: MINIMAP.w,
     h: MINIMAP.h,
   };
