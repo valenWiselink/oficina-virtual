@@ -411,13 +411,14 @@ function SupervisionLine({ view }: { view: AgentView }) {
   const scope = view.supervision;
   let text: string | undefined;
   if (scope) {
-    const who =
+    // The supervisor of everyone (Jarvis) also opens and closes them: it directs.
+    const what =
       scope.kind === 'workspace'
-        ? `«${scope.name ?? 'su espacio'}»`
+        ? `Supervisa «${scope.name ?? 'su espacio'}»`
         : scope.kind === 'all'
-          ? 'a todos'
-          : 'a sus elegidos';
-    text = `Supervisa ${who} · ${view.teamSize} ${view.teamSize === 1 ? 'agente' : 'agentes'}`;
+          ? 'Dirige a todos'
+          : 'Supervisa a sus elegidos';
+    text = `${what} · ${view.teamSize} ${view.teamSize === 1 ? 'agente' : 'agentes'}`;
   } else if (view.supervisorNames.length > 0) {
     text = `Lo supervisa ${view.supervisorNames.map((n) => `«${n}»`).join(' y ')}`;
   }

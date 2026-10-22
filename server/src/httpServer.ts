@@ -20,6 +20,7 @@ import {
 } from './constants.js';
 import type { PermissionBroker } from './permissionBroker.js';
 import { SERVER_BOOT_ID } from './serverBoot.js';
+import { jarvisPowers } from './supervisors/jarvisTools.js';
 import { supervisors } from './supervisors/supervision.js';
 import { registerSupervisorMcp } from './supervisors/supervisorMcp.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
@@ -121,7 +122,8 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
     allowedHostnames,
     ptyManager: options.ptyManager,
   });
-  // Supervisor agents' tools (standalone): each supervisor has a token of its own.
+  // Supervisor agents' tools (standalone): each supervisor has a token of its
+  // own. The supervisor of everyone (Jarvis) also opens and closes agents.
   if (!options.embedded) {
     registerSupervisorMcp(
       app,
@@ -130,6 +132,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
         registry: supervisors(),
         broker: options.permissionBroker,
         terminalOf: (id) => options.ptyManager?.get(id),
+        ...jarvisPowers(options),
       },
       allowedHostnames,
     );

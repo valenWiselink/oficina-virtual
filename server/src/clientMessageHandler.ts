@@ -36,7 +36,8 @@ import { claudeProvider, hookProviderById, hookProviders } from './providers/ind
 import { parseScope } from './supervisors/supervision.js';
 import { applySupervisionTeam, broadcastSupervision } from './supervisors/supervisionMessages.js';
 import { adoptIntoOffice } from './terminal/adoptSession.js';
-import { setBackgroundAgents, stopBackground } from './terminal/backgroundSessions.js';
+import { setBackgroundAgents } from './terminal/backgroundSessions.js';
+import { closeOfficeAgent } from './terminal/closeAgent.js';
 import { handOff } from './terminal/handOff.js';
 import type { PtySessionManager } from './terminal/ptySessionManager.js';
 import { launchAgent } from './terminal/standaloneAgentLauncher.js';
@@ -254,31 +255,9 @@ export function handleClientMessage(
       applySupervisionTeam(store, msg);
       break;
 
-    case 'closeAgent': {
-      // Two shapes now: a PTY-backed agent we launched (kill the process -- the
-      // counterpart of VS Code's terminalRef.dispose()), or an external agent we
-      // merely observed (dismiss the file so the scanner doesn't re-adopt it,
-      // then remove). removeAgent fires agentRemoved, which httpServer maps to
-      // an agentClosed broadcast.
-      const id = msg.id as number;
-      const agent = store.get(id);
-      if (agent?.bgId && runtime) {
-        // A background session would outlive its terminal: closing the agent
-        // stops it and takes it off Claude Code's list (the transcript stays).
-        agent.bgLeaving = true;
-        runtime.resumableSessions?.remove(agent.sessionId);
-        void stopBackground(agent.bgId, agent.cwd);
-      }
-      if (agent && runtime) {
-        // dispose() is a no-op for agents with no terminal, so this is safe for
-        // both shapes. The PTY's onExit handler does the store cleanup for
-        // PTY-backed agents; do it here too so external agents (and a PTY that
-        // never exits) are still removed promptly.
-        ctx.ptyManager?.dispose(id);
-        runtime.closeAgent(id);
-      }
+    case 'closeAgent':
+      closeOfficeAgent(ctx, msg.id as number);
       break;
-    }
 
     case 'adoptIntoOffice': {
       // Close a session in its outside terminal and resume it in the office.

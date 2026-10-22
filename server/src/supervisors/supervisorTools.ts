@@ -38,15 +38,15 @@ function head(text: string | undefined): string | undefined {
 
 export class SupervisorTools {
   constructor(
-    private readonly deps: ToolDeps,
-    private readonly supervisorId: number,
+    protected readonly deps: ToolDeps,
+    protected readonly supervisorId: number,
   ) {}
 
-  private members(): Member[] {
+  protected members(): Member[] {
     return this.deps.registry.members(this.supervisorId);
   }
 
-  private pendingOf(agent: AgentState): PendingPermission[] {
+  protected pendingOf(agent: AgentState): PendingPermission[] {
     return (this.deps.broker?.pending() ?? []).filter((p) => p.sessionId === agent.sessionId);
   }
 
@@ -89,7 +89,7 @@ export class SupervisorTools {
           folder ? `carpeta ${folder}` : undefined,
           doing ? `ahora: ${doing}` : undefined,
           head(agent.lastReply) ? `dijo: ${head(agent.lastReply)}` : undefined,
-          agent.officeTerminal ? undefined : 'sin terminal en la oficina (no le podés escribir)',
+          agent.officeTerminal ? undefined : this.outsideNote(),
         ].filter(Boolean);
         const asks = pending.map(
           (p) =>
@@ -143,6 +143,22 @@ export class SupervisorTools {
       : 'Ese permiso ya no está pendiente (se respondió o venció).';
   }
 
+  /** How `equipo` marks an agent whose terminal is not the office's. */
+  protected outsideNote(): string {
+    return 'sin terminal en la oficina (no le podés escribir)';
+  }
+
+  /** The answer when the office cannot type into an agent's terminal. */
+  protected noTerminal(name: string): string {
+    return `«${name}» no tiene su terminal en la oficina: no le puedo escribir. Pedile a Valentín que lo traiga.`;
+  }
+
+  /** How the supervisor signs what it writes to its agents. */
+  protected signature(): string {
+    const me = this.deps.store.get(this.supervisorId);
+    return `[Supervisor «${me ? spokenName(me) : 'tu supervisor'}»]`;
+  }
+
   escribirAAgente(query: string, mensaje: string): string {
     const text = mensaje.trim();
     if (!text) return 'El mensaje está vacío.';
@@ -150,12 +166,12 @@ export class SupervisorTools {
     if (typeof found === 'string') return found;
     const [id, agent] = found;
     const terminal = this.deps.terminalOf(id);
-    if (!terminal) {
-      return `«${spokenName(agent)}» no tiene su terminal en la oficina: no le puedo escribir. Pedile a Valentín que lo traiga.`;
-    }
-    const me = this.deps.store.get(this.supervisorId);
-    const from = me ? spokenName(me) : 'tu supervisor';
-    sendToTerminal(terminal, `[Supervisor «${from}»] ${text}`);
+    if (!terminal) return this.noTerminal(spokenName(agent));
+    sendToTerminal(terminal, `${this.signature()} ${text}`);
+    this.wrote(agent, text);
     return `Listo: se lo escribí a «${spokenName(agent)}».`;
   }
+
+  /** After a message reached one of its agents (Jarvis notes it down). */
+  protected wrote(_agent: AgentState, _text: string): void {}
 }

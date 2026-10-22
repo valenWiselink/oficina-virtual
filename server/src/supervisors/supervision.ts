@@ -20,6 +20,7 @@ import * as path from 'path';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { SERVER_JSON_DIR } from '../constants.js';
 import type { AgentState } from '../types.js';
+import { jarvisPrompt } from './jarvis.js';
 
 export type SupervisionScope =
   { kind: 'workspace'; workspaceId: string; name: string } | { kind: 'agents' } | { kind: 'all' };
@@ -65,8 +66,10 @@ export function scopeWords(scope: SupervisionScope): string {
   return 'los agentes que te asignaron';
 }
 
-/** The role a supervisor is launched with (--append-system-prompt-file). */
+/** The role a supervisor is launched with (--append-system-prompt-file). The
+ *  supervisor of everyone is Jarvis (jarvis.ts). */
 export function supervisorPrompt(scope: SupervisionScope): string {
+  if (scope.kind === 'all') return jarvisPrompt();
   return `# Sos supervisor en la Oficina virtual
 
 Supervisás ${scopeWords(scope)}. Sos el intermediario entre esos agentes y Valentín: le ahorrás tener que mirar a cada uno.

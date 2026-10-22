@@ -4,7 +4,7 @@ import type { LaunchAgent } from '../../../core/src/messages.js';
 import { EFFORT_CHOICES, MODEL_CHOICES } from '../agents/agentEdits.js';
 import { Choices } from '../agents/Choices.js';
 import { SupervisionField } from '../agents/SupervisionField.js';
-import type { SupervisionScope } from '../agents/supervisionRules.js';
+import { nicknameForScope, type SupervisionScope } from '../agents/supervisionRules.js';
 import { Button } from '../components/ui/Button.js';
 import { Modal } from '../components/ui/Modal.js';
 import { TextInput } from '../components/ui/TextInput.js';
@@ -181,7 +181,13 @@ export function useLaunchDialog(taken: () => readonly TakenLook[]): {
             candidates={[]}
             disabled={false}
             allowPicked={false}
-            onChange={(supervision) => setPending({ ...pending, supervision })}
+            onChange={(supervision) =>
+              setPending({
+                ...pending,
+                supervision,
+                nickname: nicknameForScope(pending.nickname, supervision),
+              })
+            }
           />
 
           <div className="flex gap-8 justify-end pt-4">

@@ -19,6 +19,17 @@ export interface TeamCandidate extends Placeable {
   supervision?: { kind: string };
 }
 
+/** The supervisor of everyone is Jarvis: it also opens, closes and connects
+ *  agents (server/src/supervisors/jarvis.ts). The name it gets by default. */
+export const JARVIS_NAME = 'Jarvis';
+
+/** The name a launch takes when its supervision changes: an unnamed
+ *  supervisor of everyone becomes Jarvis, and stops being so if it changes. */
+export function nicknameForScope(nickname: string, scope: SupervisionScope): string {
+  if (scope.kind === 'all') return nickname.trim() ? nickname : JARVIS_NAME;
+  return nickname === JARVIS_NAME ? '' : nickname;
+}
+
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** It supervises others (a supervisor is never on anyone's team). */

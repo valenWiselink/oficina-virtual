@@ -95,6 +95,14 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   get it by `--append-system-prompt-file` unless the global CLAUDE.md has it
   (one such flag per launch: a supervisor's role file wins); the welcome and
   Ajustes can append/take back the exact block in the global CLAUDE.md.
+- `supervisors/` — supervisor agents: `supervision.ts` (who watches whom,
+  launch files), `supervisorRelay.ts` (what reaches them as `[Oficina]`
+  messages), `supervisorMcp.ts` + `supervisorTools.ts` (their tools at
+  `POST /mcp`, one token each), `supervisorGuard.ts` (what they may approve).
+  The supervisor of everyone is Jarvis (`jarvis.ts`: role + notebook in
+  `~/.pixel-agents/jarvis/bitacora.md`; `jarvisTools.ts`: open, close and hand
+  over agents, folders, notebook). Its launches go through `launchAgent`, its
+  closes through `terminal/closeAgent.ts` (the same as the office's ✕).
 - `serverBoot.ts` — this run's id. Agent ids restart at 1 on every start, so
   `/ws` greets with `serverHello` (the page reloads on a new run) and the
   terminal socket refuses a `?boot=` from another run.

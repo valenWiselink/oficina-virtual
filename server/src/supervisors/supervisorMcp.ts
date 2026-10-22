@@ -11,8 +11,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import { normalizeHostname } from '../wsAuth.js';
+import { type JarvisDeps, JarvisTools, registerJarvisTools } from './jarvisTools.js';
 import { MCP_SERVER_NAME } from './supervision.js';
-import { SupervisorTools, type ToolDeps } from './supervisorTools.js';
+import { SupervisorTools } from './supervisorTools.js';
 
 /** The bearer token of a request, if any. */
 export function bearerOf(header: string | string[] | undefined): string | undefined {
@@ -23,10 +24,14 @@ export function bearerOf(header: string | string[] | undefined): string | undefi
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 
-/** The MCP server one supervisor talks to (its tools, bound to its team). */
-export function supervisorMcpServer(deps: ToolDeps, supervisorId: number): McpServer {
-  const tools = new SupervisorTools(deps, supervisorId);
+/** The MCP server one supervisor talks to (its tools, bound to its team). The
+ *  supervisor of everyone is Jarvis, with tools of its own (jarvisTools.ts). */
+export function supervisorMcpServer(deps: JarvisDeps, supervisorId: number): McpServer {
+  const isJarvis = deps.store.get(supervisorId)?.supervision?.kind === 'all';
+  const jarvis = isJarvis ? new JarvisTools(deps, supervisorId) : undefined;
+  const tools = jarvis ?? new SupervisorTools(deps, supervisorId);
   const server = new McpServer({ name: MCP_SERVER_NAME, version: '1.0.0' });
+  if (jarvis) registerJarvisTools(server, jarvis);
 
   server.registerTool(
     'equipo',
@@ -83,7 +88,7 @@ export function supervisorMcpServer(deps: ToolDeps, supervisorId: number): McpSe
 /** POST /mcp: authenticate the supervisor by its token, then serve its tools. */
 export function registerSupervisorMcp(
   app: FastifyInstance,
-  deps: ToolDeps,
+  deps: JarvisDeps,
   allowedHostnames: ReadonlySet<string>,
 ): void {
   app.all('/mcp', async (request, reply) => {
