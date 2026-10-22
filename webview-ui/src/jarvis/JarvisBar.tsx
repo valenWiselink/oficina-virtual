@@ -152,8 +152,9 @@ export function JarvisBar({
             </div>
           )
         )}
-        {/* Talk, write, silence, open: one group, so it never breaks apart. */}
-        <div className="flex items-center gap-6 flex-[1_1_440px] min-w-0">
+        {/* Talk, write, silence, open: one group against the right edge, so it
+            never breaks apart (with the chat open, the icons stay right). */}
+        <div className="flex items-center justify-end gap-6 flex-[1_1_440px] min-w-0">
           <Button
             size="icon_lg"
             variant={ears.phase === 'listening' ? 'active' : 'default'}

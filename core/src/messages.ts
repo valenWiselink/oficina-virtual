@@ -731,9 +731,11 @@ export interface ChatItem {
   role: ChatRole;
   text: string;
   at?: number;
+  from?: string;
+  voice?: boolean;
 }
 
-export type ChatRole = 'user' | 'assistant' | 'tool';
+export type ChatRole = 'user' | 'assistant' | 'tool' | 'note';
 
 export interface AgentChatAppend {
   type: 'agentChatAppend';
@@ -792,19 +794,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_398;
-  supervision?: AnonymousSchema_399;
+  effort?: AnonymousSchema_400;
+  supervision?: AnonymousSchema_401;
 }
 
-export type AnonymousSchema_398 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_400 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_399 {
-  kind: AnonymousSchema_400;
+export interface AnonymousSchema_401 {
+  kind: AnonymousSchema_402;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_400 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_402 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -853,16 +855,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_425;
+  scope: AnonymousSchema_427;
 }
 
-export interface AnonymousSchema_425 {
-  kind: AnonymousSchema_426;
+export interface AnonymousSchema_427 {
+  kind: AnonymousSchema_428;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_426 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_428 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

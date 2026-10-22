@@ -106,8 +106,12 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   per office (`liveJarvis`; a second is refused at launch and in Editar).
   In the webview it has no avatar (`webview-ui/src/jarvis/`): App takes it out
   of every view (`withoutJarvis`) and of the terminal tabs (`isHidden` in
-  useTerminalDrawer), and shows it as `JarvisBar` (foot of the office) and
-  `JarvisVisor` (middle of the screen, when it needs you or speaks).
+  useTerminalDrawer), and shows it as `JarvisBar` (on a computer, a band the
+  whole width of the window under the office and the terminals; on a phone,
+  the foot of the office page) and `JarvisVisor` (middle of the screen, when
+  it needs you or speaks). In a chat, `[Oficina] …` and `[Supervisor «X»] …`
+  lines are notes, not yours (`agentChat.userItem`), and `[Voz] …` is yours,
+  said aloud.
   Always there: `jarvisKeeper.ts` (+ `jarvisWiring.ts`) starts it with the
   office, opens a clean conversation every morning and relaunches it when its
   role changed (the registry keeps each supervisor's `roleHash` in

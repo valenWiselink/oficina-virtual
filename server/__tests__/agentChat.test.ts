@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { chatItemsOf, readChat, toolLine } from '../src/agentChat.js';
+import { chatItemsOf, readChat, toolLine, userItem } from '../src/agentChat.js';
 
 // Record shapes as Claude Code 2.1 writes them.
 const user = (uuid: string, content: unknown, extra: Record<string, unknown> = {}) => ({
@@ -90,5 +90,49 @@ describe('readChat', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('who wrote a line', () => {
+  it('tells the office and a supervisor from you, and a spoken message from a typed one', () => {
+    expect(userItem('1', '[Oficina] «Coral» terminó su turno.', 5)).toEqual({
+      id: '1',
+      role: 'note',
+      from: 'Oficina',
+      text: '«Coral» terminó su turno.',
+      at: 5,
+    });
+    expect(userItem('2', '[Supervisor «Jarvis»] Seguí con el PR', 6)).toMatchObject({
+      role: 'note',
+      from: 'Jarvis',
+      text: 'Seguí con el PR',
+    });
+    expect(userItem('3', '[Voz] ¿Cómo viene Coral?', 7)).toEqual({
+      id: '3',
+      role: 'user',
+      voice: true,
+      text: '¿Cómo viene Coral?',
+      at: 7,
+    });
+    expect(userItem('4', 'Hola [Oficina]', 8)).toMatchObject({
+      role: 'user',
+      text: 'Hola [Oficina]',
+    });
+  });
+
+  it('says the office tools and other MCP tools in words, never their raw id', () => {
+    expect(toolLine('mcp__oficina__escribir_a_agente', { agente: 'Coral' })).toBe(
+      'Le escribió a «Coral»',
+    );
+    expect(toolLine('mcp__oficina__lanzar_agente', { apodo: 'Pulpo' })).toBe('Abrió a «Pulpo»');
+    expect(toolLine('mcp__oficina__pasar_resultado', { de: 'Coral', a: 'Pulpo' })).toBe(
+      'Le pasó a «Pulpo» lo de «Coral»',
+    );
+    expect(toolLine('mcp__oficina__anotar', {})).toBe('Anotó en su bitácora');
+    expect(toolLine('mcp__claude_ai_Atlassian__getJiraIssue', {})).toBe(
+      'Usó getJiraIssue (Atlassian)',
+    );
+    expect(toolLine('ToolSearch', {})).toBeNull();
+    expect(toolLine('SendMessage', { to: 'oficina-coral' })).toBe('Le escribió a «oficina-coral»');
   });
 });

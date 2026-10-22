@@ -1631,11 +1631,21 @@ components:
         at:
           type: number
           description: When it was written (ms since epoch, from the record).
+        from:
+          type: string
+          description: |
+            A note only: who wrote it into the conversation (Oficina, or a
+            supervisor by name), not you.
+        voice:
+          type: boolean
+          description: Something you said aloud (the office marks it «[Voz]»).
 
     ChatRole:
-      description: Who a chat line is from (a tool line is the agent using one).
+      description: |
+        Who a chat line is from (a tool line is the agent using one; a note is
+        the office or a supervisor writing into the conversation).
       type: string
-      enum: [user, assistant, tool]
+      enum: [user, assistant, tool, note]
 
     AgentChat:
       description: The latest part of an agent's conversation, for its chat view.

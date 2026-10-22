@@ -167,8 +167,17 @@ export function ChatPane({
               <ToolLines key={row.key} items={row.items} />
             ) : row.item.role === 'user' ? (
               <UserBubble key={row.item.id} item={row.item} />
+            ) : row.item.role === 'note' ? (
+              <NoteBubble key={row.item.id} item={row.item} />
             ) : (
-              <AgentMessage key={row.item.id} item={row.item} color={color} agentId={view.id} />
+              <AgentMessage
+                key={row.item.id}
+                item={row.item}
+                color={color}
+                agentId={view.id}
+                // Jarvis answers as itself; the rest are Claude.
+                author={view.supervision?.kind === 'all' ? view.name : 'Claude'}
+              />
             ),
           )}
         {sending.map((p) => (
@@ -241,7 +250,25 @@ function UserBubble({ item }: { item: ChatItem }) {
       <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
         {withoutChatHint(item.text)}
       </div>
-      <span className="text-2xs text-text-muted">Vos · {hm(item.at)}</span>
+      <span className="text-2xs text-text-muted">
+        {item.voice ? 'Vos · por voz' : 'Vos'} · {hm(item.at)}
+      </span>
+    </div>
+  );
+}
+
+/** Something the office (or a supervisor) wrote into the conversation:
+ *  neither you nor the agent, so it reads as a quiet note on the left. */
+function NoteBubble({ item }: { item: ChatItem }) {
+  const from = item.from === 'Oficina' || !item.from ? 'Aviso de la oficina' : `De ${item.from}`;
+  return (
+    <div className="self-start max-w-[85%] flex flex-col items-start gap-2">
+      <div className="bg-bg-dark text-text-2 border border-border rounded-xl px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed text-[0.92em]">
+        {item.text}
+      </div>
+      <span className="text-2xs text-text-muted">
+        {from} · {hm(item.at)}
+      </span>
     </div>
   );
 }
@@ -312,10 +339,12 @@ function AgentMessage({
   item,
   color,
   agentId,
+  author,
 }: {
   item: ChatItem;
   color: string;
   agentId: number;
+  author: string;
 }) {
   // A long answer folds to its start; "Ver todo" opens it.
   const long = isLongAnswer(item.text);
@@ -325,7 +354,7 @@ function AgentMessage({
     <div className="self-start max-w-[92%] min-w-0 flex flex-col gap-2">
       <span className="text-2xs text-text-muted flex items-center gap-4">
         <span className="w-6 h-6 rounded-full" style={{ background: color }} />
-        Claude · {hm(item.at)}
+        {author} · {hm(item.at)}
       </span>
       <div className="bg-bg text-text border border-border rounded-2xl rounded-tl-sm px-[0.8em] py-[0.6em] min-w-0">
         <div className={folded ? 'relative max-h-[18em] overflow-hidden' : undefined}>

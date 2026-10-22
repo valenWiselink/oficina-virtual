@@ -55,10 +55,74 @@ export function toolLine(name: string, input: Rec): string | null {
     case 'TaskCreate':
     case 'TaskUpdate':
     case 'TodoWrite':
-      return null; // the task list is shown elsewhere
+    case 'ToolSearch':
+      return null; // the task list is shown elsewhere; loading tools is noise
+    case 'ListAgents':
+      return 'Miró las sesiones de la PC';
+    case 'SendMessage':
+      return input.to
+        ? `Le escribió a «${clip(String(input.to), 40)}»`
+        : 'Le escribió a otra sesión';
     default:
-      return `Usó ${name}`;
+      return mcpToolLine(name, input) ?? `Usó ${name}`;
   }
+}
+
+/** The office's own tools (supervisors, Jarvis), said as what they did. */
+function officeToolLine(tool: string, input: Rec): string | null {
+  const who = (v: unknown) => `«${clip(String(v ?? ''), 40)}»`;
+  switch (tool) {
+    case 'escribir_a_agente':
+      return `Le escribió a ${who(input.agente)}`;
+    case 'lanzar_agente':
+      return `Abrió a ${who(input.apodo)}`;
+    case 'cerrar_agente':
+      return `Cerró a ${who(input.agente)}`;
+    case 'pasar_resultado':
+      return `Le pasó a ${who(input.a)} lo de ${who(input.de)}`;
+    case 'ultima_respuesta':
+      return `Leyó lo último de ${who(input.agente)}`;
+    case 'equipo':
+      return 'Miró cómo viene el equipo';
+    case 'carpetas':
+      return 'Miró las carpetas';
+    case 'bitacora':
+      return 'Leyó su bitácora';
+    case 'anotar':
+      return 'Anotó en su bitácora';
+    case 'aprobar_permiso':
+      return 'Aprobó un permiso';
+    case 'rechazar_permiso':
+      return 'Rechazó un permiso';
+    default:
+      return null;
+  }
+}
+
+/** An MCP tool (`mcp__<server>__<tool>`): the office's in words, others by
+ *  their tool and server names, never the raw id. */
+function mcpToolLine(name: string, input: Rec): string | null {
+  const match = name.match(/^mcp__(.+?)__(.+)$/);
+  if (!match) return null;
+  const [, server, tool] = match;
+  if (server === 'oficina') return officeToolLine(tool, input) ?? `Usó ${tool.replace(/_/g, ' ')}`;
+  const where = server.replace(/^claude_ai_/, '').replace(/_/g, ' ');
+  return `Usó ${tool.replace(/_/g, ' ')} (${where})`;
+}
+
+/**
+ * A user record as a chat line: what you wrote; what you said aloud (the
+ * office marks it «[Voz]»); or a note the office or a supervisor wrote into
+ * the conversation («[Oficina] …», «[Supervisor «X»] …»), which is not yours.
+ */
+export function userItem(id: string, text: string, at: number | undefined): ChatItem {
+  const office = text.match(/^\[Oficina\]\s*([\s\S]*)$/);
+  if (office) return { id, role: 'note', from: 'Oficina', text: office[1].trim(), at };
+  const boss = text.match(/^\[Supervisor «([^»]+)»\]\s*([\s\S]*)$/);
+  if (boss) return { id, role: 'note', from: boss[1], text: boss[2].trim(), at };
+  const voice = text.match(/^\[Voz\]\s*([\s\S]*)$/);
+  if (voice) return { id, role: 'user', voice: true, text: voice[1].trim(), at };
+  return { id, role: 'user', text, at };
 }
 
 /** What you typed, from a user record's text (null for what is not yours). */
@@ -103,7 +167,7 @@ export function chatItemsOf(record: Rec): ChatItem[] {
             )
           : [];
     const text = parts.map(userText).filter(Boolean).join('\n\n');
-    return text ? [{ id, role: 'user', text, at }] : [];
+    return text ? [userItem(id, text, at)] : [];
   }
 
   if (record.type !== 'assistant' || !Array.isArray(content)) return [];

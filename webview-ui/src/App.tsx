@@ -435,6 +435,25 @@ function App() {
         },
       };
 
+  // Jarvis's band. On a computer it runs the whole width of the window, under
+  // the office and the terminals (asked for 2026-10-22: its chat ended short
+  // of the right edge, beside the strip of tabs); on a phone it closes the
+  // office page.
+  const jarvisBand =
+    !isDebugMode && (terminalAvailable || jarvis) ? (
+      <div
+        className="shrink-0 border-t border-border bg-bg-dark *:border-t-0"
+        style={isMobile ? bandUnder(stripOver) : undefined}
+      >
+        <JarvisBar
+          jarvis={jarvis}
+          actions={agentActions}
+          onSummon={summonJarvis}
+          focusSignal={jarvisFocus}
+        />
+      </div>
+    ) : null;
+
   // The office region is shared by both shells: desktop mounts it as the
   // flexing left half of the split view (the terminal panel docks beside it);
   // mobile mounts it as the first page of the sliding track.
@@ -543,21 +562,7 @@ function App() {
           />
         )}
       </div>
-      {!isDebugMode && (terminalAvailable || jarvis) && (
-        // Its band goes on under the strip of tabs; the top line is this
-        // wrapper's, so it runs under the strip too.
-        <div
-          className="shrink-0 border-t border-border bg-bg-dark *:border-t-0"
-          style={bandUnder(stripOver)}
-        >
-          <JarvisBar
-            jarvis={jarvis}
-            actions={agentActions}
-            onSummon={summonJarvis}
-            focusSignal={jarvisFocus}
-          />
-        </div>
-      )}
+      {isMobile && jarvisBand}
     </div>
   );
 
@@ -566,7 +571,7 @@ function App() {
     // the terminal panel. Mobile: a column — the sliding office/terminal track
     // on top, the agent-card bar pinned along the bottom.
     <div
-      className={`w-full h-full relative overflow-hidden flex ${isMobile ? 'flex-col' : DOCK_DIRECTION[terminalDock]}`}
+      className="w-full h-full relative overflow-hidden flex flex-col"
       // The hour's backdrop behind everything, so the card bar and the floating
       // terminal panel sit on the same paper as the board.
       style={{
@@ -592,9 +597,10 @@ function App() {
         />
       ) : (
         <>
-          {officeRegion}
+          <div className={`flex-1 min-h-0 flex ${DOCK_DIRECTION[terminalDock]}`}>
+            {officeRegion}
 
-          {/* Standalone with a terminal: terminalAvailable is only ever true when
+            {/* Standalone with a terminal: terminalAvailable is only ever true when
               the server reports a working PTY to a tokened session, which VS
               Code's surface never does. In flow as a flex sibling so the office
               region reflows beside it instead of being overlaid.
@@ -603,44 +609,46 @@ function App() {
               bar stands alone with every agent in the office, external sessions
               included — the at-a-glance "who needs attention" strip, with a
               click raising the agent's editor terminal where there is one. */}
-          {terminalAvailable ? (
-            <TerminalDrawer
-              agentIds={terminalAgentIds}
-              onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
-              tabIds={drawerTabIds}
-              shownAgentId={terminalDrawer.shownAgentId}
-              onSelectAgent={selectTab}
-              onCloseAgent={handleCloseAgent}
-              // A space with no agents of its own shows no one else's terminal
-              // (the panes stay mounted, only hidden).
-              isOpen={terminalDrawer.isOpen && (workspaces.tabIds?.length ?? 1) > 0}
-              onClosePanel={terminalDrawer.close}
-              dock={terminalDock}
-              style={drawerPull(stripOver)}
-              sizePx={terminalDrawer.sizePx}
-              onResizeStart={terminalDrawer.onResizeStart}
-              getAppearance={terminalDrawer.getAppearance}
-              statusFor={terminalDrawer.statusFor}
-              onStatusChange={terminalDrawer.onStatusChange}
-              viewFor={(id) => agentViews.find((v) => v.id === id)}
-              actions={agentActions}
-              pinnedId={terminalDrawer.pinnedId}
-              onTogglePin={terminalDrawer.togglePin}
-            />
-          ) : (
-            !isDebugMode && (
-              <AgentCardBar
-                agentIds={agents}
+            {terminalAvailable ? (
+              <TerminalDrawer
+                agentIds={terminalAgentIds}
                 onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
-                focusedAgentId={focusedAgentId}
+                tabIds={drawerTabIds}
+                shownAgentId={terminalDrawer.shownAgentId}
+                onSelectAgent={selectTab}
+                onCloseAgent={handleCloseAgent}
+                // A space with no agents of its own shows no one else's terminal
+                // (the panes stay mounted, only hidden).
+                isOpen={terminalDrawer.isOpen && (workspaces.tabIds?.length ?? 1) > 0}
+                onClosePanel={terminalDrawer.close}
+                dock={terminalDock}
+                style={drawerPull(stripOver)}
+                sizePx={terminalDrawer.sizePx}
+                onResizeStart={terminalDrawer.onResizeStart}
                 getAppearance={terminalDrawer.getAppearance}
-                labelFor={(id) => agentViews.find((v) => v.id === id)?.name}
                 statusFor={terminalDrawer.statusFor}
-                onSelect={handleCardSelect}
-                onClose={handleCloseAgent}
+                onStatusChange={terminalDrawer.onStatusChange}
+                viewFor={(id) => agentViews.find((v) => v.id === id)}
+                actions={agentActions}
+                pinnedId={terminalDrawer.pinnedId}
+                onTogglePin={terminalDrawer.togglePin}
               />
-            )
-          )}
+            ) : (
+              !isDebugMode && (
+                <AgentCardBar
+                  agentIds={agents}
+                  onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
+                  focusedAgentId={focusedAgentId}
+                  getAppearance={terminalDrawer.getAppearance}
+                  labelFor={(id) => agentViews.find((v) => v.id === id)?.name}
+                  statusFor={terminalDrawer.statusFor}
+                  onSelect={handleCardSelect}
+                  onClose={handleCloseAgent}
+                />
+              )
+            )}
+          </div>
+          {jarvisBand}
         </>
       )}
 
