@@ -39,6 +39,7 @@ import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { watchAgentPrs } from './prWatchWiring.js';
 import { PixelAgentsServer } from './server.js';
+import { officeJarvisKeeper } from './supervisors/jarvisWiring.js';
 import { supervisors } from './supervisors/supervision.js';
 import { SupervisorRelay } from './supervisors/supervisorRelay.js';
 import { setBackgroundAgents } from './terminal/backgroundSessions.js';
@@ -471,14 +472,30 @@ async function main(): Promise<void> {
     // Background sessions (on by default): agents outlive the office, which
     // only attaches to them (terminal/backgroundSessions.ts).
     setBackgroundAgents(adapter.getSetting('pixel-agents.backgroundAgents', true));
+    // Jarvis is always there: once the sessions are back, it gets its new role
+    // or starts on its own, and every morning a clean conversation.
+    const jarvisKeeper = ptyManager.enabled
+      ? officeJarvisKeeper({
+          store,
+          runtime,
+          ptyManager,
+          bypass: () => adapter.getSetting('pixel-agents.bypassPermissions', false),
+          hasPending: (agent) =>
+            permissionBroker.pending().some((p) => p.sessionId === agent.sessionId),
+        })
+      : undefined;
     void resumeOfficeSessions(
       { store, runtime, ptyManager, provider: claudeProvider },
       adapter.getSetting('pixel-agents.bypassPermissions', false),
-    ).then((resumed) => {
-      if (resumed > 0) {
-        console.log(`[Pixel Agents] Resumed ${resumed} session(s) from the previous run`);
-      }
-    });
+    )
+      .then((resumed) => {
+        if (resumed > 0) {
+          console.log(`[Pixel Agents] Resumed ${resumed} session(s) from the previous run`);
+        }
+        return jarvisKeeper?.onOfficeStart();
+      })
+      .then(() => jarvisKeeper?.start())
+      .catch((err: unknown) => console.error(`[Pixel Agents] Jarvis keeper: ${String(err)}`));
 
     // Start scanning for external sessions (Claude running in user's terminal)
     const cwd = process.cwd();
@@ -515,6 +532,7 @@ async function main(): Promise<void> {
       // leave a child that ignores SIGHUP orphaned on a dead server.
       // The terminals die here, their sessions do not: keep them resumable,
       // and keep what the surviving ones still ask in their terminal.
+      jarvisKeeper?.stop();
       runtime.resumableSessions?.freeze();
       terminalAsks.freeze();
       await ptyManager.disposeAll();
