@@ -8,6 +8,7 @@ import { CommandPalette } from './command/CommandPalette.js';
 import { useCommandPaletteShortcut } from './command/usePaletteShortcut.js';
 import { AgentCardBar } from './components/AgentCardBar.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
+import { bandUnder, drawerPull, officeRoom, stripOverlap } from './components/cardBar.js';
 import { CloseAgentConfirm } from './components/CloseAgentConfirm.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
@@ -134,7 +135,6 @@ function App() {
   const [historyTab, setHistoryTab] = useState<HistoryTab>('dia');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
-  const [broadcastPreset, setBroadcastPreset] = useState<number[] | undefined>(undefined);
   const [launchSignal, setLaunchSignal] = useState(0);
   // The visor's «Contestar» focuses what you write to Jarvis in its bar.
   const [jarvisFocus, setJarvisFocus] = useState(0);
@@ -359,6 +359,14 @@ function App() {
   const drawerTabIds = (workspaces.tabIds ?? terminalAgentIds).filter(
     (id) => id !== jarvisId || id === shownTabId,
   );
+  // The drawer's strip of tabs (see-through) lies over the office's edge.
+  const stripOver = stripOverlap(
+    terminalDock,
+    terminalAvailable &&
+      !isMobile &&
+      terminalAgentIds.length > 0 &&
+      (drawerTabIds.length > 0 || !officeReadOnly),
+  );
   const summonHome = jarvisHome(directories, officeViews);
   const summonJarvis =
     !officeReadOnly && terminalAvailable && summonHome
@@ -408,10 +416,6 @@ function App() {
         onAdopt: terminalAvailable ? requestAdopt : undefined,
         onHandOff: requestHandOff,
         onHandOffTo: handOffTo,
-        onMessageMany: (ids) => {
-          setBroadcastPreset(ids);
-          setIsBroadcastOpen(true);
-        },
         onClose: handleCloseAgent,
         onEdit: requestEdit,
         onOpenTerminal: (id) => {
@@ -433,6 +437,7 @@ function App() {
     <div
       // @container: the toolbar's usage meter shrinks with the office, not the window.
       className={`@container relative overflow-hidden flex flex-col ${isMobile ? 'w-full h-full' : 'flex-1 min-w-0 min-h-0'}`}
+      style={officeRoom(stripOver)}
     >
       {/* The office itself; Jarvis's bar sits under it, in flow. */}
       <div className="relative flex-1 min-h-0">
@@ -443,7 +448,7 @@ function App() {
             {view === 'tablero' ? (
               <BoardView views={workspaces.shown} actions={agentActions} space={workspaces.space} />
             ) : (
-              <GraphView views={workspaces.shown} actions={agentActions} />
+              <GraphView views={workspaces.shown} actions={agentActions} under={stripOver} />
             )}
             {workspaces.bar}
           </div>
@@ -534,12 +539,19 @@ function App() {
         )}
       </div>
       {!isDebugMode && (terminalAvailable || jarvis) && (
-        <JarvisBar
-          jarvis={jarvis}
-          actions={agentActions}
-          onSummon={summonJarvis}
-          focusSignal={jarvisFocus}
-        />
+        // Its band goes on under the strip of tabs; the top line is this
+        // wrapper's, so it runs under the strip too.
+        <div
+          className="shrink-0 border-t border-border bg-bg-dark *:border-t-0"
+          style={bandUnder(stripOver)}
+        >
+          <JarvisBar
+            jarvis={jarvis}
+            actions={agentActions}
+            onSummon={summonJarvis}
+            focusSignal={jarvisFocus}
+          />
+        </div>
       )}
     </div>
   );
@@ -599,6 +611,7 @@ function App() {
               isOpen={terminalDrawer.isOpen && (workspaces.tabIds?.length ?? 1) > 0}
               onClosePanel={terminalDrawer.close}
               dock={terminalDock}
+              style={drawerPull(stripOver)}
               sizePx={terminalDrawer.sizePx}
               onResizeStart={terminalDrawer.onResizeStart}
               getAppearance={terminalDrawer.getAppearance}
@@ -644,10 +657,7 @@ function App() {
             onSetView={setView}
             onOpenHistory={() => openHistory('dia')}
             onOpenSettings={() => setIsSettingsOpen(true)}
-            onBroadcast={() => {
-              setBroadcastPreset(undefined);
-              setIsBroadcastOpen(true);
-            }}
+            onBroadcast={() => setIsBroadcastOpen(true)}
             onToggleFocus={() => (isFocused() ? endFocus() : startFocus())}
             onOpenPrs={() => openHistory('prs')}
           />
@@ -655,7 +665,6 @@ function App() {
             open={isBroadcastOpen}
             onClose={() => setIsBroadcastOpen(false)}
             views={officeViews}
-            initial={broadcastPreset}
           />
         </>
       )}

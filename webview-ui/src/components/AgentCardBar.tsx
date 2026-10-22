@@ -27,13 +27,15 @@ interface AgentCardBarProps {
 
 /**
  * The strip of agent cards between the office and the terminal panel — one
- * mug shot and status dot per agent — shared by both desktop hosts. It takes
- * its own room in the layout (the board and the graph never sit under it).
+ * mug shot and status dot per agent — shared by both desktop hosts. It is
+ * see-through.
  *
  * In standalone, TerminalDrawer owns the strip and the cards double as the
- * terminal panel's tabs. In VS Code the strip stands alone and lists every
- * agent in the office, external sessions included; a card click raises that
- * agent's editor terminal via focusAgent.
+ * terminal panel's tabs; there it lies over the office's edge and the graph
+ * goes on under it (cardBar.ts stripOverlap). In VS Code the strip stands
+ * alone, in its own room, and lists every agent in the office, external
+ * sessions included; a card click raises that agent's editor terminal via
+ * focusAgent.
  */
 export function AgentCardBar({
   agentIds,

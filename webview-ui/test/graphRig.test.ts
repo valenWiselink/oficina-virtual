@@ -84,3 +84,40 @@ describe('CameraRig', () => {
     expect(toScreen(r.cam, { x: 2000, y: 100 })).toEqual({ x: 400, y: 300 });
   });
 });
+
+describe('CameraRig with the strip of tabs over a side', () => {
+  it('centres in what the strip leaves uncovered', () => {
+    const right = rig();
+    right.calm = true;
+    right.inset = { top: 0, right: 72, bottom: 0, left: 0 };
+    right.centerOn({ x: 1000, y: 1000 });
+    expect(toScreen(right.cam, { x: 1000, y: 1000 })).toEqual({ x: 364, y: 300 });
+
+    const left = rig();
+    left.calm = true;
+    left.inset = { top: 0, right: 0, bottom: 0, left: 72 };
+    left.centerOn({ x: 1000, y: 1000 });
+    expect(toScreen(left.cam, { x: 1000, y: 1000 })).toEqual({ x: 436, y: 300 });
+  });
+
+  it('fits everyone inside the frame it is given, and zooms around its middle', () => {
+    const r = rig();
+    r.calm = true;
+    r.inset = { top: 64, right: 0, bottom: 0, left: 0 };
+    r.fit();
+    r.step(content, r.frame(), undefined);
+    expect(toScreen(r.cam, { x: 500, y: 300 }).y).toBeCloseTo(64 + 268);
+    const before = toScreen(r.cam, { x: 500, y: 300 });
+    r.zoomBy(2);
+    r.step(null, r.frame(), undefined);
+    expect(toScreen(r.cam, { x: 500, y: 300 }).y).toBeCloseTo(before.y);
+  });
+
+  it('a point under the strip counts as out of frame', () => {
+    const r = rig();
+    r.calm = true;
+    r.inset = { top: 0, right: 72, bottom: 0, left: 0 };
+    r.reveal({ x: 760, y: 300 });
+    expect(toScreen(r.cam, { x: 760, y: 300 })).toEqual({ x: 364, y: 300 });
+  });
+});

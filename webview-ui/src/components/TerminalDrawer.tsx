@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import { usePaneModes } from '../chat/chatMode.js';
@@ -35,6 +35,8 @@ interface TerminalDrawerProps {
   onClosePanel: () => void;
   /** The window edge it docks to. */
   dock: TerminalDock;
+  /** Its own box: pulled over the office by the strip's size (cardBar.ts). */
+  style?: CSSProperties;
   /** Open size in px along the dock's axis (user-resizable). Ignored while collapsed. */
   sizePx: number;
   /** Mousedown on the inner-edge drag handle; the hook owns the resize gesture. */
@@ -138,7 +140,7 @@ export function TerminalDrawer(props: TerminalDrawerProps) {
   const slotOf = (agentId: number) => visible.indexOf(agentId);
 
   return (
-    <div className={`shrink-0 flex ${layout.box}`}>
+    <div className={`shrink-0 flex ${layout.box}`} style={props.style}>
       <AgentCardBar
         agentIds={props.tabIds ?? agentIds}
         onNewAgent={props.onNewAgent}

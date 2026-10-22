@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { cardVariant, mergeOrder, reorderByPointer } from '../src/components/cardBar.js';
+import {
+  bandUnder,
+  cardVariant,
+  drawerPull,
+  mergeOrder,
+  NO_INSETS,
+  officeRoom,
+  reorderByPointer,
+  stripOverlap,
+} from '../src/components/cardBar.js';
 
 describe('cardVariant', () => {
   it('the showing pane wins over the selected character', () => {
@@ -39,5 +48,28 @@ describe('reorderByPointer', () => {
   it('skips cards that are not laid out', () => {
     const partial = (id: number) => (id === 2 ? null : mid(id));
     expect(reorderByPointer([1, 2, 3], 1, partial, 200)).toEqual([2, 1, 3]);
+  });
+});
+
+describe('stripOverlap (the strip of tabs over the office)', () => {
+  it('lies over the side it docks to; at the bottom, or hidden, not at all', () => {
+    expect(stripOverlap('right', true)).toEqual({ ...NO_INSETS, right: 72 });
+    expect(stripOverlap('left', true)).toEqual({ ...NO_INSETS, left: 72 });
+    expect(stripOverlap('top', true)).toEqual({ ...NO_INSETS, top: 64 });
+    expect(stripOverlap('bottom', true)).toEqual(NO_INSETS);
+    expect(stripOverlap('right', false)).toEqual(NO_INSETS);
+  });
+
+  it('the office makes room inside, the drawer comes over it and the band runs under', () => {
+    const o = stripOverlap('right', true);
+    expect(officeRoom(o)).toMatchObject({ paddingRight: 72, paddingLeft: 0 });
+    expect(drawerPull(o)).toMatchObject({ marginLeft: -72, marginRight: -0 });
+    expect(drawerPull(stripOverlap('top', true))).toMatchObject({ marginBottom: -64 });
+    expect(bandUnder(stripOverlap('left', true))).toEqual({
+      marginRight: -0,
+      marginLeft: -72,
+      paddingRight: 0,
+      paddingLeft: 72,
+    });
   });
 });

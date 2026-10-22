@@ -1,8 +1,12 @@
+import type { Insets } from '../components/cardBar.js';
 import {
   type Bounds,
   type Camera,
   centerOn,
   fitCamera,
+  type Frame,
+  fromFrame,
+  intoFrame,
   isVisible,
   type Pt,
   type ViewSize,
@@ -28,7 +32,9 @@ function approach(cam: Camera, target: Camera, k: number): Camera {
  * Where the graph's camera is and where it is going: fitting everyone,
  * gliding to a spot, or going along with one agent ("Seguir"). In calm mode
  * it jumps instead of gliding. Moving it by hand (drag, wheel, pinch, arrows,
- * the minimap) ends fitting and following. No canvas here: tested on its own.
+ * the minimap) ends fitting and following. Centring and fitting keep to the
+ * part of the view the strip of tabs leaves uncovered (`inset`). No canvas
+ * here: tested on its own.
  */
 export class CameraRig {
   cam: Camera = { x: 0, y: 0, zoom: 1 };
@@ -37,6 +43,8 @@ export class CameraRig {
   /** The agent the camera goes along with. */
   following: number | null = null;
   view: ViewSize = { w: 0, h: 0 };
+  /** What the see-through strip of agent tabs covers at each side (screen px). */
+  inset: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
   calm = false;
   /** The zoom asked for while following (the buttons, + and −). */
   private followZoom: number | null = null;
@@ -71,26 +79,42 @@ export class CameraRig {
     this.autoFit = true;
   }
 
-  /** Zoom around the middle of the view (still following, when it was). */
+  /** The part of the view the strip leaves uncovered. */
+  frame(): Frame {
+    const { top, right, bottom, left } = this.inset;
+    return { x: left, y: top, w: this.view.w - left - right, h: this.view.h - top - bottom };
+  }
+
+  /** The camera with world point `p` in the middle of the frame. */
+  centered(p: Pt, zoom = this.cam.zoom): Camera {
+    const f = this.frame();
+    return fromFrame(centerOn(this.cam, p, f, zoom), f);
+  }
+
+  /** Glide to show all of `b` inside the frame. */
+  fitTo(b: Bounds, padding: number): void {
+    const f = this.frame();
+    this.go(fromFrame(fitCamera(b, f, padding), f));
+  }
+
+  /** Zoom around the middle of the frame (still following, when it was). */
   zoomBy(factor: number): void {
-    const goal = zoomAt(
-      this.target ?? this.cam,
-      { x: this.view.w / 2, y: this.view.h / 2 },
-      factor,
-    );
+    const f = this.frame();
+    const goal = zoomAt(this.target ?? this.cam, { x: f.x + f.w / 2, y: f.y + f.h / 2 }, factor);
     if (this.following !== null) this.followZoom = goal.zoom;
     else this.go(goal);
   }
 
   /** Centre a world point, at `zoom` (default: as it is). */
   centerOn(p: Pt, zoom = this.cam.zoom): void {
-    this.go(centerOn(this.cam, p, this.view, zoom));
+    this.go(this.centered(p, zoom));
   }
 
   /** Bring a point into view only when it is out of frame (`margin`: how
    *  far inside the border still counts as out, screen px). */
   reveal(p: Pt, margin = 0): void {
-    if (!isVisible(this.cam, this.view, p, -margin)) this.centerOn(p);
+    const f = this.frame();
+    if (!isVisible(intoFrame(this.cam, f), f, p, -margin)) this.centerOn(p);
   }
 
   follow(id: number | null): void {
@@ -101,14 +125,15 @@ export class CameraRig {
     this.onFollow(id);
   }
 
-  /** One frame: aim (everyone, or the followed agent at `followed`; gone =
-   *  stop following) and take a step there. */
-  step(content: Bounds | null, fitView: ViewSize, followed: Pt | undefined): void {
+  /** One frame: aim (everyone inside `fit`, or the followed agent at
+   *  `followed`; gone = stop following) and take a step there. */
+  step(content: Bounds | null, fit: ViewSize & Partial<Pt>, followed: Pt | undefined): void {
     if (this.following !== null && !followed) this.follow(null);
     if (this.following !== null && followed) {
-      this.target = centerOn(this.cam, followed, this.view, this.followZoom ?? this.cam.zoom);
+      this.target = this.centered(followed, this.followZoom ?? this.cam.zoom);
     } else if (this.autoFit && content) {
-      this.target = fitCamera(content, fitView, FIT_PADDING);
+      const at = { x: fit.x ?? 0, y: fit.y ?? 0 };
+      this.target = fromFrame(fitCamera(content, fit, FIT_PADDING), at);
     }
     const target = this.target;
     if (!target) return;

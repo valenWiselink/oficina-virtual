@@ -28,6 +28,19 @@ export interface ViewSize {
   h: number;
 }
 
+/** A part of the view (screen px): its top-left corner and its size. */
+export interface Frame extends Pt, ViewSize {}
+
+/** The camera as seen from a frame's own top-left corner (screen points
+ *  then count from there), and back. */
+export function intoFrame(cam: Camera, f: Pt): Camera {
+  return { ...cam, x: cam.x + f.x / cam.zoom, y: cam.y + f.y / cam.zoom };
+}
+
+export function fromFrame(cam: Camera, f: Pt): Camera {
+  return { ...cam, x: cam.x - f.x / cam.zoom, y: cam.y - f.y / cam.zoom };
+}
+
 export const ZOOM_MIN = 0.35;
 export const ZOOM_MAX = 3;
 /** Fitting never blows a small graph up past this. */

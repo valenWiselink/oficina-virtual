@@ -13,6 +13,8 @@ import {
   type Bounds,
   type Camera,
   edgeArrow,
+  type Frame,
+  intoFrame,
   isVisible,
   type Pt,
   toScreen,
@@ -79,6 +81,9 @@ export interface SceneFrame {
   now: number;
   cam: Camera;
   view: ViewSize;
+  /** The part of the view the strip of tabs leaves uncovered (the arrows
+   *  toward who is off-screen go on its border); absent: all of it. */
+  frame?: Frame;
   /** Decorative effects off (calm mode or the slow-PC brake). */
   calm: boolean;
   /** Close-up cards under each agent (zoomed in). */
@@ -103,8 +108,6 @@ export interface SceneMarks {
    *  and the dragged one (drawn see-through, so the target shows). */
   dropTarget?: number | null;
   dragged?: number | null;
-  /** Agents picked together: a dashed ring each. */
-  picked?: ReadonlySet<number>;
 }
 
 /** What is clickable (graphHit.ts reads it) and what was drawn. */
@@ -402,7 +405,6 @@ function drawBodies(
         n,
         list.find((x) => x.id === marks.dragged),
       );
-    if (marks.picked?.has(v.id)) drawPickRing(pen, n);
     grow(at.content, { x: n.x - n.r, y: n.y - n.r - 20, w: n.r * 2, h: n.r * 2 + 20 });
   });
   const order = [...list].sort(
@@ -482,19 +484,6 @@ function drawDropRing(pen: Pen, n: SimNode, from: AgentView | undefined) {
     ? `Soltá para pasarle la última respuesta de ${clip(from.name, NAME_CHARS)}`
     : 'Soltá para pasarle la última respuesta';
   ctx.fillText(text, n.x, n.y - n.r - 16);
-  ctx.restore();
-}
-
-/** One of the agents picked together. */
-function drawPickRing(pen: Pen, n: SimNode) {
-  const { ctx, th } = pen;
-  ctx.save();
-  ctx.strokeStyle = th.accent;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 4]);
-  ctx.beginPath();
-  ctx.arc(n.x, n.y, n.r + 7, 0, Math.PI * 2);
-  ctx.stroke();
   ctx.restore();
 }
 
@@ -693,8 +682,10 @@ function drawOffscreenWaits(
   for (const v of needing) {
     const n = nodes.get(`a${v.id}`);
     if (!n || isVisible(f.cam, f.view, n, -n.r * f.cam.zoom)) continue;
-    const at = edgeArrow(f.cam, f.view, n, 22);
-    out.push({ id: v.id, box: drawEdgeArrow(ctx, th, at, clip(v.name, NAME_CHARS)) });
+    const fr = f.frame ?? { x: 0, y: 0, ...f.view };
+    const at = edgeArrow(intoFrame(f.cam, fr), fr, n, 22);
+    const shifted = { ...at, x: at.x + fr.x, y: at.y + fr.y };
+    out.push({ id: v.id, box: drawEdgeArrow(ctx, th, shifted, clip(v.name, NAME_CHARS)) });
   }
   return out;
 }
