@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL,
   changedKeys,
+  folderOf,
   followKeys,
   inWorkspace,
   moveWorkspace,
   needsByWorkspace,
-  folderOf,
   newcomersToAssign,
+  ownFolders,
   withoutWorkspace,
   workspaceOf,
   type WorkspaceState,
@@ -141,5 +142,19 @@ describe('moveWorkspace', () => {
     expect(
       workspaceOf(agent, { ...shared, workspaces: moveWorkspace(shared.workspaces, 'per', 'wl') }),
     ).toBe('per');
+  });
+});
+
+describe('ownFolders', () => {
+  it('gives the folders that land in a workspace: not the ones an earlier one claims', () => {
+    const s = state({
+      workspaces: [
+        { id: 'wl', name: 'Wiselink', folders: ['development', 'webapp'] },
+        { id: 'per', name: 'Personal', folders: ['Development', 'oficina-virtual'] },
+      ],
+    });
+    expect(ownFolders(s, 'wl')).toEqual(['development', 'webapp']);
+    expect(ownFolders(s, 'per')).toEqual(['oficina-virtual']);
+    expect(ownFolders(s, 'borrado')).toEqual([]);
   });
 });

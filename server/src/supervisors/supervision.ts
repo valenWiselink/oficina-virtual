@@ -28,6 +28,9 @@ export type SupervisionScope =
 /** The MCP server name in a supervisor's config: its tools are mcp__oficina__*. */
 export const MCP_SERVER_NAME = 'oficina';
 export const MCP_ALLOWED_TOOLS = `mcp__${MCP_SERVER_NAME}__*`;
+/** Agents a supervisor launched that may be alive at once (lanzar_agente):
+ *  past this it closes one that finished, or Valentín decides. */
+export const LAUNCHED_ALIVE_MAX = 4;
 const NAME_MAX = 60;
 
 /**
@@ -66,6 +69,13 @@ export function scopeWords(scope: SupervisionScope): string {
   return 'los agentes que te asignaron';
 }
 
+/** Where a team supervisor may launch agents, in words (supervisorLaunch.ts
+ *  decides; the supervisor of everyone is Jarvis, with its own rules). */
+function launchWhere(scope: SupervisionScope): string {
+  if (scope.kind === 'workspace') return `una de las carpetas del espacio «${scope.name}»`;
+  return 'la tuya o la de uno de tus agentes';
+}
+
 /** The role a supervisor is launched with (--append-system-prompt-file). The
  *  supervisor of everyone is Jarvis (jarvis.ts). */
 export function supervisorPrompt(scope: SupervisionScope): string {
@@ -82,6 +92,8 @@ Vas a recibir mensajes que empiezan con "[Oficina]": te los escribe la oficina, 
 - Permisos: aprobá con \`aprobar_permiso\` sólo lo claramente seguro (leer, buscar, correr tests, lint o builds locales, editar archivos dentro de su carpeta). La oficina igual rechaza lo peligroso aunque lo apruebes. Todo lo demás pedíselo a Valentín con una línea propia que empiece con "Te toca:", con el id del permiso, qué pide el agente y tu recomendación. Si algo está claramente mal, podés usar \`rechazar_permiso\` con el motivo.
 - Preguntas y decisiones de tus agentes: traéselas a Valentín con "Te toca:" y tu recomendación. Cuando él te conteste, pasale la respuesta al agente con \`escribir_a_agente\`.
 - Podés coordinar a tus agentes con \`escribir_a_agente\` (pedirle a uno que siga, pasarle algo de otro).
+- Cuando Valentín te pida algo que tiene que hacer otro agente, abrí uno por pedido con \`lanzar_agente\`: un apodo corto, la carpeta (${launchWhere(scope)}) y una tarea que pueda hacer sin vos (qué hacer, en qué repo o ticket, qué entregar), que es su primer mensaje. Entra a tu equipo y la oficina te avisa cuando pida algo o termine. Hay un tope de ${LAUNCHED_ALIVE_MAX} agentes abiertos por vos andando a la vez.
+- Cuando uno terminó lo que se le pidió y ya le reportaste a Valentín lo que hizo (y lo que le dejó con "Te toca:"), cerralo con \`cerrar_agente\`. La oficina sólo deja cerrar a los que están en «Terminó» o «Sin tarea»; si quedó esperando una respuesta, no lo cierres.
 
 ## Qué no hacés
 - No hacés el trabajo de ellos ni tocás código.
@@ -140,12 +152,14 @@ export class SupervisionTeams {
     return this.all()[supervisorSessionId] ?? [];
   }
 
-  /** Returns false when the team was already this one. */
+  /** Returns false when the team was already this one (an empty one is kept
+   *  too: "sent, and empty" is not "never sent"). */
   set(supervisorSessionId: string, members: string[]): boolean {
     const clean = [...new Set(members.filter((m) => m && m !== supervisorSessionId))].sort();
     const teams = this.all();
     const before = (teams[supervisorSessionId] ?? []).slice().sort();
-    if (before.length === clean.length && before.every((m, i) => m === clean[i])) return false;
+    const same = before.length === clean.length && before.every((m, i) => m === clean[i]);
+    if (same && supervisorSessionId in teams) return false;
     teams[supervisorSessionId] = clean;
     this.write(teams);
     return true;
@@ -215,10 +229,26 @@ export class SupervisorRegistry {
     }
   }
 
+  /** Workspace supervisors: the folder names whose agents land in their
+   *  workspace, as the browser sends them with the team — where they may
+   *  launch agents. */
+  readonly folders: SupervisionTeams;
+  /** The sessions each supervisor launched: its live ones count against
+   *  LAUNCHED_ALIVE_MAX. */
+  readonly launched: SupervisionTeams;
+  /** Launches still on their way, per supervisor session. */
+  private readonly launching = new Map<string, number>();
+  /** Sessions a supervisor just launched: the end of their first turn is
+   *  news even when no "active" status came before it (supervisorRelay). */
+  private readonly firstTurn = new Set<string>();
+
   constructor(
     readonly teams = new SupervisionTeams(),
     private readonly filesDir = path.join(os.homedir(), SERVER_JSON_DIR, 'supervisores'),
-  ) {}
+  ) {
+    this.folders = new SupervisionTeams(path.join(filesDir, 'carpetas.json'));
+    this.launched = new SupervisionTeams(path.join(filesDir, 'lanzados.json'));
+  }
 
   attach(store: AgentStateStore): void {
     this.store = store;
@@ -248,6 +278,44 @@ export class SupervisorRegistry {
     if (!this.store || !supervisor?.supervision) return [];
     const team = new Set(this.teamOf(supervisor));
     return [...this.store.entries()].filter(([, a]) => isAgent(a) && team.has(a.sessionId));
+  }
+
+  /** How many agents it launched are alive (in the office or on their way). */
+  launchedAlive(supervisor: AgentState): number {
+    const mine = new Set(this.launched.get(supervisor.sessionId));
+    const live = [...(this.store?.values() ?? [])].filter((a) => mine.has(a.sessionId)).length;
+    return live + (this.launching.get(supervisor.sessionId) ?? 0);
+  }
+
+  /** A launch is on its way: it counts until the returned function runs. */
+  beginLaunch(supervisorSessionId: string): () => void {
+    this.launching.set(supervisorSessionId, (this.launching.get(supervisorSessionId) ?? 0) + 1);
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      const left = (this.launching.get(supervisorSessionId) ?? 1) - 1;
+      if (left > 0) this.launching.set(supervisorSessionId, left);
+      else this.launching.delete(supervisorSessionId);
+    };
+  }
+
+  /** It launched this session: counted against its cap (only the live ones
+   *  are kept) and on its team at once — a workspace's team is confirmed by
+   *  the browser, which puts it there by the same folder rule. */
+  noteLaunched(supervisor: AgentState, sessionId: string): void {
+    const live = new Set([...(this.store?.values() ?? [])].map((a) => a.sessionId));
+    const mine = this.launched.get(supervisor.sessionId).filter((s) => live.has(s));
+    this.launched.set(supervisor.sessionId, [...mine, sessionId]);
+    this.firstTurn.add(sessionId);
+    if (supervisor.supervision && supervisor.supervision.kind !== 'all') {
+      this.teams.set(supervisor.sessionId, [...this.teams.get(supervisor.sessionId), sessionId]);
+    }
+  }
+
+  /** Once, for the first status seen of a session a supervisor just launched. */
+  takeFirstTurn(sessionId: string): boolean {
+    return this.firstTurn.delete(sessionId);
   }
 
   /** The live supervisors (agent ids) a session is supervised by. */
@@ -308,10 +376,13 @@ export class SupervisorRegistry {
     this.saveTokens();
   }
 
-  /** No longer a supervisor: its token and files go. */
+  /** No longer a supervisor: its token and files go (and what it launched
+   *  stops counting against anyone). */
   forget(sessionId: string): void {
     for (const [token, owner] of this.tokens) if (owner === sessionId) this.tokens.delete(token);
     this.saveTokens();
+    this.folders.remove(sessionId);
+    this.launched.remove(sessionId);
     for (const ext of ['mcp.json', 'rol.md']) {
       fs.rmSync(path.join(this.filesDir, `${sessionId}.${ext}`), { force: true });
     }

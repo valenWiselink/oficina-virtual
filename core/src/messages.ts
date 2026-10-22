@@ -813,6 +813,7 @@ export interface SupervisionTeam {
   type: 'supervisionTeam';
   supervisorId: number;
   members: string[];
+  folders?: string[];
 }
 
 export interface SaveAgentSeats {

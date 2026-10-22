@@ -129,7 +129,9 @@ Ayuda).
   o a todos. Le llegan los permisos, las preguntas y los turnos terminados de su
   equipo; aprueba lo seguro, te pide lo demás con un «Te toca» y te cuenta qué hizo
   cada uno. Lo peligroso (push, borrar, publicar, migraciones, deploys) siempre te
-  lo pide a vos: la oficina no lo deja aprobarlo.
+  lo pide a vos: la oficina no lo deja aprobarlo. También lanza un agente por
+  pedido (sólo en carpetas de lo que supervisa, hasta 4 andando a la vez) y lo
+  cierra cuando terminó y ya te lo contó (nunca si trabaja o espera algo).
 - **Jarvis**: el que supervisa a todos (en + Agente, «Supervisa: Todos (Jarvis)»;
   se llama Jarvis si no le ponés otro nombre). Además de supervisar, dirige: le
   pedís algo y abre un agente nuevo con su tarea y un apodo, se lo da a uno que ya

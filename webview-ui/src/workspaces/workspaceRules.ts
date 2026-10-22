@@ -42,6 +42,15 @@ export function workspaceOf(agent: Placeable, state: WorkspaceState): string | n
   return byFolder?.id ?? null;
 }
 
+/** The folder names whose agents land in a workspace by themselves: its own
+ *  folders that no workspace before it claims first. */
+export function ownFolders(state: WorkspaceState, workspaceId: string): string[] {
+  const at = state.workspaces.findIndex((w) => w.id === workspaceId);
+  if (at < 0) return [];
+  const earlier = state.workspaces.slice(0, at).flatMap((w) => w.folders);
+  return state.workspaces[at].folders.filter((f) => !earlier.some((e) => sameFolder(e, f)));
+}
+
 /** The agents a workspace shows (ALL: everyone). */
 export function inWorkspace<T extends Placeable>(
   agents: readonly T[],

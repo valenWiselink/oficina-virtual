@@ -24,6 +24,45 @@ export function bearerOf(header: string | string[] | undefined): string | undefi
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 
+/** A team supervisor's own lanzar_agente and cerrar_agente (Jarvis registers
+ *  its own, with the same words, in jarvisTools.ts). */
+function registerTeamLaunchTools(server: McpServer, tools: SupervisorTools): void {
+  server.registerTool(
+    'lanzar_agente',
+    {
+      description:
+        'Abre un agente nuevo de la oficina (una sesión propia de Claude Code, no un subagente) con su primera tarea. Entra a tu equipo y la oficina te avisa cuando pida algo o termine. Sólo en carpetas de lo que supervisás (para un espacio, una de sus carpetas) y con un tope de agentes abiertos por vos andando a la vez.',
+      inputSchema: {
+        carpeta: z
+          .string()
+          .describe('Dónde trabaja: el nombre de una carpeta de tu espacio o su ruta completa'),
+        tarea: z
+          .string()
+          .describe('Su primer mensaje: qué hacer, en qué repo o ticket y qué entregar'),
+        apodo: z.string().describe('Corto, fácil de decir y distinto de los que ya hay'),
+        modelo: z
+          .string()
+          .optional()
+          .describe('opus, sonnet, haiku o fable; sin esto, el de siempre'),
+        esfuerzo: z
+          .string()
+          .optional()
+          .describe('low, medium, high, xhigh o max; sin esto, el de siempre'),
+      },
+    },
+    async (input) => text(await tools.lanzarAgente(input)),
+  );
+  server.registerTool(
+    'cerrar_agente',
+    {
+      description:
+        'Cierra un agente de tu equipo que terminó lo que se le pidió, cuando ya le contaste a Valentín qué hizo (su conversación queda guardada). Sólo cierra a los que están en «Terminó» o «Sin tarea»: nunca a uno que trabaja, que espera un permiso o que hizo una pregunta.',
+      inputSchema: { agente: z.string().describe('Nombre o id del agente') },
+    },
+    ({ agente }) => text(tools.cerrarAgente(agente)),
+  );
+}
+
 /** The MCP server one supervisor talks to (its tools, bound to its team). The
  *  supervisor of everyone is Jarvis, with tools of its own (jarvisTools.ts). */
 export function supervisorMcpServer(deps: JarvisDeps, supervisorId: number): McpServer {
@@ -32,6 +71,7 @@ export function supervisorMcpServer(deps: JarvisDeps, supervisorId: number): Mcp
   const tools = jarvis ?? new SupervisorTools(deps, supervisorId);
   const server = new McpServer({ name: MCP_SERVER_NAME, version: '1.0.0' });
   if (jarvis) registerJarvisTools(server, jarvis);
+  else registerTeamLaunchTools(server, tools);
 
   server.registerTool(
     'equipo',

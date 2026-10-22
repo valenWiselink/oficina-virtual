@@ -2038,7 +2038,9 @@ components:
       description: |
         The members (session ids) of a "workspace" or "agents" supervisor, as
         the browser computes them (workspaces live there). Sent whenever they
-        change; ignored for "all" supervisors.
+        change; ignored for "all" supervisors. A workspace supervisor's message also
+        carries the folder names whose agents land in its workspace: where it
+        may launch agents (lanzar_agente).
       type: object
       additionalProperties: false
       required: [type, supervisorId, members]
@@ -2048,6 +2050,10 @@ components:
         supervisorId:
           type: integer
         members:
+          type: array
+          items:
+            type: string
+        folders:
           type: array
           items:
             type: string

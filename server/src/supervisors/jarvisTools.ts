@@ -117,7 +117,7 @@ export class JarvisTools extends SupervisorTools {
     };
   }
 
-  async lanzarAgente(input: {
+  override async lanzarAgente(input: {
     carpeta: string;
     tarea: string;
     apodo: string;
@@ -162,7 +162,7 @@ export class JarvisTools extends SupervisorTools {
     return `Abrí a «${apodo}» (id ${id}) en ${folder}. Ya arrancó con la tarea; te aviso cuando termine.`;
   }
 
-  cerrarAgente(query: string): string {
+  override cerrarAgente(query: string): string {
     if (!this.jarvis.close) return 'Esta oficina no puede cerrar agentes.';
     const found = this.find(query);
     if (typeof found === 'string') return found;

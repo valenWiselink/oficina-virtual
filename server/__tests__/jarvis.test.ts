@@ -244,24 +244,19 @@ describe('the MCP server', () => {
   }
 
   it('gives Jarvis its own tools, and other supervisors only theirs', async () => {
+    // Every supervisor opens and closes agents; Jarvis by its own rules.
     const shared = [
       'aprobar_permiso',
+      'cerrar_agente',
       'equipo',
       'escribir_a_agente',
+      'lanzar_agente',
       'rechazar_permiso',
       'ultima_respuesta',
     ];
     expect(await toolNames(12)).toEqual(shared);
     expect(await toolNames(11)).toEqual(
-      [
-        ...shared,
-        'anotar',
-        'bitacora',
-        'carpetas',
-        'cerrar_agente',
-        'lanzar_agente',
-        'pasar_resultado',
-      ].sort(),
+      [...shared, 'anotar', 'bitacora', 'carpetas', 'pasar_resultado'].sort(),
     );
   });
 });

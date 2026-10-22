@@ -92,9 +92,10 @@ export function makeAgentEdits(link: EditLink, timeoutMs = RUN_TIMEOUT_MS) {
   const setSupervision = (id: number, scope: SupervisionScope): Promise<RunAnswer> =>
     ask('supervisionResult', id, { type: 'setSupervision', id, scope });
 
-  /** Who its team is (session ids), for workspaces and hand-picked teams. */
-  const sendTeam = (supervisorId: number, members: string[]): void => {
-    link.send({ type: 'supervisionTeam', supervisorId, members });
+  /** Who its team is (session ids), for workspaces and hand-picked teams; a
+   *  workspace's also says which folders land in it (where it may launch). */
+  const sendTeam = (supervisorId: number, members: string[], folders?: string[]): void => {
+    link.send({ type: 'supervisionTeam', supervisorId, members, folders });
   };
 
   return { editAgent, setAgentRun, setSupervision, sendTeam };
