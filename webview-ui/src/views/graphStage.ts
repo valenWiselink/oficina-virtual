@@ -13,7 +13,7 @@ import {
   toScreen,
   toWorld,
 } from './graphCamera.js';
-import { type GraphTheme, readTheme, rgba } from './graphDraw.js';
+import { type GraphTheme, readTheme } from './graphDraw.js';
 import { drawMinimap, MINIMAP, minimapToWorld } from './graphExtras.js';
 import { QUIET_ALPHA } from './graphFilter.js';
 import {
@@ -27,7 +27,7 @@ import { type Box, type GraphTarget, hitTest } from './graphHit.js';
 import { DIM_ALPHA, focusOf, HoverDwell, type HoverTarget } from './graphHover.js';
 import { mostUrgent } from './graphPick.js';
 import { setPin } from './graphPins.js';
-import { type Grab, type Mods, type PointerHost, PointerTracker } from './graphPointers.js';
+import { type Grab, type PointerHost, PointerTracker } from './graphPointers.js';
 import { CameraRig } from './graphRig.js';
 import { drawScene, edgesOf, layout, type SceneOut, VOS, WORLD } from './graphScene.js';
 import { type SimNode, stepGraph } from './graphSim.js';
@@ -79,10 +79,6 @@ export interface GraphInputs {
   onPill?: (id: number, how: 'hover' | 'click') => void;
   /** Right click, or a finger held still: the menu of what is there. */
   onMenu?: (target: GraphTarget | null, at: Pt) => void;
-  /** Agents picked together (Ctrl+click, Shift + box). */
-  picked?: ReadonlySet<number>;
-  /** Ctrl+click toggles one; a box adds the agents inside it. */
-  onPick?: (ids: number[], how: 'toggle' | 'add') => void;
   /** What stays crisp without hovering (the filter by state); null: all. */
   dim?: ReadonlySet<string> | null;
   /** An agent dragged and dropped on another one's disc (`toId`). */
@@ -159,8 +155,6 @@ export class GraphStage implements PointerHost {
   private pillHover: number | null = null;
   /** While dragging an agent: the one under it that would get its answer. */
   private dropOn: number | null = null;
-  /** Shift + drag: the box being drawn (screen px). */
-  private boxRect: { from: Pt; to: Pt } | null = null;
   /** A meeting in focus, and the camera to go back to. */
   private meeting: { id: number; back: { cam: Camera; autoFit: boolean } } | null = null;
   /** focusOn's node, until it is drawn (or the wait runs out). */
@@ -263,7 +257,7 @@ export class GraphStage implements PointerHost {
     inp.onFrame?.();
   }
 
-  /** Paint this frame: the scene, the minimap and a pick box. */
+  /** Paint this frame: the scene and the minimap. */
   private draw(inp: GraphInputs, now: number): void {
     const wall = Date.now();
     const cam = this.rig.cam;
@@ -285,7 +279,6 @@ export class GraphStage implements PointerHost {
       ...this.focusMarks(inp, now),
       dropTarget: this.dropOn,
       dragged: this.held?.node.startsWith('a') ? Number(this.held.node.slice(1)) : null,
-      picked: inp.picked,
     };
     this.out = drawScene(this.ctx, this.th, scene, inp.views, this.nodes, marks, inp.life);
     this.minimap = drawMinimapIfNeeded(
@@ -298,7 +291,6 @@ export class GraphStage implements PointerHost {
       this.nodes,
     );
     if (this.minimap) this.lastMinimap = this.minimap;
-    if (this.boxRect) drawPickBox(this.ctx, this.th, this.boxRect, this.dpr);
   }
 
   private focusPending(now: number): void {
@@ -409,30 +401,8 @@ export class GraphStage implements PointerHost {
     this.held = null;
   }
 
-  /** Shift + drag on the background: the box, and on letting go the agents
-   *  whose discs are inside it join the pick. */
-  box(from: Pt, to: Pt, done: boolean): void {
-    this.boxRect = done ? null : { from, to };
-    if (!done || !this.out) return;
-    const a = toWorld(this.rig.cam, from);
-    const b = toWorld(this.rig.cam, to);
-    const inside = (x: number, lo: number, hi: number) =>
-      x >= Math.min(lo, hi) && x <= Math.max(lo, hi);
-    const ids = this.out.hits
-      .filter(
-        (h) => h.member === undefined && inside(h.disc.x, a.x, b.x) && inside(h.disc.y, a.y, b.y),
-      )
-      .map((h) => h.id);
-    if (ids.length > 0) this.inputs().onPick?.([...new Set(ids)], 'add');
-  }
-
-  click(target: GraphTarget | null, p: Pt, repeat: boolean, mods?: Mods): void {
+  click(target: GraphTarget | null, p: Pt, repeat: boolean): void {
     const { views, onSelect } = this.inputs();
-    // Ctrl+click on an agent: in or out of the pick, nothing else.
-    if (mods?.ctrl && target?.type === 'agent' && target.member === undefined) {
-      this.inputs().onPick?.([target.id], 'toggle');
-      return;
-    }
     const zoom = this.rig.cam.zoom;
     switch (target?.type) {
       case 'agent':
@@ -577,27 +547,6 @@ export class GraphStage implements PointerHost {
       },
     };
   }
-}
-
-/** The box Shift + drag draws to pick several. */
-function drawPickBox(
-  ctx: CanvasRenderingContext2D,
-  th: GraphTheme,
-  r: { from: Pt; to: Pt },
-  dpr: number,
-) {
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const x = Math.min(r.from.x, r.to.x);
-  const y = Math.min(r.from.y, r.to.y);
-  const w = Math.abs(r.to.x - r.from.x);
-  const h = Math.abs(r.to.y - r.from.y);
-  ctx.fillStyle = rgba(th.accent, 0.08);
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = th.accent;
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4, 3]);
-  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
-  ctx.setLineDash([]);
 }
 
 /** The minimap shows only when part of the graph is out of view. */

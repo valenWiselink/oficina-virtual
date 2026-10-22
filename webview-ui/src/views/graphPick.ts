@@ -1,4 +1,3 @@
-import { riskyReason } from '../permissions/riskyCommand.js';
 import { type AgentView, byUrgency } from './agentViews.js';
 
 /**
@@ -48,31 +47,4 @@ export function selectionOf(
   if (views.some((v) => v.id === agentId)) return { id: agentId };
   const lead = views.find((v) => v.subagents.some((s) => s.id === agentId));
   return lead ? { id: lead.id, member: agentId } : { id: agentId };
-}
-
-/** The pick after a Ctrl+click (`toggle`) or a box (`add`). The first
- *  Ctrl+click also takes the agent already selected, as in any list. */
-export function pickNext(
-  prev: readonly number[],
-  ids: readonly number[],
-  how: 'toggle' | 'add',
-  selected: number | null,
-): number[] {
-  const start = prev.length === 0 && selected !== null ? [selected] : [...prev];
-  if (how === 'add') return [...new Set([...start, ...ids])];
-  const next = new Set(start);
-  for (const id of ids) {
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-  }
-  return [...next];
-}
-
-/** The permissions among them that are safe to approve all at once. */
-export function simplePermissions(views: readonly AgentView[]) {
-  return views.flatMap((v) => {
-    const p = v.permission;
-    if (!p) return [];
-    return riskyReason(p.toolName, p.toolInput as Record<string, unknown>) ? [] : [p];
-  });
 }

@@ -49,7 +49,6 @@ export const GRAPH_KEYS_HELP: ReadonlyArray<[string, string]> = [
 /** What the mouse (or a finger) does, under the keys in the same list. */
 export const GRAPH_MOUSE_HELP: ReadonlyArray<[string, string]> = [
   ['Clic derecho', 'El menú del agente (con el dedo: mantenelo apretado)'],
-  ['Ctrl+clic · Shift y arrastrar', 'Elegir varios'],
   ['Arrastrar un agente sobre otro', 'Pasarle su última respuesta'],
   ['Doble clic en el hueco de una junta', 'Enfocarla'],
   ['Mouse quieto sobre un agente', 'Su ficha, con su equipo resaltado'],

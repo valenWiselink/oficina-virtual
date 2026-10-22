@@ -14,7 +14,6 @@ import { type GraphControls, useGraphCanvas } from './useGraphCanvas.js';
 import { useGraphHover } from './useGraphHover.js';
 import { useGraphKeys } from './useGraphKeys.js';
 import { useGraphMenu } from './useGraphMenu.js';
-import { useGraphPicks } from './useGraphPicks.js';
 import { useGraphPill } from './useGraphPill.js';
 import { useGraphSelection } from './useGraphSelection.js';
 
@@ -36,7 +35,6 @@ export function useGraphView(
   const [slow, setSlow] = useState(false);
   const [filter, setFilter] = useState<GraphFilter>('all');
   const [meetingId, setMeetingId] = useState<number | null>(null);
-  const picks = useGraphPicks(() => sel.marked?.id ?? null);
   const look = { calm: useCalmMode(), tint: useDayTint(), theme: useAppTheme() };
   const controls = useGraphCanvas(canvasRef, {
     ...look,
@@ -46,11 +44,8 @@ export function useGraphView(
     cameraKey: useWorkspaces().current,
     onSelect: (target, repeat) => {
       pill.close();
-      picks.clear();
       sel.clicked(target, repeat);
     },
-    picked: picks.set,
-    onPick: picks.onPick,
     onPill: pill.onPill,
     dim: filterFocus(views, filter),
     onMenu: (target, at) => menu.open(target, at),
@@ -61,31 +56,29 @@ export function useGraphView(
   });
   const { pick, select, selected, selection } = sel;
   const menu = useGraphMenu({ views, actions, controls, following: followId, pick, select });
-  const release = releaser(followId, controls, { pill, sel, picks });
+  const release = releaser(followId, controls, { pill, sel });
   useGraphEvents({ rootRef, controls, release, opened: sel.opened, life: lifeRef.current });
   const keyInputs = { views, actions, controls, release, selected, selection, select };
   const keys = useGraphKeys({ ...keyInputs, following: followId });
   const state = { filter, setFilter, meetingId, followId, slow };
-  return { views, sel, hover, pill, picks, controls, keys, menu, ...state };
+  return { sel, hover, pill, controls, keys, menu, ...state };
 }
 
 /** Esc, from the graph, one thing at a time: a drag in progress (nothing
- *  dropped), a focused meeting, the agents picked together, following, the
- *  grown pill, and last the selection. */
+ *  dropped), a focused meeting, following, the grown pill, and last the
+ *  selection. */
 function releaser(
   followId: number | null,
   controls: GraphControls,
   open: {
     pill: { isOpen: () => boolean; close: () => void };
     sel: { clear: () => void };
-    picks: { any: boolean; clear: () => void };
   },
 ): () => void {
-  const { pill, sel, picks } = open;
+  const { pill, sel } = open;
   return () => {
     if (controls.cancelDrag() || controls.unfocusMeeting()) return;
-    if (picks.any) picks.clear();
-    else if (followId !== null) controls.follow(null);
+    if (followId !== null) controls.follow(null);
     else if (pill.isOpen()) pill.close();
     else sel.clear();
   };

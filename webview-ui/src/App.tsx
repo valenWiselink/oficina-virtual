@@ -131,7 +131,6 @@ function App() {
   const [historyTab, setHistoryTab] = useState<HistoryTab>('dia');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
-  const [broadcastPreset, setBroadcastPreset] = useState<number[] | undefined>(undefined);
   const [launchSignal, setLaunchSignal] = useState(0);
   useCommandPaletteShortcut(() => setIsPaletteOpen(true));
   const openHistory = (tab: HistoryTab) => {
@@ -365,10 +364,6 @@ function App() {
         onAdopt: terminalAvailable ? requestAdopt : undefined,
         onHandOff: requestHandOff,
         onHandOffTo: handOffTo,
-        onMessageMany: (ids) => {
-          setBroadcastPreset(ids);
-          setIsBroadcastOpen(true);
-        },
         onClose: handleCloseAgent,
         onEdit: requestEdit,
         onOpenTerminal: (id) => {
@@ -582,10 +577,7 @@ function App() {
             onSetView={setView}
             onOpenHistory={() => openHistory('dia')}
             onOpenSettings={() => setIsSettingsOpen(true)}
-            onBroadcast={() => {
-              setBroadcastPreset(undefined);
-              setIsBroadcastOpen(true);
-            }}
+            onBroadcast={() => setIsBroadcastOpen(true)}
             onToggleFocus={() => (isFocused() ? endFocus() : startFocus())}
             onOpenPrs={() => openHistory('prs')}
           />
@@ -593,7 +585,6 @@ function App() {
             open={isBroadcastOpen}
             onClose={() => setIsBroadcastOpen(false)}
             views={agentViews}
-            initial={broadcastPreset}
           />
         </>
       )}
