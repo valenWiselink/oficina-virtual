@@ -125,18 +125,26 @@ const EMPTY_LINES: Record<
       'Todos ocupados en algo.',
       'Nadie mirando el techo.',
     ],
-    morning: ['Todos arrancaron con algo.', 'Cada uno con lo suyo.', 'Nadie de brazos cruzados.'],
+    morning: [
+      'Todos arrancaron con algo.',
+      'Arranque con todos en marcha.',
+      'Ni uno esperando qué hacer.',
+    ],
     midday: [
       'Nadie sin tarea, ni al mediodía.',
-      'Cada uno con lo suyo.',
-      'Todos con algo entre manos.',
+      'Todos con algo, aunque sea mediodía.',
+      'Mediodía y nadie de brazos cruzados.',
     ],
     afternoon: [
       'Cada uno con lo suyo.',
       'Todos con algo entre manos.',
-      'Nadie de brazos cruzados.',
+      'La tarde con todos ocupados.',
     ],
-    evening: ['Todos con algo, todavía.', 'Cada uno con lo suyo.', 'Nadie de brazos cruzados.'],
+    evening: [
+      'Todos con algo, todavía.',
+      'Nadie sin tarea a esta hora.',
+      'Hasta tarde, todos en algo.',
+    ],
   },
 };
 
