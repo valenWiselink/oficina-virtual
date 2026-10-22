@@ -5,10 +5,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { AgentRuntime } from '../src/agentRuntime.js';
 import { createAgentState } from '../src/agentState.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
+import { handleClientMessage } from '../src/clientMessageHandler.js';
 import type { PendingPermission } from '../src/permissionBroker.js';
-import { jarvisPrompt, Notebook } from '../src/supervisors/jarvis.js';
+import { jarvisPrompt, liveJarvis, Notebook, ONE_JARVIS } from '../src/supervisors/jarvis.js';
 import { type JarvisLaunch, JarvisTools } from '../src/supervisors/jarvisTools.js';
 import {
   SupervisionTeams,
@@ -16,6 +18,7 @@ import {
   SupervisorRegistry,
 } from '../src/supervisors/supervision.js';
 import { supervisorMcpServer } from '../src/supervisors/supervisorMcp.js';
+import type { PtySessionManager } from '../src/terminal/ptySessionManager.js';
 import type { AgentState } from '../src/types.js';
 
 let dir: string;
@@ -258,5 +261,48 @@ describe('the MCP server', () => {
     expect(await toolNames(11)).toEqual(
       [...shared, 'anotar', 'bitacora', 'carpetas', 'pasar_resultado'].sort(),
     );
+  });
+});
+
+describe('one Jarvis per office', () => {
+  it('is the oldest live supervisor of everyone', () => {
+    const store = new AgentStateStore();
+    add(store, 5, { supervision: { kind: 'agents' } });
+    expect(liveJarvis(store)).toBeUndefined();
+    add(store, 9, { supervision: { kind: 'all' } });
+    add(store, 7, { supervision: { kind: 'all' } });
+    add(store, 8, { supervision: { kind: 'all' }, leadAgentId: 7 });
+    expect(liveJarvis(store)).toBe(7);
+  });
+
+  it('refuses a second one, launched or made from Editar', () => {
+    const store = new AgentStateStore();
+    add(store, 1);
+    add(store, 2, { supervision: { kind: 'all' } });
+    const sent: Array<Record<string, unknown>> = [];
+    const ctx = {
+      store,
+      cache: null,
+      privileged: true,
+      runtime: {} as AgentRuntime,
+      ptyManager: {} as PtySessionManager,
+    };
+    const send = (m: Record<string, unknown>) => sent.push(m);
+    handleClientMessage(
+      { type: 'launchAgent', directoryPath: WORK, supervision: { kind: 'all' } },
+      send,
+      ctx,
+    );
+    handleClientMessage({ type: 'setSupervision', id: 1, scope: { kind: 'all' } }, send, ctx);
+    expect(sent).toEqual([
+      { type: 'agentLaunchFailed', directoryPath: WORK, reason: ONE_JARVIS },
+      { type: 'supervisionResult', id: 1, ok: false, reason: ONE_JARVIS, newId: undefined },
+    ]);
+  });
+
+  it('talks like the films: «señor», de usted, ahead of trouble', () => {
+    expect(jarvisPrompt()).toContain('«señor»');
+    expect(jarvisPrompt()).toContain('de usted');
+    expect(jarvisPrompt()).toContain('Te adelantás');
   });
 });

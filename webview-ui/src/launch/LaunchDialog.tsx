@@ -41,28 +41,35 @@ interface PendingLaunch {
  * another colour when an agent in the office already has them, see
  * freshLaunchChoice). Returns the function that starts it and the dialog.
  */
-export function useLaunchDialog(taken: () => readonly TakenLook[]): {
-  requestLaunch: (directory: Directory) => void;
+export function useLaunchDialog(
+  taken: () => readonly TakenLook[],
+  /** The office already has its Jarvis (one per office). */
+  jarvisTaken: () => boolean = () => false,
+): {
+  /** `asJarvis`: the dialog comes set for the office's Jarvis (Jarvis's bar). */
+  requestLaunch: (directory: Directory, asJarvis?: boolean) => void;
   launchDialog: React.ReactNode;
 } {
   const [pending, setPending] = useState<PendingLaunch | null>(null);
   const { workspaces } = useWorkspaces();
 
   const requestLaunch = useCallback(
-    (directory: Directory) => {
+    (directory: Directory, asJarvis = false) => {
       const start = freshLaunchChoice(
         recallLaunchChoice(directory.path),
         taken(),
         CLAWD_COLOR_NAMES.length,
       );
+      const supervision: SupervisionScope = asJarvis ? { kind: 'all' } : { kind: 'none' };
       setPending({
         directory,
         ...start,
+        nickname: asJarvis ? nicknameForScope('', supervision) : start.nickname,
         model: start.model ?? null,
         effort: start.effort ?? null,
         prompt: '',
         template: 'nada',
-        supervision: { kind: 'none' },
+        supervision,
       });
     },
     [taken],
@@ -181,6 +188,7 @@ export function useLaunchDialog(taken: () => readonly TakenLook[]): {
             candidates={[]}
             disabled={false}
             allowPicked={false}
+            jarvisTaken={jarvisTaken()}
             onChange={(supervision) =>
               setPending({
                 ...pending,

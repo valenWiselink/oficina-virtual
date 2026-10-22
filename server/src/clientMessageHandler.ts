@@ -33,6 +33,7 @@ import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
 import { hooksConsentRequest } from './providers/hook/consentGate.js';
 import { claudeProvider, hookProviderById, hookProviders } from './providers/index.js';
+import { liveJarvis, ONE_JARVIS } from './supervisors/jarvis.js';
 import { parseScope } from './supervisors/supervision.js';
 import { applySupervisionTeam, broadcastSupervision } from './supervisors/supervisionMessages.js';
 import { adoptIntoOffice } from './terminal/adoptSession.js';
@@ -161,6 +162,12 @@ export function handleClientMessage(
       // the browser drawer (a shell running as the operator -- privileged, like
       // every message past the read-only gate above).
       if (!runtime || !ctx.ptyManager) break;
+      // One Jarvis per office: a second supervisor of everyone is refused.
+      const supervision = parseScope(msg.supervision) ?? undefined;
+      if (supervision?.kind === 'all' && liveJarvis(store) !== undefined) {
+        send({ type: 'agentLaunchFailed', directoryPath: msg.directoryPath, reason: ONE_JARVIS });
+        break;
+      }
       // Permission posture is a persisted per-host setting, never a per-launch
       // field: the client sends where to launch, plus the name and colour
       // chosen in the launch dialog. No directoryPath falls back to the server
@@ -175,7 +182,7 @@ export function handleClientMessage(
           prompt: launchPrompt(msg),
           model: cleanModel(msg.model),
           effort: cleanEffort(msg.effort),
-          supervision: parseScope(msg.supervision) ?? undefined,
+          supervision,
         },
       ).then((id) => {
         // Born a supervisor: every office learns who it watches over.
@@ -228,6 +235,11 @@ export function handleClientMessage(
       }
       if (scope === undefined) {
         answer(false, 'No entendí a quién tiene que supervisar');
+        break;
+      }
+      const jarvis = liveJarvis(store);
+      if (scope?.kind === 'all' && jarvis !== undefined && jarvis !== id) {
+        answer(false, ONE_JARVIS);
         break;
       }
       void setSupervision(

@@ -22,6 +22,7 @@ export function SupervisionField({
   candidates,
   disabled,
   allowPicked = true,
+  jarvisTaken = false,
   onChange,
 }: {
   scope: SupervisionScope;
@@ -31,6 +32,8 @@ export function SupervisionField({
   disabled: boolean;
   /** "Elegidos" needs the agent to exist (launching: pick them later in Editar). */
   allowPicked?: boolean;
+  /** Another agent is already Jarvis: there is one per office. */
+  jarvisTaken?: boolean;
   onChange: (scope: SupervisionScope, picked: string[]) => void;
 }) {
   const pick = (kind: string | null) => {
@@ -56,7 +59,8 @@ export function SupervisionField({
         choices={KINDS.filter(
           (k) =>
             (k.value !== 'workspace' || workspaces.length > 0) &&
-            (k.value !== 'agents' || allowPicked),
+            (k.value !== 'agents' || allowPicked) &&
+            (k.value !== 'all' || !jarvisTaken),
         )}
         value={scope.kind === 'none' ? null : scope.kind}
         disabled={disabled}
