@@ -119,6 +119,9 @@ export interface AgentView {
   tasks: Array<{ subject: string; status: 'pending' | 'in_progress' | 'completed' }>;
   /** Start of its latest answer, one line. */
   lastReplyHead?: string;
+  /** Jarvis: something of that answer is said aloud (all of it when the turn
+   *  answered you, only its «Te toca:» after an «[Oficina]» notice). */
+  saysAloud?: boolean;
   /** When its session last wrote anything (server clock) — how long it has
    *  really been still. */
   lastRecordAt?: number;
@@ -467,6 +470,7 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
         key: identity?.sessionId ?? name,
         tasks: tasks.map((t) => ({ subject: t.subject, status: t.status })),
         lastReplyHead: identity?.lastReplyHead,
+        saysAloud: identity?.saysAloud,
         lastRecordAt: identity?.lastRecordAt,
         area: identity?.area,
         waitingSince:

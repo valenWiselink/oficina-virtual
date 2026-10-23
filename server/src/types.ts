@@ -130,6 +130,9 @@ export interface AgentState {
   tasks?: AgentTask[];
   /** Latest text answer of the main conversation (for handing it to another agent). */
   lastReply?: string;
+  /** The current (or last) turn answers Valentín: he started it or wrote in
+   *  it, not an «[Oficina]» notice (voice/turnAuthor.ts). */
+  turnByValentin?: boolean;
   /** What that answer leaves for the operator to do ("mergear PR #812"), and
    *  the record it came from (so "done" can be marked per answer). `prAsk`
    *  is the one PR it is only about; `merged` says that PR got merged (the

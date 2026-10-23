@@ -7,6 +7,7 @@
  * whisper.cpp on the graphics card when it is there (gpuEars.ts).
  */
 
+import { spokenReply } from '../agentIdentity.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { liveJarvis } from '../supervisors/jarvis.js';
 import { gpuEars, hearingPrompt } from './gpuEars.js';
@@ -120,9 +121,11 @@ async function say(
   if (typeof msg.text === 'string') {
     raw = msg.text.slice(0, TEST_MAX_CHARS);
   } else {
-    // Only Jarvis speaks: its latest answer, read from the office, not sent.
+    // Only Jarvis speaks: its latest answer, read from the office, not sent —
+    // and of an answer to the office's notices only its «Te toca:» line.
     const id = liveJarvis(store);
-    raw = id === undefined || id !== msg.id ? undefined : store.get(id)?.lastReply;
+    const jarvis = id === undefined || id !== msg.id ? undefined : store.get(id);
+    raw = jarvis ? spokenReply(jarvis) : undefined;
   }
   const text = raw ? speechText(raw) : '';
   if (!text) return { ok: false, reason: 'No hay nada para decir' };

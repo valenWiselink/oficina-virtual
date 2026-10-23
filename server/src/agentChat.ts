@@ -126,7 +126,7 @@ export function userItem(id: string, text: string, at: number | undefined): Chat
 }
 
 /** What you typed, from a user record's text (null for what is not yours). */
-function userText(raw: string): string | null {
+export function userText(raw: string): string | null {
   const text = raw.trim();
   const bash = text.match(/^<bash-input>([\s\S]*?)<\/bash-input>/);
   if (bash) return `! ${bash[1].trim()}`;

@@ -137,6 +137,10 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   The page says its answers in line (`jarvis/speechQueue.ts`): a new one
   waits for the one it is saying; Esc, «Callar» or talking to it empties the
   line; at most 2 wait, and one that waited 60 s without starting is dropped.
+  Only answers to Valentín are said: a turn is his when he started it or
+  wrote in it, typed or «[Voz]» (`voice/turnAuthor.ts`); an answer to an
+  «[Oficina]» notice (the morning wake-up is one too) is only shown, and only
+  its «Te toca:» line is said (`spokenReply`, `saysAloud` in `agentIdentity`).
   Its speed is the player's (`playbackRate`, same pitch; 1,2× by default,
   Ajustes → Jarvis → Velocidad), so it works for any engine.
   Its ears are in the webview: `jarvis/jarvisEars.ts` records until silence,

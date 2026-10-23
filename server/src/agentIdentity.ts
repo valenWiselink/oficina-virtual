@@ -5,6 +5,7 @@ import { replyChoices } from './replyChoices.js';
 import { repoAreaOf } from './repoArea.js';
 import { supervisors } from './supervisors/supervision.js';
 import type { AgentState, AgentTask } from './types.js';
+import { observeTurnAuthor } from './voice/turnAuthor.js';
 
 /** Bytes read from each end of a transcript to seed identity for a session the
  *  office starts watching mid-way (adopted, restored or resumed). */
@@ -80,6 +81,7 @@ export function observeIdentity(agent: AgentState, record: Record<string, unknow
 
   if (observeTasks(agent, record)) changed = true;
   if (observeLastReply(agent, record)) changed = true;
+  if (observeTurnAuthor(agent, record)) changed = true;
   if (observeRecordTime(agent, record)) changed = true;
   if (observeBackground(agent, record)) changed = true;
   return changed;
@@ -269,11 +271,8 @@ export function yourTurnOf(
   reply: string,
   settled: (url: string) => boolean = () => false,
 ): string | undefined {
-  const line = reply.match(YOUR_TURN_LINE)?.[1];
-  if (line) {
-    const clean = line.replace(/[*_`]/g, '').trim();
-    if (clean) return clip(clean, YOUR_TURN_MAX);
-  }
+  const line = teTocaLine(reply);
+  if (line) return line;
   const prs = new Map<string, string>();
   for (const m of reply.matchAll(PR_LINK)) {
     if (!settled(m[0])) prs.set(`${m[1]}#${m[2]}`, m[1]);
@@ -285,6 +284,22 @@ export function yourTurnOf(
   return prs.size === 1
     ? `revisar el PR ${numbers[0]}${where}`
     : `revisar ${prs.size} PRs: ${numbers.join(', ')}${where}`;
+}
+
+/** The answer's own «Te toca: …» line, without its label (no PR guessing). */
+export function teTocaLine(reply: string): string | undefined {
+  const line = reply.match(YOUR_TURN_LINE)?.[1]?.replace(/[*_`]/g, '').trim();
+  return line ? clip(line, YOUR_TURN_MAX) : undefined;
+}
+
+/**
+ * What of its latest answer is said aloud: all of it when the turn answers
+ * Valentín; after an «[Oficina]» notice only its «Te toca:» line (what brings
+ * Jarvis to the middle of the screen), else nothing (asked 2026-10-23).
+ */
+export function spokenReply(agent: AgentState): string | undefined {
+  if (!agent.lastReply) return undefined;
+  return agent.turnByValentin ? agent.lastReply : teTocaLine(agent.lastReply);
 }
 
 const REPLY_HEAD_MAX = 140;
@@ -440,6 +455,7 @@ export function identityMessage(id: number, agent: AgentState): Record<string, u
     replyLink: agent.replyLink,
     replyChoices: agent.replyChoices,
     lastReplyHead: replyHead(agent.lastReply),
+    saysAloud: spokenReply(agent) ? true : undefined,
     lastRecordAt: agent.lastRecordAt,
     backgroundTasks: runningBackground(agent).length,
     backgroundLabel: runningBackground(agent).at(-1)?.label,

@@ -66,7 +66,13 @@ describe('when ElevenLabs cannot, Jarvis does not go mute', () => {
   const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
   const JARVIS = 4;
   let reply = 'Listo, señor.';
-  const jarvis = () => ({ supervision: { kind: 'all' }, sessionId: 's', lastReply: reply });
+  // Answers to Valentín: those are said aloud whole (voice/turnAuthor.ts).
+  const jarvis = () => ({
+    supervision: { kind: 'all' },
+    sessionId: 's',
+    lastReply: reply,
+    turnByValentin: true,
+  });
   const store = {
     entries: () => [[JARVIS, jarvis()]][Symbol.iterator](),
     get: (id: number) => (id === JARVIS ? jarvis() : undefined),

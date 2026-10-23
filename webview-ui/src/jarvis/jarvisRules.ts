@@ -165,11 +165,13 @@ export const ANSWER_LAG_MS = 15_000;
  * read from the transcript a moment later (measured 2026-10-22: the first
  * version waited for neither and never spoke). So an ended turn keeps waiting
  * for a new answer, up to ANSWER_LAG_MS. Never on page load, never an answer
- * already heard, never mid-turn for a permission.
+ * already heard, never mid-turn for a permission. And only an answer with
+ * something to say aloud (`aloud`, the office's `saysAloud`): one to an
+ * «[Oficina]» notice without a «Te toca:» shows in the bar and stays silent.
  */
 export function speechStep(
   prev: SpeechWatch,
-  now: { id?: number; busy: boolean; head?: string; asksPermission: boolean },
+  now: { id?: number; busy: boolean; head?: string; asksPermission: boolean; aloud: boolean },
   at: number,
 ): { next: SpeechWatch; speak: boolean } {
   if (now.id === undefined || prev.id !== now.id) {
@@ -182,7 +184,7 @@ export function speechStep(
   const endedAt = prev.busy ? at : prev.endedAt;
   const waiting = endedAt !== undefined && at - endedAt <= ANSWER_LAG_MS;
   if (waiting && !now.asksPermission && !!now.head && now.head !== prev.headAtStart) {
-    return { next: { id: now.id, busy: false, headAtStart: now.head }, speak: true };
+    return { next: { id: now.id, busy: false, headAtStart: now.head }, speak: now.aloud };
   }
   return {
     next: {

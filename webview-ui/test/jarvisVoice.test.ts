@@ -4,13 +4,19 @@ import { heardText, SpeechGate } from '../src/jarvis/jarvisEars.js';
 import { ANSWER_LAG_MS, speechStep, type SpeechWatch } from '../src/jarvis/jarvisRules.js';
 
 describe('when Jarvis speaks', () => {
-  type Now = { busy: boolean; head?: string; asksPermission?: boolean; id?: number };
+  type Now = {
+    busy: boolean;
+    head?: string;
+    asksPermission?: boolean;
+    aloud?: boolean;
+    id?: number;
+  };
   /** Feed renders in order; returns at which ones it spoke. */
   function run(steps: Array<[number, Now]>): number[] {
     let watch: SpeechWatch = { busy: false };
     const spoke: number[] = [];
     for (const [at, now] of steps) {
-      const r = speechStep(watch, { id: 1, asksPermission: false, ...now }, at);
+      const r = speechStep(watch, { id: 1, asksPermission: false, aloud: true, ...now }, at);
       watch = r.next;
       if (r.speak) spoke.push(at);
     }
@@ -76,9 +82,39 @@ describe('when Jarvis speaks', () => {
     ).toEqual([]);
   });
 
+  it('not an answer with nothing to say aloud (a notice without «Te toca:»), nor later', () => {
+    expect(
+      run([
+        [0, { busy: false, head: 'Antes.' }],
+        [10, { busy: true, head: 'Antes.' }],
+        [20, { busy: false, head: 'Anotado, señor.', aloud: false }],
+        // The next render of the same answer does not say it either.
+        [30, { busy: false, head: 'Anotado, señor.' }],
+      ]),
+    ).toEqual([]);
+  });
+
+  it('an answer to a notice with «Te toca:», and the next one to you', () => {
+    expect(
+      run([
+        [0, { busy: false, head: 'Antes.' }],
+        [10, { busy: true, head: 'Antes.', aloud: false }],
+        [20, { busy: false, head: 'Coral abrió el PR. Te toca: mergearlo' }],
+        [30, { busy: true, head: 'Coral abrió el PR. Te toca: mergearlo' }],
+        [40, { busy: false, head: 'Anotado, señor.', aloud: false }],
+        [50, { busy: true, head: 'Anotado, señor.' }],
+        [60, { busy: false, head: 'Listo, señor.' }],
+      ]),
+    ).toEqual([20, 60]);
+  });
+
   it('not when another Jarvis takes its place', () => {
     let watch: SpeechWatch = { id: 1, busy: true, headAtStart: 'A.' };
-    const r = speechStep(watch, { id: 2, busy: false, head: 'B.', asksPermission: false }, 5);
+    const r = speechStep(
+      watch,
+      { id: 2, busy: false, head: 'B.', asksPermission: false, aloud: true },
+      5,
+    );
     watch = r.next;
     expect(r.speak).toBe(false);
     expect(watch).toEqual({ id: 2, busy: false, headAtStart: 'B.' });

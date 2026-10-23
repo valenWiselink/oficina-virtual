@@ -691,6 +691,12 @@ components:
         lastReplyHead:
           type: string
           description: Start of the latest answer, one line, at most 140 characters.
+        saysAloud:
+          type: boolean
+          description: |
+            Jarvis has something of its latest answer to say aloud: all of it
+            when the turn answered Valentín, only its "Te toca:" line when an
+            "[Oficina]" notice started it. Absent = it stays silent.
         lastRecordAt:
           type: number
           description: Time of the session's latest record (ms since epoch).

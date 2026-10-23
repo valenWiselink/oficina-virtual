@@ -64,7 +64,8 @@ export function wakePrompt(reason: 'manana' | 'arranque'): string {
     reason === 'manana'
       ? 'Empieza un día nuevo y esta es una conversación nueva.'
       : 'La oficina acaba de arrancar y esta es una conversación nueva.';
-  return `${why} Leé tu bitácora con la herramienta bitacora para retomar lo pendiente y después contestá sólo «A su disposición, señor.».`;
+  // From the office, not Valentín: shown as its note and never read aloud.
+  return `[Oficina] ${why} Leé tu bitácora con la herramienta bitacora para retomar lo pendiente y después contestá sólo «A su disposición, señor.».`;
 }
 
 export function localDay(date: Date): string {
