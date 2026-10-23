@@ -65,6 +65,27 @@ describe('supervisorMayApprove', () => {
     }
   });
 
+  it('approves entering and leaving a worktree, but not throwing one away', () => {
+    expect(supervisorMayApprove('EnterWorktree', {}, CWD).ok).toBe(true);
+    expect(supervisorMayApprove('EnterWorktree', { name: 'fix-login' }, CWD).ok).toBe(true);
+    expect(
+      supervisorMayApprove('EnterWorktree', { path: `${CWD}\\.claude\\worktrees\\a` }, CWD).ok,
+    ).toBe(true);
+    expect(supervisorMayApprove('ExitWorktree', { action: 'keep' }, CWD).ok).toBe(true);
+    expect(supervisorMayApprove('ExitWorktree', { action: 'remove' }, CWD).ok).toBe(true);
+    expect(
+      supervisorMayApprove('ExitWorktree', { action: 'remove', discard_changes: false }, CWD).ok,
+    ).toBe(true);
+    // Valentín's alone: not even his «sí» through Jarvis may approve it.
+    const discard = supervisorMayApprove(
+      'ExitWorktree',
+      { action: 'remove', discard_changes: true },
+      CWD,
+    );
+    expect(discard.ok).toBe(false);
+    expect(discard.ok === false && discard.askable).toBeFalsy();
+  });
+
   it('refuses MCP and unknown tools', () => {
     expect(supervisorMayApprove('mcp__github__create_pr', {}, CWD).ok).toBe(false);
     expect(supervisorMayApprove('Teleport', {}, CWD).ok).toBe(false);
