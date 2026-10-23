@@ -95,7 +95,7 @@ export function supervisorMcpServer(deps: JarvisDeps, supervisorId: number): Mcp
     'aprobar_permiso',
     {
       description:
-        'Aprueba un permiso pendiente de uno de tus agentes. Sólo lo claramente seguro (leer, buscar, tests/lint/build locales, editar en su carpeta): la oficina rechaza lo peligroso y te dice que se lo pidas a Valentín.',
+        'Aprueba un permiso pendiente de uno de tus agentes. Sólo lo claramente seguro (leer, buscar, tests/lint/build locales, editar en su carpeta, entrar o salir de una copia de trabajo): la oficina rechaza lo peligroso y te dice que se lo pidas a Valentín.',
       inputSchema: { id: z.string().describe('El id del permiso (está en el aviso y en equipo)') },
     },
     ({ id }) => text(tools.aprobarPermiso(id)),

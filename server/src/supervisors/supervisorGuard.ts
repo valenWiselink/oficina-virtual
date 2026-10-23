@@ -56,6 +56,12 @@ const READ_ONLY = new Set([
   'Task',
 ]);
 
+/**
+ * Entering or leaving a git worktree (Valentín, 2026-10-23: agents open them
+ * without asking anyone). Leaving with `discard_changes` throws work away.
+ */
+const WORKTREE = new Set(['EnterWorktree', 'ExitWorktree']);
+
 /** Tools that write one file: fine inside the agent's folder only. */
 const FILE_WRITES = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
@@ -139,6 +145,11 @@ export function supervisorMayApprove(
 ): GuardVerdict {
   if (toolName.startsWith('mcp__')) return mcpVerdict(toolName);
   if (READ_ONLY.has(toolName)) return { ok: true };
+  if (WORKTREE.has(toolName)) {
+    return input.discard_changes === true
+      ? { ok: false, reason: 'borra una copia de trabajo con cambios sin guardar' }
+      : { ok: true };
+  }
 
   if (FILE_WRITES.has(toolName)) {
     const file = input.file_path ?? input.notebook_path;
