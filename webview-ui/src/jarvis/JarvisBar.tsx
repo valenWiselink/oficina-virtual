@@ -7,12 +7,23 @@ import { sendToAgent } from '../terminal/agentInput.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
 import { ChoiceReplies } from '../views/CardExtras.js';
+import { clock, MAX_DICTATION_MS } from './dictation.js';
 import { useJarvisEars } from './jarvisEars.js';
 import { dismissJarvisNotice, useJarvisNotice } from './jarvisNotice.js';
 import { JarvisRing } from './JarvisRing.js';
 import { jarvisLine, jarvisMood } from './jarvisRules.js';
 import { requestJarvisVoice, setJarvisMuted, useJarvisVoice } from './jarvisVoice.js';
 import { talkToJarvis } from './talk.js';
+
+/** How long it has been listening, «0:42». */
+function ListenClock({ since }: { since: number | undefined }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, []);
+  return <span className="tabular-nums">{clock(Math.max(0, now - (since ?? now)))}</span>;
+}
 
 /**
  * Jarvis at the foot of the office (option A of the 2026-10-22 canvas): its
@@ -79,18 +90,18 @@ export function JarvisBar({
   };
   const turnId = jarvis.kind === 'needs' ? jarvis.yourTurnId : undefined;
   const speaks = !!voice.status && voice.status.engine !== 'off';
-  const earsLine =
-    ears.phase === 'listening'
-      ? 'Te escucho… hablá; cuando hagas silencio, se lo paso.'
-      : ears.phase === 'transcribing'
-        ? 'Escribiendo lo que dijiste…'
-        : ears.phase === 'preparing'
-          ? `Preparando el oído de Jarvis${ears.percent !== undefined ? ` (${ears.percent} %)` : ''}: la primera vez baja el modelo de voz.`
-          : ears.error
-            ? ears.error
-            : ears.heard
-              ? `Le dijiste: «${ears.heard}»`
-              : undefined;
+  const listening = ears.phase === 'listening';
+  const earsLine = listening
+    ? `Te escucho, tomate tu tiempo: no corto por silencio. Cuando termines, apretá de nuevo el botón o Alt+J y se lo paso (se corta solo a los ${clock(MAX_DICTATION_MS)}).`
+    : ears.phase === 'transcribing'
+      ? 'Escribiendo lo que dijiste…'
+      : ears.phase === 'preparing'
+        ? `Preparando el oído de Jarvis${ears.percent !== undefined ? ` (${ears.percent} %)` : ''}: la primera vez baja el modelo de voz.`
+        : ears.error
+          ? ears.error
+          : ears.heard
+            ? `${ears.full ? `Llegaste a los ${clock(MAX_DICTATION_MS)} y se lo pasé. ` : ''}Le dijiste: «${ears.heard}»`
+            : undefined;
 
   return (
     <section
@@ -157,21 +168,35 @@ export function JarvisBar({
         {/* Talk, write, silence, open: one group against the right edge, so it
             never breaks apart (with the chat open, the icons stay right). */}
         <div className="flex items-center justify-end gap-6 flex-[1_1_440px] min-w-0">
-          <Button
-            size="icon_lg"
-            variant={ears.phase === 'listening' ? 'active' : 'default'}
-            aria-pressed={ears.phase === 'listening'}
-            aria-label={
-              ears.phase === 'listening' ? 'Dejar de escuchar' : 'Hablarle a Jarvis (Alt+J)'
-            }
-            title={ears.phase === 'listening' ? 'Dejar de escuchar' : 'Hablarle (Alt+J)'}
-            disabled={ears.phase === 'transcribing' || ears.phase === 'preparing'}
-            onClick={() => talkToJarvis(jarvis.id)}
-          >
-            <span className="material-symbols-sharp text-lg" aria-hidden="true">
-              {ears.phase === 'listening' ? 'stop' : 'mic'}
-            </span>
-          </Button>
+          {listening ? (
+            <Button
+              size="md"
+              aria-pressed
+              aria-label="Escuchando: terminar y mandárselo a Jarvis (Alt+J)"
+              title="Terminar y mandar (Alt+J)"
+              className="h-40 flex items-center gap-8 bg-danger! border-danger! text-white! hover:opacity-90"
+              onClick={() => talkToJarvis(jarvis.id)}
+            >
+              <span className="w-8 h-8 rounded-full bg-white soft-pulse" aria-hidden="true" />
+              <span className="font-bold">Escuchando</span>
+              <ListenClock since={ears.since} />
+              <span className="material-symbols-sharp text-lg" aria-hidden="true">
+                stop
+              </span>
+            </Button>
+          ) : (
+            <Button
+              size="icon_lg"
+              aria-label="Hablarle a Jarvis (Alt+J)"
+              title="Hablarle (Alt+J): apretá para empezar y otra vez para terminar"
+              disabled={ears.phase === 'transcribing' || ears.phase === 'preparing'}
+              onClick={() => talkToJarvis(jarvis.id)}
+            >
+              <span className="material-symbols-sharp text-lg" aria-hidden="true">
+                mic
+              </span>
+            </Button>
+          )}
           {!open && (
             <form
               className="flex items-center gap-6 flex-1 min-w-0"

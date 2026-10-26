@@ -44,7 +44,8 @@ const outage = new OutageNotice();
 
 const cache = new SpeechCache();
 const TEST_MAX_CHARS = 300;
-/** 30 s of 16-bit 16 kHz audio (the page stops listening at 30 s). */
+/** 30 s of 16-bit 16 kHz audio (the page sends a dictation in parts of
+ *  12 s at most: webview-ui/src/jarvis/dictation.ts). */
 const HEAR_MAX_BYTES = 30 * 16_000 * 2 + 4096;
 
 /** Handles a voice message; false when `msg` is not one. */

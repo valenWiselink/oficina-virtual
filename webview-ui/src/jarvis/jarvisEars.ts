@@ -1,75 +1,30 @@
 import { useSyncExternalStore } from 'react';
 
+import { Dictation, MAX_DICTATION_MS, partAudio, SAMPLE_RATE } from './dictation.js';
 import type { EarsReply } from './whisperWorker.js';
 
 /**
- * Jarvis's ears, in the office: the microphone (it stops by itself after you
- * stop talking), then the office writes it down with whisper.cpp on the
- * graphics card (server/src/voice/gpuEars.ts). When it cannot (no NVIDIA
- * card, still installing, it failed), Whisper in a worker (whisperWorker.ts)
- * does it here. Nothing leaves this PC; the models are downloaded once.
+ * Jarvis's ears, in the office: the microphone, from one press to the next
+ * (a silence never stops it: dictation.ts), then the office writes it down
+ * with whisper.cpp on the graphics card (server/src/voice/gpuEars.ts), part
+ * by part while you keep talking. When it cannot (no NVIDIA card, still
+ * installing, it failed), Whisper in a worker (whisperWorker.ts) does it
+ * here. Nothing leaves this PC; the models are downloaded once.
  */
 
 export type EarsPhase = 'idle' | 'preparing' | 'listening' | 'transcribing';
 
 export interface EarsState {
   phase: EarsPhase;
+  /** When it started listening (Date.now()), for the clock. */
+  since?: number;
   /** Downloading the model the first time (0-100). */
   percent?: number;
   /** What it understood last (shown a moment in the bar). */
   heard?: string;
+  /** The last dictation reached the safety net and was sent by itself. */
+  full?: boolean;
   error?: string;
-}
-
-const SAMPLE_RATE = 16_000;
-/** What is listened to as the room's noise before you speak. */
-const NOISE_MS = 250;
-/** Kept around the voice when the silence is cut. */
-const VOICE_PAD_MS = 300;
-
-/** Voice activity, frame by frame: started talking, and how long the quiet
- *  after it has lasted. Pure, so it is tested. */
-export class SpeechGate {
-  private floor = 0;
-  started = false;
-  /** When the voice began and last sounded (ms from the start), to cut the
-   *  silence around it: Whisper invents words in silence. */
-  firstVoiceMs = 0;
-  lastVoiceMs = 0;
-  private quietMs = 0;
-  private elapsedMs = 0;
-  private readonly silenceMs: number;
-  private readonly noSpeechMs: number;
-  private readonly maxMs: number;
-
-  constructor(silenceMs = 1200, noSpeechMs = 7000, maxMs = 30_000) {
-    this.silenceMs = silenceMs;
-    this.noSpeechMs = noSpeechMs;
-    this.maxMs = maxMs;
-  }
-
-  /** Feed one frame's loudness (RMS) and length; returns whether to stop. */
-  feed(rms: number, ms: number): 'more' | 'done' | 'nothing' {
-    this.elapsedMs += ms;
-    // The room's noise, from the first quarter second (frames are ~8 ms).
-    if (this.elapsedMs <= NOISE_MS) {
-      this.floor = Math.max(this.floor, rms);
-      return 'more';
-    }
-    const threshold = Math.max(0.012, this.floor * 2.5);
-    if (rms > threshold) {
-      if (!this.started) this.firstVoiceMs = this.elapsedMs - ms;
-      this.started = true;
-      this.lastVoiceMs = this.elapsedMs;
-      this.quietMs = 0;
-    } else if (this.started) {
-      this.quietMs += ms;
-    }
-    if (this.elapsedMs >= this.maxMs) return this.started ? 'done' : 'nothing';
-    if (this.started && this.quietMs >= this.silenceMs) return 'done';
-    if (!this.started && this.elapsedMs >= this.noSpeechMs) return 'nothing';
-    return 'more';
-  }
 }
 
 /** What Whisper writes for silence or noise, not for you. */
@@ -142,11 +97,21 @@ function ears(): Worker {
   worker = new Worker(new URL('./whisperWorker.ts', import.meta.url), { type: 'module' });
   worker.onmessage = (e: MessageEvent<EarsReply>) => {
     const msg = e.data;
-    if (msg.type === 'progress') set({ phase: 'preparing', percent: msg.percent });
+    // Parts are written while it still listens: that phase is kept.
+    const listening = state.phase === 'listening';
+    if (msg.type === 'progress')
+      set(listening ? { percent: msg.percent } : { phase: 'preparing', percent: msg.percent });
     else if (msg.type === 'text') waiting.get(msg.id)?.(msg.text);
     else if (msg.type === 'failed') {
       if (msg.id !== undefined) waiting.get(msg.id)?.(new Error(msg.reason));
-      else set({ phase: 'idle', error: `No pude preparar el oído: ${msg.reason}` });
+      else {
+        // Nothing waiting for it will be written now.
+        for (const w of [...waiting.values()]) w(new Error(msg.reason));
+        set({
+          ...(listening ? {} : { phase: 'idle' as const }),
+          error: `No pude preparar el oído: ${msg.reason}`,
+        });
+      }
     }
   };
   return worker;
@@ -183,10 +148,50 @@ export function pcm16Base64(audio: Float32Array): string {
  *  it could not. */
 export type OfficeEars = (audio: Float32Array) => Promise<string | undefined>;
 
-/** What you said as text: the office first, this page's Whisper if it cannot. */
-async function writeDown(audio: Float32Array, office?: OfficeEars): Promise<string> {
-  const text = office ? await office(audio).catch(() => undefined) : undefined;
-  return text ?? transcribe(audio);
+/**
+ * The parts of a dictation written down while you keep talking: the office
+ * first, one part after the other (whisper.cpp takes one at a time, and a
+ * part waiting in its queue would run out its time), and this page's Whisper
+ * for a part the office could not write — without holding up the next ones.
+ * Joined in the order you said them.
+ */
+export class PartWriter {
+  private chain: Promise<unknown> = Promise.resolve();
+  private readonly texts: Promise<string | undefined>[] = [];
+  private failure: unknown;
+  private readonly office: OfficeEars;
+  private readonly local: (audio: Float32Array) => Promise<string>;
+
+  constructor(
+    office: OfficeEars | undefined,
+    local: (audio: Float32Array) => Promise<string> = transcribe,
+  ) {
+    this.office = office ?? (() => Promise.resolve(undefined));
+    this.local = local;
+  }
+
+  add(audio: Float32Array): void {
+    const seconds = audio.length / SAMPLE_RATE;
+    const office = this.chain.then(() => this.office(audio).catch(() => undefined));
+    this.chain = office;
+    const text = office
+      .then((written) => written ?? this.local(audio))
+      .then(
+        (raw) => heardText(raw, seconds),
+        (err: unknown) => {
+          this.failure = err;
+          return undefined;
+        },
+      );
+    this.texts.push(text);
+  }
+
+  /** Everything you said, joined; throws only if no part could be written. */
+  async text(): Promise<string | undefined> {
+    const parts = (await Promise.all(this.texts)).filter((t): t is string => !!t);
+    if (parts.length === 0 && this.failure !== undefined) throw this.failure;
+    return parts.length ? parts.join(' ') : undefined;
+  }
 }
 
 /** The worklet that hands the microphone's samples to the page. */
@@ -197,21 +202,19 @@ registerProcessor('jarvis-rec', JarvisRec);`;
 
 let stopNow: (() => void) | undefined;
 
-/** Stop listening now (a click on the microphone again). */
+/** Stop listening now and send it (a press on the microphone or Alt+J). */
 export function stopListening(): void {
   stopNow?.();
 }
 
-/** The stretch with your voice, and a little around it. */
-export function voiceOnly(audio: Float32Array, gate: SpeechGate): Float32Array {
-  const at = (ms: number) => Math.round((ms / 1000) * SAMPLE_RATE);
-  const from = Math.max(0, at(gate.firstVoiceMs - VOICE_PAD_MS));
-  const to = Math.min(audio.length, at(gate.lastVoiceMs + VOICE_PAD_MS));
-  return to > from ? audio.slice(from, to) : audio;
-}
-
-/** Record until you stop talking; null if you said nothing. */
-async function record(): Promise<Float32Array | null> {
+/**
+ * Record until you press again (or the safety net), handing each part with
+ * your voice to `onPart` as soon as it is cut. Resolves with whether you
+ * said anything, and whether the safety net stopped it.
+ */
+async function record(
+  onPart: (audio: Float32Array) => void,
+): Promise<{ heard: boolean; full: boolean }> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       channelCount: 1,
@@ -226,33 +229,32 @@ async function record(): Promise<Float32Array | null> {
     await ctx.audioWorklet.addModule(url);
     const source = ctx.createMediaStreamSource(stream);
     const node = new AudioWorkletNode(ctx, 'jarvis-rec');
-    const chunks: Float32Array[] = [];
-    const gate = new SpeechGate();
-    const result = await new Promise<'done' | 'nothing'>((resolve) => {
-      stopNow = () => resolve(gate.started ? 'done' : 'nothing');
+    const dictation = new Dictation();
+    // The whole dictation, so a part is a slice of it (~7.7 MB at most).
+    const audio = new Float32Array(Math.ceil((MAX_DICTATION_MS / 1000) * SAMPLE_RATE) + 4096);
+    const full = await new Promise<boolean>((resolve) => {
+      stopNow = () => {
+        const part = dictation.finish();
+        if (part) onPart(partAudio(audio, part));
+        resolve(false);
+      };
       node.port.onmessage = (e: MessageEvent<Float32Array>) => {
         const frame = e.data;
-        chunks.push(frame);
+        if (dictation.length + frame.length > audio.length) return;
+        audio.set(frame, dictation.length);
         let sum = 0;
         for (const s of frame) sum += s * s;
-        const verdict = gate.feed(
-          Math.sqrt(sum / frame.length),
-          (frame.length / SAMPLE_RATE) * 1000,
-        );
-        if (verdict !== 'more') resolve(verdict);
+        const step = dictation.feed(Math.sqrt(sum / frame.length), frame.length);
+        if (step.part) onPart(partAudio(audio, step.part));
+        if (step.full) resolve(true);
       };
       source.connect(node);
+      // The clock counts what is recorded (opening the microphone takes a moment).
+      set({ since: Date.now() });
     });
     source.disconnect();
     node.port.onmessage = null;
-    if (result === 'nothing') return null;
-    const audio = new Float32Array(chunks.reduce((n, c) => n + c.length, 0));
-    let at = 0;
-    for (const c of chunks) {
-      audio.set(c, at);
-      at += c.length;
-    }
-    return voiceOnly(audio, gate);
+    return { heard: dictation.heard, full };
   } finally {
     stopNow = undefined;
     for (const t of stream.getTracks()) t.stop();
@@ -262,8 +264,9 @@ async function record(): Promise<Float32Array | null> {
 }
 
 /**
- * Listen once: record what you say, write it down, and hand the text to
- * `onText`. Says why in the state when it could not.
+ * Listen once: from this press to the next one (pressing while it listens
+ * finishes it), write it down and hand the text to `onText`. Says why in the
+ * state when it could not.
  */
 export async function listenOnce(
   onText: (text: string) => void,
@@ -271,21 +274,27 @@ export async function listenOnce(
 ): Promise<void> {
   if (state.phase === 'listening') return stopListening();
   if (state.phase !== 'idle') return;
-  set({ phase: 'listening', error: undefined, heard: undefined });
+  set({ phase: 'listening', since: Date.now(), error: undefined, heard: undefined, full: false });
   try {
-    const audio = await record();
-    if (!audio) {
-      set({ phase: 'idle', error: 'No te escuché: probá de nuevo más cerca del micrófono.' });
+    const writer = new PartWriter(office);
+    const { heard, full } = await record((audio) => writer.add(audio));
+    if (!heard) {
+      set({
+        phase: 'idle',
+        since: undefined,
+        error: 'No te escuché: probá de nuevo más cerca del micrófono.',
+      });
       return;
     }
-    set({ phase: 'transcribing' });
-    const text = heardText(await writeDown(audio, office), audio.length / SAMPLE_RATE);
+    set({ phase: 'transcribing', since: undefined, full });
+    const text = await writer.text();
     set({ phase: 'idle', heard: text, error: text ? undefined : 'No entendí lo que dijiste.' });
     if (text) onText(text);
   } catch (err) {
     const denied = err instanceof DOMException && err.name === 'NotAllowedError';
     set({
       phase: 'idle',
+      since: undefined,
       error: denied
         ? 'Windows no deja usar el micrófono: Configuración → Privacidad → Micrófono.'
         : `No pude escuchar: ${err instanceof Error ? err.message : String(err)}`,

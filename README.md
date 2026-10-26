@@ -161,10 +161,11 @@ Ayuda).
     PC, en `~/.pixel-agents/jarvis/voz.json`, y la página nunca la ve. Lee lo que
     contesta sin código, links ni markdown, con subtítulos en el medio de la
     pantalla; el parlante de la barra lo silencia y Esc lo calla.
-  - **Escucha**: el micrófono de la barra o **Alt+J**. Graba hasta que hacés
-    silencio y lo pasa a texto en esta PC con Whisper (en la placa de video si
-    hay WebGPU; la primera vez baja el modelo, unos cientos de MB); le llega como
-    «[Voz] …». Si le hablás mientras habla, se calla.
+  - **Escucha**: el micrófono de la barra o **Alt+J** para empezar, y otra vez
+    para terminar y mandárselo (no corta por silencio; se corta solo a los
+    2 minutos). Lo pasa a texto en esta PC con Whisper, por partes mientras
+    hablás (en la placa de video si hay; la primera vez baja el modelo, unos
+    cientos de MB); le llega como «[Voz] …». Si le hablás mientras habla, se calla.
 - Las rutas de archivos en la terminal se abren con un clic en el Explorador.
 - **Agentes que sobreviven a reinicios** (Ajustes → Agentes, prendido por
   defecto): cada agente corre como sesión en segundo plano de Claude Code y la

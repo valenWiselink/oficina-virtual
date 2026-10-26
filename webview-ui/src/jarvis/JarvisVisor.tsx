@@ -6,6 +6,7 @@ import { describeToolInput } from '../permissions/describeToolInput.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
 import { ChoiceReplies } from '../views/CardExtras.js';
+import { useJarvisEars } from './jarvisEars.js';
 import { JarvisVoiceBars } from './JarvisRing.js';
 import {
   askedLine,
@@ -39,6 +40,7 @@ export function JarvisVisor({
   onAnswer: () => void;
 }) {
   const { speaking } = useJarvisVoice();
+  const listening = useJarvisEars().phase === 'listening';
   const key = visorKey(jarvis, asked);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const needs = key !== undefined && !dismissed.has(key);
@@ -108,7 +110,7 @@ export function JarvisVisor({
                     talkToJarvis(jarvis.id);
                   }}
                 >
-                  Contestar hablando
+                  {listening ? 'Terminar y mandar' : 'Contestar hablando'}
                 </Button>
               )}
             </>

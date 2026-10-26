@@ -9,16 +9,16 @@ import { officeEars } from './officeEars.js';
 export const VOICE_MARK = '[Voz]';
 
 /**
- * Talk to Jarvis: it stops speaking (you talked over it), listens until you
- * stop, and gets what you said (written by the office when it can). A
- * second press stops listening.
+ * Talk to Jarvis: it stops speaking (you talked over it) and listens until
+ * you press again — a silence never cuts you off — then gets what you said
+ * (written by the office when it can).
  */
 export function talkToJarvis(jarvisId: number): void {
   stopJarvis();
   void listenOnce((text) => void sendToAgent(jarvisId, `${VOICE_MARK} ${text}`), officeEars);
 }
 
-/** Alt+J talks to Jarvis from anywhere in the office (again: stop listening). */
+/** Alt+J talks to Jarvis from anywhere in the office (again: finish and send). */
 export function useTalkShortcut(jarvisId: number | undefined): void {
   useEffect(() => {
     if (jarvisId === undefined) return;
