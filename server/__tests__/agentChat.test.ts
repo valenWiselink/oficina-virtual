@@ -193,3 +193,37 @@ describe('images you sent', () => {
     expect(chatItemsOf(user('i3', 'hola'))[0]).not.toHaveProperty('images');
   });
 });
+
+// Claude Code 2.1.312 records a long paste wrapped in these tags (the id
+// repeated in the closing one), seen 2026-10-28 in Jarvis' transcript.
+const pasted = (text: string) =>
+  `\n\n<pasted_content id="0047">\n${text}\n</pasted_content id="0047">\n`;
+
+describe('what Claude Code records as pasted', () => {
+  it('is what you wrote, not a harness note', () => {
+    const [item] = chatItemsOf(user('w1', pasted('el plano 3d:\nse rompe el cuadrado')));
+    expect(item).toMatchObject({ role: 'user', text: 'el plano 3d:\nse rompe el cuadrado' });
+  });
+
+  it('with an image, so the chat line that settles the message exists', () => {
+    const png = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'x' } };
+    const text = `[Image #41]${pasted('inspector y capas es el que más me gusta')}`;
+    const [item] = chatItemsOf(user('w2', [{ type: 'text', text }, png]));
+    expect(item).toMatchObject({
+      role: 'user',
+      text: 'inspector y capas es el que más me gusta',
+      images: 1,
+    });
+  });
+
+  it('an office notice or a queued message stays what it was', () => {
+    const [note] = chatItemsOf(user('w3', pasted('[Oficina] «pincel» terminó su turno.')));
+    expect(note).toMatchObject({ role: 'note', from: 'Oficina' });
+    const [queued] = chatItemsOf({
+      type: 'attachment',
+      uuid: 'w4',
+      attachment: { type: 'queued_command', prompt: pasted('dale, seguí').trim() },
+    });
+    expect(queued).toMatchObject({ role: 'user', text: 'dale, seguí' });
+  });
+});

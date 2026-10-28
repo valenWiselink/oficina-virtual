@@ -121,3 +121,13 @@ describe('what Jarvis says aloud', () => {
     expect(spokenReply(agent)).toBe('Bien, señor.');
   });
 });
+
+describe('a prompt Claude Code recorded as pasted', () => {
+  const pasted = (text: string) =>
+    `\n\n<pasted_content id="0047">\n${text}\n</pasted_content id="0047">\n`;
+
+  it('is still his, or the office', () => {
+    expect(promptAuthor(pasted('el plano 3d a veces se rompe'))).toBe('valentin');
+    expect(promptAuthor(pasted(NOTICE))).toBe('office');
+  });
+});
