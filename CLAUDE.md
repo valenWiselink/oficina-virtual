@@ -251,6 +251,10 @@ allows colour literals only in `constants.ts` (canvas colours) and CSS.
 - `fs.watch` is unreliable on Windows — always pair it with polling.
 - Buffer partial lines when tailing append-only files.
 - A user record's `content` is a string or an array (tool results).
+- Since 2026-10-28 (2.1.312) Claude Code records a paste of 4+ lines wrapped
+  in `<pasted_content id="…">…</pasted_content id="…">`; the chat pastes
+  every message, so `userText` unwraps it (or the line is dropped as harness
+  text and its "sent" bubble never settles).
 - `/clear` starts a NEW JSONL file; the old one just stops.
 - Idle detection: `system`/`turn_duration` for tool turns, a 5 s text-idle
   timer for text-only turns. `idle_prompt` notifications mean idle, not a question.

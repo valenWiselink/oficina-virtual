@@ -125,9 +125,14 @@ export function userItem(id: string, text: string, at: number | undefined): Chat
   return { id, role: 'user', text, at };
 }
 
+/** Claude Code 2.1.312 records a long paste (the chat pastes every message)
+ *  wrapped in `<pasted_content id="…">…</pasted_content id="…">` (seen
+ *  2026-10-28): what is inside is the message. */
+const PASTED = /<pasted_content\b[^>]*>\n?([\s\S]*?)\n?<\/pasted_content\b[^>]*>/g;
+
 /** What you typed, from a user record's text (null for what is not yours). */
 export function userText(raw: string): string | null {
-  const text = raw.trim();
+  const text = raw.replace(PASTED, '$1').trim();
   const bash = text.match(/^<bash-input>([\s\S]*?)<\/bash-input>/);
   if (bash) return `! ${bash[1].trim()}`;
   const command = text.match(/<command-name>([\s\S]*?)<\/command-name>/);
