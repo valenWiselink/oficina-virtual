@@ -45,15 +45,6 @@ export const drawerPull = (o: Insets) => ({
   marginLeft: -o.right,
 });
 
-/** A band across the office (Jarvis's bar) that goes on under the strip at
- *  the sides, its content still clear of it. */
-export const bandUnder = (o: Insets) => ({
-  marginRight: -o.right,
-  marginLeft: -o.left,
-  paddingRight: o.right,
-  paddingLeft: o.left,
-});
-
 /** Card highlight tiers: 'focused' = the agent's character is selected in the
  *  office (active background, no border); 'active' = its terminal pane is the
  *  one showing (background + accent border). */

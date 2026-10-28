@@ -17,7 +17,7 @@ export function GraphFilterBar({
     <div
       role="radiogroup"
       aria-label="Resaltar por estado"
-      className="absolute right-14 bottom-80 z-10 soft-panel p-3 flex gap-2"
+      className="absolute right-88 bottom-80 z-10 soft-panel p-3 flex gap-2"
     >
       {GRAPH_FILTERS.map((f) => (
         <button

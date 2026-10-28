@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import type { ChatItem } from '../../../core/src/messages.js';
 import { transport } from '../transport/index.js';
-import { type PendingDelivery, sameMessage } from './chatText.js';
+import { type PendingDelivery, sameSent } from './chatText.js';
 
 /** Each agent's conversation as chat lines: loaded when its chat opens,
  *  then appended as the session writes. */
@@ -16,6 +16,10 @@ const listeners = new Set<() => void>();
 export interface PendingMessage {
   key: string;
   text: string;
+  /** Previews (object URLs) of the images sent with it. */
+  images?: string[];
+  /** Where the office saved them (to send them again on a retry). */
+  paths?: string[];
   at: number;
   /** Whether it reached the agent's terminal (sendToAgent). */
   delivery: PendingDelivery;
@@ -30,10 +34,15 @@ function emit(): void {
 
 /** Draw a message you just sent until the transcript brings it; the key
  *  settles its delivery later. */
-export function addPending(agentId: number, text: string): string {
+export function addPending(
+  agentId: number,
+  text: string,
+  pictures?: { previews: string[]; paths: string[] },
+): string {
   const entry: PendingMessage = {
     key: `p${++pendingSeq}`,
     text,
+    ...(pictures?.paths.length ? { images: pictures.previews, paths: pictures.paths } : {}),
     at: Date.now(),
     delivery: 'sending',
   };
@@ -62,12 +71,25 @@ export function dropPending(agentId: number, key: string): void {
   emit();
 }
 
-/** Drop the pending messages the transcript already shows. */
+/** The previews of images sent from this page, by the chat line that shows
+ *  them once the transcript has it (the transcript only counts them). */
+const sentPictures = new Map<string, string[]>();
+
+export function picturesOf(itemId: string): string[] | undefined {
+  return sentPictures.get(itemId);
+}
+
+/** Drop the pending messages the transcript already shows; their previews
+ *  move to the line that shows them. */
 function settlePending(agentId: number, items: readonly ChatItem[]): void {
   const waiting = pending.get(agentId);
   if (!waiting) return;
   const users = items.filter((i) => i.role === 'user');
-  const left = waiting.filter((p) => !users.some((u) => sameMessage(p.text, u.text)));
+  const left = waiting.filter((p) => {
+    const shown = users.find((u) => sameSent(p, u));
+    if (shown && p.images) sentPictures.set(shown.id, p.images);
+    return !shown;
+  });
   if (left.length === waiting.length) return;
   if (left.length > 0) pending.set(agentId, left);
   else pending.delete(agentId);

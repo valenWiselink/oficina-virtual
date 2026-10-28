@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { pasteText } from '../src/terminal/pasteText.js';
+import { messagePastes, pasteText } from '../src/terminal/pasteText.js';
 
 /**
  * What reaches an agent's PTY while its terminal socket comes and goes
@@ -124,6 +124,26 @@ describe('what a terminal sends while it reconnects', () => {
     expect(dropped).not.toHaveBeenCalled();
   });
 
+  it('sends each image path as its own paste, a pause apart, then the text and Enter', () => {
+    const { conn, socket } = connection();
+    socket().attach();
+    const done = vi.fn();
+    conn.sendMessage(
+      () => messagePastes('¿qué ves?', ['C:\\t\\a.png', 'C:\\mi pc\\b.png'], true),
+      done,
+    );
+    expect(socket().inputs()).toEqual(['\x1b[200~C:\\t\\a.png\x1b[201~']);
+    vi.advanceTimersByTime(900);
+    expect(socket().inputs()).toHaveLength(2);
+    expect(socket().inputs()[1]).toBe('\x1b[200~"C:\\mi pc\\b.png"\x1b[201~');
+    vi.advanceTimersByTime(900);
+    expect(socket().inputs()[2]).toBe('\x1b[200~¿qué ves?\x1b[201~');
+    expect(done).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(150);
+    expect(socket().inputs()[3]).toBe('\r');
+    expect(done).toHaveBeenCalledWith(true);
+  });
+
   it('drops a held message when the terminal stays away 30 s, and says so', () => {
     const { conn, dropped, socket } = connection();
     socket().attach();
@@ -152,5 +172,10 @@ describe('a message pasted into a terminal', () => {
   it('keeps its lines inside the bracketed-paste markers', () => {
     expect(pasteText('uno\ndos\r\ntres', true)).toBe('\x1b[200~uno\rdos\rtres\x1b[201~');
     expect(pasteText('uno\ndos', false)).toBe('uno\rdos');
+  });
+
+  it('with images: each path alone, quoted when it has spaces; no empty text paste', () => {
+    expect(messagePastes('', ['C:\\a b\\x.png'], false)).toEqual(['"C:\\a b\\x.png"']);
+    expect(messagePastes('hola', [], true)).toEqual(['\x1b[200~hola\x1b[201~']);
   });
 });

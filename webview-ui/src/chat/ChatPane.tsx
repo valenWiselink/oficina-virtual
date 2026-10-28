@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  type DragEvent,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import type { ChatItem } from '../../../core/src/messages.js';
 import { Button } from '../components/ui/Button.js';
@@ -13,15 +20,18 @@ import { ChoiceReplies } from '../views/CardExtras.js';
 import { offersQuickReplies } from '../views/cardRules.js';
 import { clawdColor } from '../views/clawdColor.js';
 import { useChatFontSize, zoomChatFont } from './chatFont.js';
+import { type Attachment, saveImage } from './chatImages.js';
 import {
   addPending,
   dropPending,
   type PendingMessage,
+  picturesOf,
   settleDelivery,
   useAgentChat,
   usePendingMessages,
 } from './chatStore.js';
 import { isLongAnswer, pendingNote, withChatHint, withoutChatHint } from './chatText.js';
+import { Composer, type SendResult } from './Composer.js';
 import { Markdown } from './Markdown.js';
 import { PathAgentContext } from './pathAgent.js';
 
@@ -56,13 +66,19 @@ export function ChatPane({
   actions,
   onSend,
   onShowTerminal,
+  composerLeading,
+  focusSignal,
 }: {
   view: AgentView;
   actions: BoardActions;
-  /** Type the text into the agent's terminal and press Enter; resolves
-   *  whether it got there (sendToAgent). */
-  onSend: (text: string) => Promise<boolean>;
+  /** Type the text into the agent's terminal (after its images' paths) and
+   *  press Enter; resolves whether it got there (sendToAgent). */
+  onSend: (text: string, images?: readonly string[]) => Promise<boolean>;
   onShowTerminal: () => void;
+  /** Before the box where you write (Jarvis's microphone). */
+  composerLeading?: ReactNode;
+  /** Changes when something wants the box focused. */
+  focusSignal?: number;
 }) {
   const { items, failed, retry } = useAgentChat(view.id);
   const sending = usePendingMessages(view.id);
@@ -70,6 +86,9 @@ export function ChatPane({
   const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const pinnedToEnd = useRef(true);
+  // Images dragged over the chat: it says where to drop them.
+  const [dragging, setDragging] = useState(false);
+  const [dropped, setDropped] = useState<File[]>();
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -96,14 +115,26 @@ export function ChatPane({
     view.kind === 'meet' ||
     view.kind === 'research';
   // Written in the chat: it asks for a chat-sized answer, and shows at once.
-  const send = (text: string) => {
-    const key = addPending(view.id, text);
-    void onSend(withChatHint(text)).then((sent) => {
+  const deliver = (text: string, pictures?: { previews: string[]; paths: string[] }) => {
+    const key = addPending(view.id, text, pictures);
+    void onSend(withChatHint(text), pictures?.paths).then((sent) => {
       settleDelivery(view.id, key, sent);
       if (!sent) void playBonkSound();
     });
     pinnedToEnd.current = true;
   };
+  // Its images are saved in the office first: their paths are what is pasted.
+  const send = async (text: string, images: Attachment[]): Promise<SendResult> => {
+    let paths: string[];
+    try {
+      paths = await Promise.all(images.map((a) => saveImage(a.file)));
+    } catch (err) {
+      return `No se mandó: ${(err as Error).message}`;
+    }
+    deliver(text, images.length ? { previews: images.map((a) => a.preview), paths } : undefined);
+    return undefined;
+  };
+  const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes('Files');
 
   const color = clawdColor(view.palette, view.hueShift);
   return (
@@ -118,7 +149,29 @@ export function ChatPane({
         e.preventDefault();
         zoomChatFont(shortcut === 'zoomIn' ? 1 : shortcut === 'zoomOut' ? -1 : 0);
       }}
+      onDragOver={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        setDragging(false);
+        setDropped(Array.from(e.dataTransfer.files));
+      }}
     >
+      {dragging && (
+        <div className="absolute inset-8 z-10 rounded-xl border-2 border-dashed border-accent bg-bg/85 flex items-center justify-center pointer-events-none">
+          <p className="m-0 text-sm font-semibold text-text">
+            Soltá la imagen para mandársela a {view.name}
+          </p>
+        </div>
+      )}
       <FontControl fontPx={fontPx} />
       <div
         ref={scroller}
@@ -187,7 +240,7 @@ export function ChatPane({
             busy={busy}
             onRetry={() => {
               dropPending(view.id, p.key);
-              send(p.text);
+              deliver(p.text, p.paths && { previews: p.images ?? [], paths: p.paths });
             }}
             onDiscard={() => dropPending(view.id, p.key)}
           />
@@ -203,7 +256,13 @@ export function ChatPane({
           pinnedToEnd.current = true;
         }}
       />
-      <Composer view={view} onSend={send} />
+      <Composer
+        view={view}
+        onSend={send}
+        dropped={dropped}
+        leading={composerLeading}
+        focusSignal={focusSignal}
+      />
     </div>
   );
 }
@@ -245,11 +304,15 @@ function FontControl({ fontPx }: { fontPx: number }) {
 }
 
 function UserBubble({ item }: { item: ChatItem }) {
+  const text = withoutChatHint(item.text);
   return (
     <div className="self-end max-w-[85%] flex flex-col items-end gap-2">
-      <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
-        {withoutChatHint(item.text)}
-      </div>
+      <SentImages previews={picturesOf(item.id)} count={item.images} />
+      {text && (
+        <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
+          {text}
+        </div>
+      )}
       <span className="text-2xs text-text-muted">
         {item.voice ? 'Vos · por voz' : 'Vos'} · {hm(item.at)}
       </span>
@@ -308,9 +371,12 @@ function PendingBubble({
         message.delivery === 'sending' ? 'opacity-75' : ''
       } ${calm ? '' : 'transition-opacity duration-300'}`}
     >
-      <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
-        {message.text}
-      </div>
+      <SentImages previews={message.images} />
+      {message.text && (
+        <div className="bg-active-bg text-text rounded-2xl rounded-br-sm px-[0.75em] py-[0.45em] whitespace-pre-wrap break-words leading-relaxed">
+          {message.text}
+        </div>
+      )}
       <span className={`text-2xs ${failed ? 'text-danger' : 'text-text-muted'}`} role="status">
         Vos
         {message.delivery === 'sent' && (
@@ -485,46 +551,30 @@ function ChatChoices({
   );
 }
 
-function Composer({ view, onSend }: { view: AgentView; onSend: (text: string) => void }) {
-  const [text, setText] = useState('');
-  const box = useRef<HTMLTextAreaElement>(null);
-  // Typing while its terminal shows a dialog would answer the dialog instead.
-  const blocked = !!view.permission || (view.kind === 'needs' && view.blocking);
-  useEffect(() => {
-    const el = box.current;
-    // Hidden (the panel closed) it measures 0: keep the CSS height until shown.
-    if (!el || el.offsetParent === null) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
-    el.style.overflowY = el.scrollHeight > 140 ? 'auto' : 'hidden';
-  }, [text]);
-  const send = () => {
-    const t = text.trim();
-    if (!t || blocked) return;
-    onSend(t);
-    setText('');
-  };
+/** The images that went with a message: their previews when they were sent
+ *  from this page, else how many (the transcript only counts them). */
+function SentImages({ previews, count }: { previews?: readonly string[]; count?: number }) {
+  if (previews?.length) {
+    return (
+      <div className="flex flex-wrap justify-end gap-4">
+        {previews.map((src) => (
+          <img
+            key={src}
+            src={src}
+            alt="Imagen que mandaste"
+            className="block max-w-160 max-h-120 object-cover rounded-xl border border-border"
+          />
+        ))}
+      </div>
+    );
+  }
+  if (!count) return null;
   return (
-    <div className="border-t border-border bg-bg px-10 py-8 flex items-end gap-6">
-      <textarea
-        ref={box}
-        rows={1}
-        value={text}
-        disabled={blocked}
-        placeholder={blocked ? 'Primero contestá lo que te pidió' : `Escribile a ${view.name}…`}
-        aria-label={`Mensaje para ${view.name}`}
-        className="flex-1 min-h-34 resize-none text-[1em] bg-bg text-text border border-border rounded-lg px-10 py-7 outline-none placeholder:text-text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20"
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            send();
-          }
-        }}
-      />
-      <Button variant="accent" size="md" disabled={blocked || !text.trim()} onClick={send}>
-        Enviar
-      </Button>
-    </div>
+    <span className="inline-flex items-center gap-4 text-2xs text-text-2 bg-bg border border-border rounded-full px-8 py-2">
+      <span className="material-symbols-sharp text-sm" aria-hidden="true">
+        image
+      </span>
+      {count === 1 ? '1 imagen' : `${count} imágenes`}
+    </span>
   );
 }

@@ -25,14 +25,19 @@ export function registerAgentInput(agentId: number, handle: TerminalInputHandle 
 
 /**
  * Send a message to an agent: a bracketed paste (newlines stay inside the
- * message), then Enter. Resolves true once it reached the agent's terminal —
- * right away, or when a terminal that is reconnecting comes back (it waits up
- * to INPUT_HOLD_MS); false when the agent has no terminal here, or it did not
- * come back in time. Only true may count as done.
+ * message), then Enter; its images first, each path pasted alone (Claude Code
+ * attaches them: chatImages.ts). Resolves true once it reached the agent's
+ * terminal — right away, or when a terminal that is reconnecting comes back
+ * (it waits up to INPUT_HOLD_MS); false when the agent has no terminal here,
+ * or it did not come back in time. Only true may count as done.
  */
-export function sendToAgent(agentId: number, text: string): Promise<boolean> {
+export function sendToAgent(
+  agentId: number,
+  text: string,
+  images?: readonly string[],
+): Promise<boolean> {
   const input = handles.get(agentId);
-  return input ? input.submit(text) : Promise.resolve(false);
+  return input ? input.submit(text, images) : Promise.resolve(false);
 }
 
 function subscribe(listener: () => void): () => void {

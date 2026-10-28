@@ -5,8 +5,8 @@ import type { AgentKind, AgentView } from '../views/agentViews.js';
 /**
  * Jarvis has no avatar (asked for 2026-10-22: "sin avatar, sin presencia,
  * como las películas"). It is the office's one supervisor of everyone; the
- * board, the graph and every list leave it out, and it lives in its bar at
- * the foot of the office (JarvisBar) and, when it needs you, in the middle of
+ * board, the graph and every list leave it out, and it lives in its bubble in
+ * the office's corner (JarvisBubble) and, when it needs you, in the middle of
  * the screen (JarvisVisor). Pure, so it is tested without a DOM.
  */
 
@@ -48,7 +48,7 @@ export function jarvisMood(jarvis: AgentView | undefined): JarvisMood {
   return 'busy';
 }
 
-/** What the bar says: what it needs from you, else the start of its latest
+/** What its panel says: what it needs from you, else the start of its latest
  *  answer, else what it is doing. */
 export function jarvisLine(jarvis: AgentView): string {
   if (jarvis.permission) {
@@ -96,7 +96,7 @@ export function askedLine({ agent, permission }: AskedPermission): string {
 /**
  * The one thing the visor is about, or none: another agent's permission it
  * asks you about, a permission it holds, or what its finished turn left for
- * you. Each shows once: dismissing it leaves it in the bar, and the next one
+ * you. Each shows once: dismissing it leaves it in its bubble, and the next one
  * comes up again.
  */
 export function visorKey(
@@ -167,7 +167,7 @@ export const ANSWER_LAG_MS = 15_000;
  * for a new answer, up to ANSWER_LAG_MS. Never on page load, never an answer
  * already heard, never mid-turn for a permission. And only an answer with
  * something to say aloud (`aloud`, the office's `saysAloud`): one to an
- * «[Oficina]» notice without a «Te toca:» shows in the bar and stays silent.
+ * «[Oficina]» notice without a «Te toca:» shows in its chat and stays silent.
  */
 export function speechStep(
   prev: SpeechWatch,

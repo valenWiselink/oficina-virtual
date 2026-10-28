@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  bandUnder,
   cardVariant,
   drawerPull,
   mergeOrder,
@@ -60,16 +59,10 @@ describe('stripOverlap (the strip of tabs over the office)', () => {
     expect(stripOverlap('right', false)).toEqual(NO_INSETS);
   });
 
-  it('the office makes room inside, the drawer comes over it and the band runs under', () => {
+  it('the office makes room inside and the drawer comes over it', () => {
     const o = stripOverlap('right', true);
     expect(officeRoom(o)).toMatchObject({ paddingRight: 72, paddingLeft: 0 });
     expect(drawerPull(o)).toMatchObject({ marginLeft: -72, marginRight: -0 });
     expect(drawerPull(stripOverlap('top', true))).toMatchObject({ marginBottom: -64 });
-    expect(bandUnder(stripOverlap('left', true))).toEqual({
-      marginRight: -0,
-      marginLeft: -72,
-      paddingRight: 0,
-      paddingLeft: 72,
-    });
   });
 });

@@ -10,7 +10,8 @@ import type { GraphControls } from './useGraphCanvas.js';
 export function GraphToolbar({ controls }: { controls: GraphControls }) {
   const hasPins = useHasPins();
   return (
-    <div className="absolute right-14 bottom-36 z-10 flex gap-2 soft-panel p-3">
+    // Left of Jarvis's bubble, which floats in the corner (JarvisBubble).
+    <div className="absolute right-88 bottom-36 z-10 flex gap-2 soft-panel p-3">
       <Button
         size="sm"
         variant="ghost"

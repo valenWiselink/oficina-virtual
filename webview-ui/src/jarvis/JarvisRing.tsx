@@ -1,9 +1,19 @@
 import type { JarvisMood } from './jarvisRules.js';
 
-/** Jarvis's only body: a ring in its own colour. The dashed arc turns while it
- *  works; grey when it is not in the office. Decorative (the bar says it). */
-export function JarvisRing({ mood, size = 34 }: { mood: JarvisMood; size?: number }) {
-  const tone = mood === 'away' ? 'text-border-strong' : 'text-jarvis';
+/** Jarvis's only body: a ring in its own colour (white on its bubble). The
+ *  dashed arc turns while it works; grey when it is not in the office.
+ *  Decorative (its bubble and panel say it). */
+export function JarvisRing({
+  mood,
+  size = 34,
+  onColor = false,
+}: {
+  mood: JarvisMood;
+  size?: number;
+  /** Drawn on Jarvis's colour (its bubble): white. */
+  onColor?: boolean;
+}) {
+  const tone = onColor ? 'text-white' : mood === 'away' ? 'text-border-strong' : 'text-jarvis';
   return (
     <svg
       width={size}

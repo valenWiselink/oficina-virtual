@@ -164,3 +164,32 @@ describe('what you sent while it was working', () => {
     );
   });
 });
+
+describe('images you sent', () => {
+  const png = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBO' } };
+
+  it('are counted, not left as Claude Code marks in the text', () => {
+    const [item] = chatItemsOf(user('i1', [{ type: 'text', text: '[Image #1] ¿qué ves?' }, png]));
+    expect(item).toMatchObject({ role: 'user', text: '¿qué ves?', images: 1 });
+  });
+
+  it('make a line of their own when there is no text', () => {
+    const [item] = chatItemsOf(
+      user('i2', [png, png, { type: 'text', text: '[Image #1] [Image #2]' }]),
+    );
+    expect(item).toMatchObject({ role: 'user', text: '', images: 2 });
+  });
+
+  it('are counted by their marks while the agent works (queued)', () => {
+    const [item] = chatItemsOf({
+      type: 'attachment',
+      uuid: 'q4',
+      attachment: { type: 'queued_command', prompt: '[Image #3] mirá esto' },
+    });
+    expect(item).toMatchObject({ role: 'user', text: 'mirá esto', images: 1 });
+  });
+
+  it('a message without images has no count', () => {
+    expect(chatItemsOf(user('i3', 'hola'))[0]).not.toHaveProperty('images');
+  });
+});

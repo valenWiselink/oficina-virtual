@@ -119,12 +119,15 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   per office (`liveJarvis`; a second is refused at launch and in Editar).
   In the webview it has no avatar (`webview-ui/src/jarvis/`): App takes it out
   of every view (`withoutJarvis`) and of the terminal tabs (`isHidden` in
-  useTerminalDrawer), and shows it as `JarvisBar` (on a computer, a band the
-  whole width of the window under the office and the terminals; on a phone,
-  the foot of the office page) and `JarvisVisor` (middle of the screen, when
-  it needs you or speaks). In a chat, `[Oficina] …` and `[Supervisor «X»] …`
-  lines are notes, not yours (`agentChat.userItem`), and `[Voz] …` is yours,
-  said aloud.
+  useTerminalDrawer), and shows it as `JarvisBubble` (a round button in the
+  office's bottom-right corner that opens its chat in a floating panel) and
+  `JarvisVisor` (middle of the screen, when it needs you or speaks). In a
+  chat, `[Oficina] …` and `[Supervisor «X»] …` lines are notes, not yours
+  (`agentChat.userItem`), and `[Voz] …` is yours, said aloud.
+  Images in any chat (pasted, dropped or chosen) are saved by the server as
+  temp files (`chatImages.ts`, `saveChatImage`) and each path is pasted ALONE
+  into the terminal before the text: Claude Code turns a lone image path into
+  `[Image #1]`; a path inside text is only read with Read (measured).
   Always there: `jarvisKeeper.ts` (+ `jarvisWiring.ts`) starts it with the
   office, opens a clean conversation every morning and relaunches it when its
   role changed (the registry keeps each supervisor's `roleHash` in

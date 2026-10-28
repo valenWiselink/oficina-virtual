@@ -25,7 +25,7 @@ import {
 export interface JarvisVoiceState {
   /** As the office has it set (Ajustes); undefined until it answers. */
   status?: JarvisVoiceStatus;
-  /** Silenced in this window (the bar's speaker button). */
+  /** Silenced in this window (its panel's speaker button). */
   muted: boolean;
   /** How fast it speaks in this window (the player's rate, same pitch). */
   speed: number;

@@ -140,6 +140,31 @@ export function userText(raw: string): string | null {
   return text;
 }
 
+/** Claude Code's mark where a pasted image went: «[Image #1]». */
+const IMAGE_MARK = /\[Image #\d+\]\s*/g;
+
+/**
+ * What you wrote, as one chat line: the images that came with it counted
+ * (`images`), not left as Claude Code's «[Image #1]» marks in the text. A
+ * message of only images is still a line.
+ */
+function withImages(
+  id: string,
+  parts: string[],
+  at: number | undefined,
+  pictures: number,
+): ChatItem[] {
+  const marks = parts.reduce((n, p) => n + (p.match(IMAGE_MARK)?.length ?? 0), 0);
+  const images = Math.max(pictures, marks);
+  const text = parts
+    .map((p) => userText(p.replace(IMAGE_MARK, '')))
+    .filter(Boolean)
+    .join('\n\n');
+  if (!text && !images) return [];
+  const item = userItem(id, text, at);
+  return [images && item.role === 'user' ? { ...item, images } : item];
+}
+
 function atOf(record: Rec): number | undefined {
   const at = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : NaN;
   return Number.isNaN(at) ? undefined : at;
@@ -154,20 +179,13 @@ export function chatItemsOf(record: Rec): ChatItem[] {
   const content = (record.message as { content?: unknown } | undefined)?.content;
 
   if (record.type === 'user') {
+    const blocks = Array.isArray(content) ? (content as Rec[]) : [];
     const parts =
       typeof content === 'string'
         ? [content]
-        : Array.isArray(content)
-          ? (content as Rec[]).flatMap((b) =>
-              b.type === 'text' && typeof b.text === 'string'
-                ? [b.text]
-                : b.type === 'image'
-                  ? ['[imagen]']
-                  : [],
-            )
-          : [];
-    const text = parts.map(userText).filter(Boolean).join('\n\n');
-    return text ? [userItem(id, text, at)] : [];
+        : blocks.flatMap((b) => (b.type === 'text' && typeof b.text === 'string' ? [b.text] : []));
+    const pictures = blocks.filter((b) => b.type === 'image').length;
+    return withImages(id, parts, at, pictures);
   }
 
   // What you sent while it was working is absorbed into its turn: only this
@@ -175,8 +193,7 @@ export function chatItemsOf(record: Rec): ChatItem[] {
   if (record.type === 'attachment') {
     const queued = record.attachment as Rec | undefined;
     if (queued?.type !== 'queued_command' || typeof queued.prompt !== 'string') return [];
-    const text = userText(queued.prompt);
-    return text ? [userItem(id, text, at)] : [];
+    return withImages(id, [queued.prompt], at, 0);
   }
 
   if (record.type !== 'assistant' || !Array.isArray(content)) return [];

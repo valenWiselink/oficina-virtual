@@ -7,6 +7,7 @@ import { cleanEffort, cleanModel, editAgent, setAgentRun, setSupervision } from 
 import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type { LoadedAssets, LoadedCharacterSprites, LoadedPetSprites } from './assetLoader.js';
+import { saveChatImage } from './chatImages.js';
 import { claudeStatus, claudeTheme } from './claudeCheck.js';
 import {
   getHooksConsent,
@@ -617,6 +618,21 @@ export function handleClientMessage(
       // you said as text (voice/).
       handleVoiceMessage(msg, send, store);
       break;
+
+    case 'saveChatImage': {
+      // An image from a chat, as a file the page pastes into the terminal.
+      const id = typeof msg.id === 'number' ? msg.id : 0;
+      const saved =
+        typeof msg.data === 'string'
+          ? saveChatImage(msg.data)
+          : { ok: false as const, reason: 'No llegó la imagen' };
+      send(
+        saved.ok
+          ? { type: 'chatImageSaved', id, path: saved.path }
+          : { type: 'chatImageSaved', id, reason: saved.reason },
+      );
+      break;
+    }
 
     default:
       // focusAgent is handled entirely client-side in standalone (it focuses the
