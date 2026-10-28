@@ -8,7 +8,7 @@ import { CommandPalette } from './command/CommandPalette.js';
 import { useCommandPaletteShortcut } from './command/usePaletteShortcut.js';
 import { AgentCardBar } from './components/AgentCardBar.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
-import { bandUnder, drawerPull, officeRoom, stripOverlap } from './components/cardBar.js';
+import { drawerPull, officeRoom, stripOverlap } from './components/cardBar.js';
 import { CloseAgentConfirm } from './components/CloseAgentConfirm.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
@@ -33,7 +33,7 @@ import { useKeyboardViewport } from './hooks/useKeyboardViewport.js';
 import { useTerminalDock } from './hooks/useTerminalDock.js';
 import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { markYourTurnDone } from './identity/yourTurnStore.js';
-import { JarvisBar } from './jarvis/JarvisBar.js';
+import { JarvisBubble } from './jarvis/JarvisBubble.js';
 import { askedPermission, findJarvis, jarvisHome, withoutJarvis } from './jarvis/jarvisRules.js';
 import { JarvisVisor } from './jarvis/JarvisVisor.js';
 import { useTalkShortcut } from './jarvis/talk.js';
@@ -435,23 +435,16 @@ function App() {
         },
       };
 
-  // Jarvis's band. On a computer it runs the whole width of the window, under
-  // the office and the terminals (asked for 2026-10-22: its chat ended short
-  // of the right edge, beside the strip of tabs); on a phone it closes the
-  // office page.
-  const jarvisBand =
+  // Jarvis floats in the office's bottom-right corner (asked 2026-10-28: the
+  // band across the foot took room from the office); its chat opens above it.
+  const jarvisBubble =
     !isDebugMode && (terminalAvailable || jarvis) ? (
-      <div
-        className="shrink-0 border-t border-border bg-bg-dark *:border-t-0"
-        style={isMobile ? bandUnder(stripOver) : undefined}
-      >
-        <JarvisBar
-          jarvis={jarvis}
-          actions={agentActions}
-          onSummon={summonJarvis}
-          focusSignal={jarvisFocus}
-        />
-      </div>
+      <JarvisBubble
+        jarvis={jarvis}
+        actions={agentActions}
+        onSummon={summonJarvis}
+        focusSignal={jarvisFocus}
+      />
     ) : null;
 
   // The office region is shared by both shells: desktop mounts it as the
@@ -562,8 +555,8 @@ function App() {
             onAnswer={() => setJarvisFocus((n) => n + 1)}
           />
         )}
+        {jarvisBubble}
       </div>
-      {isMobile && jarvisBand}
     </div>
   );
 
@@ -649,7 +642,6 @@ function App() {
               )
             )}
           </div>
-          {jarvisBand}
         </>
       )}
 

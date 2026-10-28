@@ -20,7 +20,7 @@ export interface EarsState {
   since?: number;
   /** Downloading the model the first time (0-100). */
   percent?: number;
-  /** What it understood last (shown a moment in the bar). */
+  /** What it understood last (shown a moment by its bubble). */
   heard?: string;
   /** The last dictation reached the safety net and was sent by itself. */
   full?: boolean;

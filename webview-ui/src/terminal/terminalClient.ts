@@ -33,6 +33,15 @@ export interface TerminalConnectionHandlers {
  *  late enough for a background session, whose input travels through
  *  `claude attach` (the server's own sendToTerminal waits 80 ms). */
 const MESSAGE_ENTER_AFTER_MS = 150;
+/** Between the pastes of one message (an image's path, then the text):
+ *  Claude Code reads a pasted image path into «[Image #1]» asynchronously
+ *  («Pasting…»), and a paste that lands before it is done joins the path as
+ *  plain text. Measured enough on 2026-10-28. */
+const MESSAGE_PART_GAP_MS = 900;
+
+/** A message as pastes: one, or several sent one after another (each
+ *  image's path alone, then the text). Encoded at send time. */
+export type MessagePastes = () => string | string[];
 
 export type TerminalConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed';
 
@@ -65,7 +74,7 @@ export class TerminalConnection {
   private readonly agentId: number;
   private readonly handlers: TerminalConnectionHandlers;
   /** Whole messages sent while not attached: they go on the next replay. */
-  private readonly held: HeldMessages<() => string>;
+  private readonly held: HeldMessages<MessagePastes>;
 
   constructor(agentId: number, handlers: TerminalConnectionHandlers) {
     this.agentId = agentId;
@@ -198,18 +207,23 @@ export class TerminalConnection {
    * whether it got there. `paste` is encoded at send time (bracketed or not,
    * as the app wants it then).
    */
-  sendMessage(paste: () => string, done: WriteDone): void {
+  sendMessage(paste: MessagePastes, done: WriteDone): void {
     if (this.disposed || this.exited || this.refused) done(false);
     else if (this.attached) this.deliver(paste, done);
     else this.held.hold(paste, done);
   }
 
-  private deliver(paste: () => string, done: WriteDone): void {
-    if (!this.send({ type: 'input', data: paste() })) {
-      done(false);
-      return;
-    }
-    setTimeout(() => done(this.send({ type: 'input', data: '\r' })), MESSAGE_ENTER_AFTER_MS);
+  private deliver(paste: MessagePastes, done: WriteDone): void {
+    const parts = [paste()].flat();
+    const next = (i: number) => {
+      if (!this.send({ type: 'input', data: parts[i] })) {
+        done(false);
+        return;
+      }
+      if (i + 1 < parts.length) setTimeout(() => next(i + 1), MESSAGE_PART_GAP_MS);
+      else setTimeout(() => done(this.send({ type: 'input', data: '\r' })), MESSAGE_ENTER_AFTER_MS);
+    };
+    next(0);
   }
 
   /** Back attached: the held messages go one after another, each with its

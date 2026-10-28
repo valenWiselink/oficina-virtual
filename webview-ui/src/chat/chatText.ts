@@ -10,7 +10,8 @@ export const CHAT_HINT =
   '(Te escribo desde el chat de la oficina: respondé corto, como en un chat; sin títulos ni tablas salvo que hagan falta.)';
 
 export function withChatHint(text: string): string {
-  return `${text.trim()}\n\n${CHAT_HINT}`;
+  // A message of only images is the hint alone (after their «[Image #1]»).
+  return text.trim() ? `${text.trim()}\n\n${CHAT_HINT}` : CHAT_HINT;
 }
 
 /** The message as you wrote it: without the hint the chat added. */
@@ -33,6 +34,20 @@ export function sameMessage(sent: string, recorded: string): boolean {
   if (!a || !b) return false;
   if (a === b) return true;
   return a.length >= PREFIX_CHARS && b.startsWith(a.slice(0, PREFIX_CHARS));
+}
+
+/** The transcript's user line is a message the chat sent, images and all:
+ *  one with images is only matched by a line that has them, and one of
+ *  only images by a line with no text of yours. */
+export function sameSent(
+  sent: { text: string; images?: readonly string[] },
+  recorded: { text: string; images?: number },
+): boolean {
+  if (sent.images?.length) {
+    if (!recorded.images) return false;
+    if (!normalize(sent.text)) return !normalize(recorded.text);
+  }
+  return sameMessage(sent.text, recorded.text);
 }
 
 /** An answer long enough to fold in its bubble (lines or characters). */

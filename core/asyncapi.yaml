@@ -159,6 +159,7 @@ components:
         - $ref: '#/components/schemas/JarvisVoice'
         - $ref: '#/components/schemas/JarvisVoiceFailed'
         - $ref: '#/components/schemas/JarvisHeard'
+        - $ref: '#/components/schemas/ChatImageSaved'
         # Diagnostics
         - $ref: '#/components/schemas/AgentDiagnostics'
       discriminator: type
@@ -213,6 +214,7 @@ components:
         - $ref: '#/components/schemas/SetJarvisVoice'
         - $ref: '#/components/schemas/JarvisSay'
         - $ref: '#/components/schemas/JarvisHear'
+        - $ref: '#/components/schemas/SaveChatImage'
       discriminator: type
 
     # ── Server message variants ────────────────────────────────────
@@ -1653,6 +1655,9 @@ components:
         voice:
           type: boolean
           description: Something you said aloud (the office marks it «[Voz]»).
+        images:
+          type: integer
+          description: How many images came with what you wrote.
 
     ChatRole:
       description: |
@@ -2685,6 +2690,40 @@ components:
         id:
           type: integer
         audio:
+          type: string
+
+    SaveChatImage:
+      description: |
+        An image sent from a chat (pasted, dropped or chosen), base64, saved
+        as a temporary file whose path the page then pastes into the agent's
+        terminal (Claude Code attaches a pasted image path). Answered with
+        chatImageSaved carrying the same `id`.
+      type: object
+      additionalProperties: false
+      required: [type, id, data]
+      properties:
+        type:
+          const: saveChatImage
+        id:
+          type: integer
+        data:
+          type: string
+
+    ChatImageSaved:
+      description: |
+        The saveChatImage with the same `id`: where the image was saved, or
+        why it was not (`reason`, for the chat).
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: chatImageSaved
+        id:
+          type: integer
+        path:
+          type: string
+        reason:
           type: string
 
     PickFolder:

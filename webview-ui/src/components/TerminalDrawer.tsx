@@ -191,7 +191,7 @@ export function TerminalDrawer(props: TerminalDrawerProps) {
                 view={view}
                 actions={props.actions}
                 // Written into its terminal as if typed there (agentInput.ts).
-                onSend={(text) => sendToAgent(agentId, text)}
+                onSend={(text, images) => sendToAgent(agentId, text, images)}
                 onShowTerminal={() => setMode(agentId, 'terminal')}
               />
             </div>

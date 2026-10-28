@@ -16,7 +16,7 @@ import {
 import { registerAgentInput } from '../terminal/agentInput.js';
 import { attachClipboardInput } from '../terminal/clipboardInput.js';
 import { zoomTerminalFont } from '../terminal/fontZoom.js';
-import { pasteText } from '../terminal/pasteText.js';
+import { messagePastes } from '../terminal/pasteText.js';
 import { findRelativePaths, findWindowsPaths } from '../terminal/pathLinks.js';
 import { attachPromptMarks } from '../terminal/promptMarks.js';
 import {
@@ -68,9 +68,10 @@ export interface TerminalInputHandle {
    *  when the running app has turned that mode on — Claude Code has, and
    *  without the markers a multiline paste would submit at its first newline. */
   paste: (data: string) => void;
-  /** A whole message: pasted, then Enter. While the terminal reconnects it
-   *  waits (up to 30 s); resolves whether it got there. */
-  submit: (text: string) => Promise<boolean>;
+  /** A whole message: pasted (after the paths of its images, each alone),
+   *  then Enter. While the terminal reconnects it waits (up to 30 s);
+   *  resolves whether it got there. */
+  submit: (text: string, images?: readonly string[]) => Promise<boolean>;
 }
 
 /**
@@ -224,10 +225,13 @@ export function TerminalPane({
       },
       // Not through term.paste: that is typing, which a reconnect drops. The
       // paste is encoded when it goes, as the app wants it then.
-      submit: (text) =>
+      submit: (text, images = []) =>
         new Promise((resolve) => {
           term.scrollToBottom();
-          connection.sendMessage(() => pasteText(text, term.modes.bracketedPasteMode), resolve);
+          connection.sendMessage(
+            () => messagePastes(text, images, term.modes.bracketedPasteMode),
+            resolve,
+          );
         }),
     };
     registerInputRef.current?.(agentId, input);

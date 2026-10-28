@@ -4,7 +4,7 @@ import { transport } from '../transport/index.js';
 
 /**
  * What the office says once when ElevenLabs cannot (no key, no credit) and
- * Jarvis speaks with Fish instead: shown in the bar until you close it. The office does not repeat it until ElevenLabs works again.
+ * Jarvis speaks with Fish instead: shown by its bubble until you close it. The office does not repeat it until ElevenLabs works again.
  */
 
 let notice: string | undefined;

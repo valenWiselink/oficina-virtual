@@ -5,6 +5,7 @@ import {
   CHAT_HINT,
   isLongAnswer,
   sameMessage,
+  sameSent,
   withChatHint,
   withoutChatHint,
 } from '../src/chat/chatText.js';
@@ -33,6 +34,19 @@ describe('chat hint', () => {
     expect(sameMessage('hola', 'chau')).toBe(false);
     const long = 'Te voy a pasar feedback sobre la pantalla de métricas: '.repeat(3);
     expect(sameMessage(long, `${long.slice(0, 70)} [Pasted text #1 +3 lines]`)).toBe(true);
+  });
+
+  it('a message of only images is the hint alone', () => {
+    expect(withChatHint('  ')).toBe(CHAT_HINT);
+  });
+
+  it('matches a message with images only with a line that has them', () => {
+    const pics = ['blob:1'];
+    expect(sameSent({ text: 'mirá', images: pics }, { text: 'mirá', images: 1 })).toBe(true);
+    expect(sameSent({ text: 'mirá', images: pics }, { text: 'mirá' })).toBe(false);
+    expect(sameSent({ text: '', images: pics }, { text: CHAT_HINT, images: 1 })).toBe(true);
+    expect(sameSent({ text: '', images: pics }, { text: 'otra cosa', images: 1 })).toBe(false);
+    expect(sameSent({ text: 'hola' }, { text: withChatHint('hola') })).toBe(true);
   });
 
   it('folds long answers only', () => {
