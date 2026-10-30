@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 
 import { ChatPane } from '../chat/ChatPane.js';
 import { Button } from '../components/ui/Button.js';
@@ -6,8 +6,19 @@ import { sendToAgent } from '../terminal/agentInput.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
 import { clock, MAX_DICTATION_MS } from './dictation.js';
+import { heardNoteMs, heardNoteOf, useFleetingNote } from './heardNote.js';
 import { type EarsState, useJarvisEars } from './jarvisEars.js';
 import { dismissJarvisNotice, useJarvisNotice } from './jarvisNotice.js';
+import {
+  fitPanel,
+  PANEL_MIN_CSS,
+  PANEL_MIN_PX,
+  PANEL_STEP_PX,
+  panelHeightCss,
+  type PanelSize,
+  toggleMax,
+  useJarvisPanelSize,
+} from './jarvisPanelSize.js';
 import { JarvisRing } from './JarvisRing.js';
 import { jarvisLine, jarvisMood } from './jarvisRules.js';
 import { requestJarvisVoice, setJarvisMuted, useJarvisVoice } from './jarvisVoice.js';
@@ -42,7 +53,8 @@ function ListenClock({ since }: { since: number | undefined }) {
   return <span className="tabular-nums">{clock(Math.max(0, now - (since ?? now)))}</span>;
 }
 
-/** What its ears are doing, in words (undefined: nothing to say). */
+/** What its ears are doing, in words (undefined: nothing to say). What it
+ *  heard is not here: that is a fleeting note (heardNote.ts). */
 function earsLineOf(ears: EarsState): string | undefined {
   if (ears.phase === 'listening')
     return `Te escucho, tomate tu tiempo: no corto por silencio. Cuando termines, apretá de nuevo el micrófono o Alt+J y se lo paso (se corta solo a los ${clock(MAX_DICTATION_MS)}).`;
@@ -50,9 +62,96 @@ function earsLineOf(ears: EarsState): string | undefined {
   if (ears.phase === 'preparing')
     return `Preparando el oído de Jarvis${ears.percent !== undefined ? ` (${ears.percent} %)` : ''}: la primera vez baja el modelo de voz.`;
   if (ears.error) return ears.error;
-  if (ears.heard)
-    return `${ears.full ? `Llegaste a los ${clock(MAX_DICTATION_MS)} y se lo pasé. ` : ''}Le dijiste: «${ears.heard}»`;
   return undefined;
+}
+
+/** What it heard, for a moment: hovering holds it, a tap closes it. */
+function HeardNote({
+  text,
+  note,
+  boxed,
+}: {
+  text: string;
+  note: ReturnType<typeof useFleetingNote>;
+  /** Beside the bubble (a box of its own) or a line in the chat's status row. */
+  boxed: boolean;
+}) {
+  return (
+    <div className="anim-float-up" role="status">
+      <button
+        type="button"
+        title="Tocá para cerrarlo"
+        onClick={note.dismiss}
+        onMouseEnter={() => note.hold(true)}
+        onMouseLeave={() => note.hold(false)}
+        className={`w-full text-left border-0 cursor-pointer transition-opacity duration-500 motion-reduce:transition-none ${
+          note.phase === 'fading' ? 'opacity-0' : 'opacity-100'
+        } ${boxed ? 'soft-panel px-12 py-8' : 'bg-transparent p-0'}`}
+      >
+        <span className="block text-2xs text-text-2 line-clamp-3">{text}</span>
+      </button>
+    </div>
+  );
+}
+
+/** The height of the office the panel floats in. */
+function roomOf(panel: RefObject<HTMLElement | null>): number {
+  return (panel.current?.offsetParent as HTMLElement | null)?.clientHeight ?? 0;
+}
+
+/**
+ * The panel's top edge: drag it (or ↑/↓ on it) to make the chat taller or
+ * shorter, up to the top of the office; a double click maximizes or restores.
+ */
+function PanelEdge({
+  panel,
+  size,
+  onSize,
+}: {
+  panel: RefObject<HTMLElement | null>;
+  size: PanelSize;
+  onSize: (next: PanelSize, keep?: boolean) => void;
+}) {
+  const drag = useRef<{ y: number; height: number } | null>(null);
+  const resize = (height: number, keep: boolean) => onSize(fitPanel(height, roomOf(panel)), keep);
+  const dragged = (y: number) => (drag.current ? drag.current.height + drag.current.y - y : 0);
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Alto del chat de Jarvis"
+      aria-valuemin={PANEL_MIN_PX}
+      aria-valuenow={size.height}
+      tabIndex={0}
+      title="Arrastrá para cambiarle el alto (doble clic: hasta arriba o de vuelta)"
+      className="absolute top-0 inset-x-0 z-10 h-8 cursor-ns-resize touch-none outline-none transition-colors hover:bg-jarvis/30 focus-visible:bg-jarvis/50"
+      onPointerDown={(e) => {
+        if (e.button !== 0 || !panel.current) return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { y: e.clientY, height: panel.current.offsetHeight };
+      }}
+      onPointerMove={(e) => {
+        if (drag.current) resize(dragged(e.clientY), false);
+      }}
+      onPointerUp={(e) => {
+        if (!drag.current) return;
+        resize(dragged(e.clientY), true);
+        drag.current = null;
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+      }}
+      onDoubleClick={() => onSize(toggleMax(size, roomOf(panel)))}
+      onKeyDown={(e) => {
+        const step =
+          e.key === 'ArrowUp' ? PANEL_STEP_PX : e.key === 'ArrowDown' ? -PANEL_STEP_PX : 0;
+        if (!step || !panel.current) return;
+        e.preventDefault();
+        resize(panel.current.offsetHeight + step, true);
+      }}
+    />
+  );
 }
 
 /** Talk to it: press to start, again to finish and send (also Alt+J). */
@@ -122,6 +221,8 @@ export function JarvisBubble({
   const [shown, setShown] = useState(false);
   const [composerFocus, setComposerFocus] = useState(0);
   const bubble = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const [size, setSize] = useJarvisPanelSize();
   const voice = useJarvisVoice();
   const ears = useJarvisEars();
   const notice = useJarvisNotice();
@@ -147,6 +248,11 @@ export function JarvisBubble({
   const listening = ears.phase === 'listening';
   const needsYou = !!jarvis && (jarvis.kind === 'needs' || !!jarvis.permission);
   const earsLine = earsLineOf(ears);
+  const note = useFleetingNote(
+    ears.heard ? ears.heardAt : undefined,
+    heardNoteMs(ears.heard ?? ''),
+  );
+  const noteText = note.phase === 'gone' ? undefined : heardNoteOf(ears, open);
   const speaks = !!voice.status && voice.status.engine !== 'off';
   const turnId = jarvis?.kind === 'needs' ? jarvis.yourTurnId : undefined;
   const close = () => {
@@ -179,14 +285,17 @@ export function JarvisBubble({
     <>
       {open && (
         <aside
+          ref={panel}
           aria-label="Jarvis"
-          className={`absolute right-16 bottom-84 z-30 w-[min(440px,calc(100%-32px))] h-[min(640px,calc(100%-100px))] min-h-280 flex flex-col overflow-hidden soft-panel rounded-2xl! origin-bottom-right transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none ${
+          style={{ height: panelHeightCss(size), minHeight: PANEL_MIN_CSS }}
+          className={`absolute right-16 bottom-84 z-30 w-[min(440px,calc(100%-32px))] flex flex-col overflow-hidden soft-panel rounded-2xl! origin-bottom-right transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none ${
             shown ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-8'
           }`}
           onKeyDown={(e) => {
             if (e.key === 'Escape' && !e.defaultPrevented) close();
           }}
         >
+          <PanelEdge panel={panel} size={size} onSize={setSize} />
           <header className="shrink-0 flex items-start gap-10 px-14 py-10 border-b border-border bg-bg-dark">
             <JarvisRing mood={mood} size={30} />
             <div className="flex-1 min-w-0">
@@ -214,6 +323,19 @@ export function JarvisBubble({
                   </span>
                 </Button>
               )}
+              <Button
+                size="icon"
+                className="w-32! h-32!"
+                variant="ghost"
+                aria-pressed={size.max}
+                aria-label={size.max ? 'Volver al alto de antes' : 'Agrandar el chat hasta arriba'}
+                title={size.max ? 'Volver al alto de antes' : 'Hasta arriba'}
+                onClick={() => setSize(toggleMax(size, roomOf(panel)))}
+              >
+                <span className="material-symbols-sharp text-lg" aria-hidden="true">
+                  {size.max ? 'close_fullscreen' : 'open_in_full'}
+                </span>
+              </Button>
               <Button
                 size="icon"
                 className="w-32! h-32!"
@@ -259,9 +381,10 @@ export function JarvisBubble({
               )}
             </div>
           )}
-          {(notice || earsLine) && (
+          {(notice || earsLine || noteText) && (
             <div className="shrink-0 flex flex-col gap-4 px-14 py-6 border-b border-border">
               {statusLines}
+              {noteText && <HeardNote text={noteText} note={note} boxed={false} />}
             </div>
           )}
           {jarvis ? (
@@ -290,9 +413,12 @@ export function JarvisBubble({
       )}
 
       {/* Closed: what its ears or its voice have to say, beside the bubble. */}
-      {!open && (listening || notice || earsLine) && (
-        <div className="absolute right-84 bottom-16 z-30 w-[min(340px,calc(100%-100px))] soft-panel px-12 py-8 flex flex-col gap-4">
-          {statusLines}
+      {!open && (notice || earsLine || noteText) && (
+        <div className="absolute right-84 bottom-16 z-30 w-[min(340px,calc(100%-100px))] flex flex-col gap-8">
+          {(notice || earsLine) && (
+            <div className="soft-panel px-12 py-8 flex flex-col gap-4">{statusLines}</div>
+          )}
+          {noteText && <HeardNote text={noteText} note={note} boxed />}
         </div>
       )}
 
