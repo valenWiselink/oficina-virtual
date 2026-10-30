@@ -14,6 +14,7 @@ import {
   jarvisLine,
   visorContext,
   visorKey,
+  visorMode,
 } from './jarvisRules.js';
 import { stopJarvis, useJarvisVoice } from './jarvisVoice.js';
 import { talkToJarvis } from './talk.js';
@@ -22,7 +23,8 @@ import { talkToJarvis } from './talk.js';
  * Jarvis in the middle of the screen (option D of the 2026-10-22 canvas):
  * when it needs you — what it asks, in large type, with the buttons to answer
  * («Después» or Esc put it away; it stays in its bubble, and the next thing it
- * needs brings it back) — and while it speaks, with what it says as subtitles.
+ * needs brings it back) — and while it speaks, with what it says as subtitles
+ * (not while you muted it: visorMode).
  * When it asks you about another agent's permission, that permission is here
  * with Aprobar and Rechazar (or you tell Jarvis yes: valentinConsent.ts).
  */
@@ -39,12 +41,12 @@ export function JarvisVisor({
   /** «Escribirle»: write to it in its panel. */
   onAnswer: () => void;
 }) {
-  const { speaking } = useJarvisVoice();
+  const { speaking, muted } = useJarvisVoice();
   const listening = useJarvisEars().phase === 'listening';
   const key = visorKey(jarvis, asked);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const needs = key !== undefined && !dismissed.has(key);
-  const shown = !!jarvis && (needs || !!speaking);
+  const shown = !!jarvis && visorMode(needs, !!speaking, muted) !== undefined;
 
   useEffect(() => {
     if (!shown) return;

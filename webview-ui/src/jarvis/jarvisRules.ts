@@ -110,6 +110,21 @@ export function visorKey(
   return undefined;
 }
 
+/**
+ * What the visor is up for, if anything: what Jarvis needs from you, muted or
+ * not; what it is saying (its subtitles) only while it is not muted here
+ * (asked 2026-10-30: «si tengo muteado a Jarvis que no me salga la burbuja»).
+ * Muted, «Probar» in Ajustes still sounds, without the visor.
+ */
+export function visorMode(
+  needs: boolean,
+  speaking: boolean,
+  muted: boolean,
+): 'needs' | 'speaking' | undefined {
+  if (needs) return 'needs';
+  return speaking && !muted ? 'speaking' : undefined;
+}
+
 /** What led to the ask, for the visor: the start of its answer up to its
  *  «Te toca:», when that is not the ask itself. */
 export function visorContext(replyHead: string | undefined, ask: string): string | undefined {

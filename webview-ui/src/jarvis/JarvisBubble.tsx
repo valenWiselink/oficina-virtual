@@ -225,7 +225,9 @@ export function JarvisBubble({
   const [size, setSize] = useJarvisPanelSize();
   const voice = useJarvisVoice();
   const ears = useJarvisEars();
-  const notice = useJarvisNotice();
+  const voiceNotice = useJarvisNotice();
+  // Which engine speaks is no news while you muted it (it shows if you unmute).
+  const notice = voice.muted ? undefined : voiceNotice;
   useEffect(() => requestJarvisVoice(), []);
 
   useEffect(() => {
