@@ -22,6 +22,8 @@ export interface EarsState {
   percent?: number;
   /** What it understood last (shown a moment by its bubble). */
   heard?: string;
+  /** When it understood it (Date.now()): the same words twice are two notes. */
+  heardAt?: number;
   /** The last dictation reached the safety net and was sent by itself. */
   full?: boolean;
   error?: string;
@@ -288,7 +290,12 @@ export async function listenOnce(
     }
     set({ phase: 'transcribing', since: undefined, full });
     const text = await writer.text();
-    set({ phase: 'idle', heard: text, error: text ? undefined : 'No entendí lo que dijiste.' });
+    set({
+      phase: 'idle',
+      heard: text,
+      heardAt: Date.now(),
+      error: text ? undefined : 'No entendí lo que dijiste.',
+    });
     if (text) onText(text);
   } catch (err) {
     const denied = err instanceof DOMException && err.name === 'NotAllowedError';
