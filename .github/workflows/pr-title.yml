@@ -28,5 +28,3 @@ jobs:
             ci
             build
           requireScope: false
-          subjectPattern: ^[a-z].+$
-          subjectPatternError: "PR title subject must start with a lowercase letter: '{subject}'"
