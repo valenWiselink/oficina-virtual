@@ -128,6 +128,16 @@ export class PtySession {
     });
   }
 
+  /** The text of the visible screen, one string per row, as parsed so far. */
+  screenLines(): string[] {
+    const buffer = this.mirror.buffer.active;
+    const lines: string[] = [];
+    for (let y = buffer.baseY; y < buffer.baseY + this.mirror.rows; y++) {
+      lines.push(buffer.getLine(y)?.translateToString(true) ?? '');
+    }
+    return lines;
+  }
+
   onData(listener: DataListener): () => void {
     this.dataListeners.add(listener);
     return () => this.dataListeners.delete(listener);

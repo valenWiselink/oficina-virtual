@@ -187,7 +187,11 @@ export class SupervisorRelay {
   /** Queue a line for every supervisor of agent `id`. */
   private tell(id: number, line: (name: string) => string): void {
     const agent = this.deps.store.get(id);
-    if (!agent) return;
+    // A teammate or sub-agent shares its lead's session, so it would reach the
+    // lead's supervisors as an agent of their own: its turns are its lead's
+    // to report (2026-10-30: Jarvis got "«webapp-WISE-6264» terminó su
+    // turno" three times from a teammate of another agent).
+    if (!agent || agent.leadAgentId !== undefined || agent.spawnToolUseId) return;
     const name = spokenName(agent);
     for (const supervisorId of this.deps.registry.supervisorsOf(agent.sessionId)) {
       const lines = this.pending.get(supervisorId);
