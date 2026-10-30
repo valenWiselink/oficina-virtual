@@ -7,6 +7,7 @@ import {
   jarvisMood,
   visorContext,
   visorKey,
+  visorMode,
   withoutJarvis,
 } from '../src/jarvis/jarvisRules.js';
 import type { AgentView } from '../src/views/agentViews.js';
@@ -99,6 +100,14 @@ describe('its bar and its visor', () => {
         }),
       ),
     ).toBe('permiso:p9');
+  });
+
+  it('muted, never comes up for what it says, still for what it needs', () => {
+    expect(visorMode(false, true, false)).toBe('speaking');
+    expect(visorMode(false, true, true)).toBeUndefined();
+    expect(visorMode(true, false, true)).toBe('needs');
+    expect(visorMode(true, true, true)).toBe('needs');
+    expect(visorMode(false, false, false)).toBeUndefined();
   });
 
   it('is called where most of the office works', () => {
