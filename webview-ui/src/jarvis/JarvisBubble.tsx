@@ -20,7 +20,7 @@ import {
   useJarvisPanelSize,
 } from './jarvisPanelSize.js';
 import { JarvisRing } from './JarvisRing.js';
-import { jarvisLine, jarvisMood } from './jarvisRules.js';
+import { bubbleTitle, jarvisLine, jarvisMood } from './jarvisRules.js';
 import { requestJarvisVoice, setJarvisMuted, useJarvisVoice } from './jarvisVoice.js';
 import { talkToJarvis } from './talk.js';
 
@@ -431,7 +431,7 @@ export function JarvisBubble({
           open ? 'Minimizar a Jarvis' : needsYou ? 'Jarvis te necesita: abrirlo' : 'Abrir a Jarvis'
         }
         aria-expanded={open}
-        title={jarvis ? (open ? 'Minimizar' : jarvisLine(jarvis)) : 'Jarvis'}
+        title={bubbleTitle(jarvis, open, voice.muted)}
         onClick={() => setOpen(!open)}
         className={`absolute right-16 bottom-16 z-30 w-56 h-56 rounded-full border-0 p-0 cursor-pointer flex items-center justify-center shadow-soft transition-transform duration-150 ease-out hover:scale-105 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-jarvis ${
           listening ? 'bg-danger' : jarvis ? 'bg-jarvis' : 'bg-bg border border-border'
