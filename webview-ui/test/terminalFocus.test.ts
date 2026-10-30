@@ -5,13 +5,18 @@ import { isTypingInField, isTypingInTerminal } from '../src/terminal/terminalDom
 // The suite runs without a DOM: just enough of one for instanceof.
 class FakeElement {
   isContentEditable = false;
+  readonly classes: string[];
   classList = { contains: (name: string) => this.classes.includes(name) };
-  constructor(private readonly classes: string[] = []) {}
+  constructor(classes: string[] = []) {
+    this.classes = classes;
+  }
 }
 class FakeTextArea extends FakeElement {}
 class FakeInput extends FakeElement {
-  constructor(public type = 'text') {
+  type: string;
+  constructor(type = 'text') {
     super();
+    this.type = type;
   }
 }
 
