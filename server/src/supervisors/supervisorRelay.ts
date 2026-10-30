@@ -18,12 +18,16 @@ const BATCH_MS = 3000;
 const SETTLE_MS = 1500;
 /** A question already told from its hook is not told again from the transcript. */
 const QUESTION_DEDUPE_MS = 30_000;
+/** While you write in the supervisor's terminal, look again this often. */
+const DRAFT_RETRY_MS = 2000;
 
 export interface RelayDeps {
   store: AgentStateStore;
   registry: SupervisorRegistry;
   /** The office terminal of an agent, if it has one. */
   terminalOf: (id: number) => { write(data: string): void } | undefined;
+  /** Whether you are writing in that terminal: the news waits (windowInput.ts). */
+  drafting?: (id: number) => boolean;
   schedule?: (fn: () => void, ms: number) => void;
   now?: () => number;
   batchMs?: number;
@@ -197,6 +201,11 @@ export class SupervisorRelay {
   }
 
   private flush(supervisorId: number): void {
+    // Its Enter would send your half-written line glued to the news.
+    if (this.deps.drafting?.(supervisorId)) {
+      this.schedule(() => this.flush(supervisorId), DRAFT_RETRY_MS);
+      return;
+    }
     const lines = this.pending.get(supervisorId);
     this.pending.delete(supervisorId);
     const terminal = this.deps.terminalOf(supervisorId);

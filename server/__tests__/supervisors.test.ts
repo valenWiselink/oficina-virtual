@@ -238,7 +238,7 @@ describe('SupervisorRelay', () => {
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  function relay() {
+  function relay(drafting?: (id: number, now: number) => boolean) {
     const { store, registry } = office(dir);
     // A clock of its own: timers run in time order, like the real ones.
     let now = 0;
@@ -250,6 +250,7 @@ describe('SupervisorRelay', () => {
       terminalOf: (id) => ({ write: (d: string) => written.set(id, (written.get(id) ?? '') + d) }),
       schedule: (fn, ms) => queue.push({ at: now + ms, fn }),
       now: () => now,
+      ...(drafting ? { drafting: (id: number) => drafting(id, now) } : {}),
     });
     const run = () => {
       while (queue.length) {
@@ -259,8 +260,26 @@ describe('SupervisorRelay', () => {
         next.fn();
       }
     };
-    return { store, r, run, written };
+    return { store, r, run, written, clock: () => now };
   }
+
+  it('waits while you write in the supervisor terminal, then sends it all', () => {
+    // You type in Jarvis's terminal until second 20: its Enter would have
+    // sent your half-written line with the news (2026-10-30).
+    const sentAt = new Map<number, number>();
+    const { store, r, run, written } = relay((id, now) => {
+      const typing = id === 10 && now < 20_000;
+      if (!typing && !sentAt.has(id)) sentAt.set(id, now);
+      return typing;
+    });
+    r.observe({ type: 'agentStatus', id: 3, status: 'active' });
+    store.get(3)!.lastReply = 'Listo.';
+    r.observe({ type: 'agentStatus', id: 3, status: 'waiting' });
+    run();
+    expect(sentAt.get(10)).toBeGreaterThanOrEqual(20_000);
+    expect(sentAt.get(11)).toBeLessThan(20_000);
+    expect(written.get(10)).toContain('«Pagos» terminó su turno. Lo último que dijo:\rListo.');
+  });
 
   it('gathers a permission and a finished turn into one message per supervisor', () => {
     const { store, r, run, written } = relay();

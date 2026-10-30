@@ -6,6 +6,7 @@ import {
   isLongAnswer,
   sameMessage,
   sameSent,
+  shownPending,
   withChatHint,
   withoutChatHint,
 } from '../src/chat/chatText.js';
@@ -49,9 +50,63 @@ describe('chat hint', () => {
     expect(sameSent({ text: 'hola' }, { text: withChatHint('hola') })).toBe(true);
   });
 
+  it('matches a message whose invisible characters the transcript dropped', () => {
+    // Copied from Git Bash: U+0096 before «bash»; Claude Code recorded none.
+    const sent =
+      'Sebas@Seba-PC MINGW64 ~\n$ \u0096bash F:/proyectos/x/cortes.sh devwa\n' +
+      "bash: $'\\302\\226bash': command not found";
+    expect(sameMessage(sent, withChatHint(sent.replace('\u0096', '')))).toBe(true);
+    expect(sameMessage('ho\u200bla', 'hola')).toBe(true);
+  });
+
   it('folds long answers only', () => {
     expect(isLongAnswer('Listo, ya está en dev.')).toBe(false);
     expect(isLongAnswer(Array.from({ length: 20 }, (_, i) => `línea ${i}`).join('\n'))).toBe(true);
+  });
+});
+
+describe('which sent messages the transcript shows', () => {
+  const sent = (key: string, text: string, at: number, delivery: 'sending' | 'sent' = 'sent') => ({
+    key,
+    text,
+    at,
+    delivery,
+  });
+
+  it('by its text, wherever it is', () => {
+    const shown = shownPending(
+      [sent('p1', 'hola', 100), sent('p2', 'chau', 100)],
+      [{ id: 'u1', text: withChatHint('chau'), at: 50 }],
+    );
+    expect([...shown.keys()]).toEqual(['p2']);
+  });
+
+  it('a delivered one recorded differently: the next line of yours after it, in order', () => {
+    const shown = shownPending(
+      [sent('p1', 'algo que Claude Code escribió distinto', 100), sent('p2', 'listo', 200)],
+      [
+        { id: 'u0', text: 'de antes', at: 50 },
+        { id: 'u1', text: 'algo que Claude Code escribio distinto', at: 150 },
+        { id: 'u2', text: withChatHint('listo'), at: 250 },
+      ],
+    );
+    expect(shown.get('p1')?.id).toBe('u1');
+    expect(shown.get('p2')?.id).toBe('u2');
+  });
+
+  it('not one still on its way, nor with a spoken line or one from before', () => {
+    expect(
+      shownPending([sent('p1', 'a', 100, 'sending')], [{ id: 'u1', text: 'b', at: 150 }]).size,
+    ).toBe(0);
+    expect(
+      shownPending(
+        [sent('p1', 'a', 100)],
+        [
+          { id: 'u0', text: 'b', at: 50 },
+          { id: 'u1', text: 'Hola', at: 150, voice: true },
+        ],
+      ).size,
+    ).toBe(0);
   });
 });
 
