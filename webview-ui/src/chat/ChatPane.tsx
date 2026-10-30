@@ -250,10 +250,12 @@ export function ChatPane({
       <ChatChoices
         view={view}
         actions={actions}
-        onSent={(text) => {
-          // ChoiceReplies calls this only once the message went out.
-          settleDelivery(view.id, addPending(view.id, text), true);
+        track={(text) => {
+          // Drawn before it goes, like a written one: its line may come
+          // back before the terminal says it got it.
+          const key = addPending(view.id, text);
           pinnedToEnd.current = true;
+          return (sent) => (sent ? settleDelivery(view.id, key, true) : dropPending(view.id, key));
         }}
       />
       <Composer
@@ -503,7 +505,9 @@ function AgentNow({
     return (
       <div className="self-stretch soft-panel p-8 flex items-center justify-between gap-8">
         <span className="text-xs text-status-permission-text font-semibold">
-          Te hizo una pregunta con opciones: se contesta en la terminal.
+          {view.asksInTerminal
+            ? 'Te pide permiso: se contesta en la terminal.'
+            : 'Te hizo una pregunta con opciones: se contesta en la terminal.'}
         </span>
         <Button size="sm" variant="accent" onClick={onShowTerminal}>
           Ir a la terminal
@@ -530,11 +534,11 @@ function AgentNow({
 function ChatChoices({
   view,
   actions,
-  onSent,
+  track,
 }: {
   view: AgentView;
   actions: BoardActions;
-  onSent: (text: string) => void;
+  track: (text: string) => (sent: boolean) => void;
 }) {
   const writable = useWritableAgents().has(view.id);
   if (!view.choices || !offersQuickReplies(view, writable)) return null;
@@ -542,8 +546,8 @@ function ChatChoices({
     <div className="border-t border-border bg-bg px-10 pt-8 pb-2">
       <ChoiceReplies
         view={view}
-        onSent={(text) => {
-          onSent(text);
+        track={track}
+        onSent={() => {
           if (view.yourTurnId) actions.onYourTurnDone?.(view.yourTurnId);
         }}
       />

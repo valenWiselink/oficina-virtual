@@ -1,5 +1,6 @@
 import type { AgentStateStore } from './agentStateStore.js';
 import { PERMISSION_TIMER_DELAY_MS } from './constants.js';
+import { screenAsks } from './screenAsks.js';
 import { hasPromotedBackgroundAgent } from './teamUtils.js';
 import type { AgentState } from './types.js';
 
@@ -14,6 +15,21 @@ let stateGuessingAllowed = true;
 
 export function setStateGuessingAllowed(allowed: boolean): void {
   stateGuessingAllowed = allowed;
+}
+
+/**
+ * The screen of an agent's office terminal, when it has one. A tool silent for
+ * a few seconds is only waiting on a permission if that screen shows the menu:
+ * a long shell command looks just the same in the transcript (2026-10-30, a
+ * 45 s command shown as a question that locked the chat). An agent without an
+ * office terminal (an outside session) can only be guessed, as before.
+ */
+let screenOf: (agentId: number) => readonly string[] | undefined = () => undefined;
+
+export function setPermissionScreenReader(
+  reader: (agentId: number) => readonly string[] | undefined,
+): void {
+  screenOf = reader;
 }
 
 export function clearAgentActivity(
@@ -152,6 +168,13 @@ export function startPermissionTimer(
           break;
         }
       }
+    }
+
+    const screen = hasNonExempt ? screenOf(agentId) : undefined;
+    if (screen && !screenAsks(screen)) {
+      // Still working: look again while the tool runs (a prompt may follow).
+      startPermissionTimer(agentId, agents, permissionTimers, permissionExemptTools);
+      return;
     }
 
     if (hasNonExempt) {

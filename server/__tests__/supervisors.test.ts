@@ -335,6 +335,26 @@ describe('SupervisorRelay', () => {
     expect(written.get(11)).toContain('«A2» terminó su turno.');
   });
 
+  it('leaves a teammate to its lead: it shares the session but is not an agent', () => {
+    // A named teammate of A2 working in another worktree: its turns reached
+    // the supervisor of everything three times as an agent of its own
+    // ("«webapp-WISE-6264» terminó su turno", 2026-10-30).
+    const { store, r, run, written } = relay();
+    add(store, 20, { sessionId: 's2', nickname: 'webapp-WISE-6264', leadAgentId: 2 });
+    for (let i = 0; i < 3; i++) {
+      r.observe({ type: 'agentStatus', id: 20, status: 'active' });
+      r.observe({ type: 'agentStatus', id: 20, status: 'waiting' });
+      run();
+      run();
+    }
+    expect(written.get(11)).toBeUndefined();
+    r.observe({ type: 'agentStatus', id: 2, status: 'active' });
+    r.observe({ type: 'agentStatus', id: 2, status: 'waiting' });
+    run();
+    run();
+    expect(written.get(11)).toContain('«A2» terminó su turno.');
+  });
+
   it('tells a question once, with its options when the hook has them', () => {
     const { r, run, written } = relay();
     r.observeHook({

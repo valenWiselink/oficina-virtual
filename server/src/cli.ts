@@ -48,7 +48,7 @@ import { PtySessionManager } from './terminal/ptySessionManager.js';
 import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
 import { isDrafting } from './terminal/windowInput.js';
-import { setStateGuessingAllowed } from './timerManager.js';
+import { setPermissionScreenReader, setStateGuessingAllowed } from './timerManager.js';
 import { setRecapCallback } from './transcriptParser.js';
 import { setRecordTap } from './transcriptTaps.js';
 import { uninstallStatusLine } from './usageLimits/statusLineInstaller.js';
@@ -279,6 +279,8 @@ async function main(): Promise<void> {
     const runtime = new AgentRuntime(store, claudeProvider);
     // Before any client can launch: every launched session is recorded here.
     if (ptyManager.enabled) runtime.resumableSessions = new ResumableSessions();
+    // Without hooks, a silent tool is a permission only if its terminal shows one.
+    setPermissionScreenReader((id) => ptyManager.get(id)?.screenLines());
     // Today's history (standalone only: it writes under ~/.pixel-agents).
     runtime.dayLog = new DayLog(store);
     runtime.dayLog.start();

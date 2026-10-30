@@ -125,6 +125,20 @@ export function visorMode(
   return speaking && !muted ? 'speaking' : undefined;
 }
 
+/**
+ * The tooltip of its round button. Closed, it says its latest line — the
+ * start of its answer, a box beside the button whenever the pointer rests
+ * there — except while you muted it: then only what it needs from you
+ * («Te toca:», a permission) (asked 2026-10-30: nothing of what it says
+ * floats while it is muted).
+ */
+export function bubbleTitle(jarvis: AgentView | undefined, open: boolean, muted: boolean): string {
+  if (!jarvis) return 'Jarvis';
+  if (open) return 'Minimizar';
+  const needsYou = jarvis.kind === 'needs' || !!jarvis.permission;
+  return muted && !needsYou ? 'Abrir a Jarvis' : jarvisLine(jarvis);
+}
+
 /** What led to the ask, for the visor: the start of its answer up to its
  *  «Te toca:», when that is not the ask itself. */
 export function visorContext(replyHead: string | undefined, ask: string): string | undefined {

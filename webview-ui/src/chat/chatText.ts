@@ -73,13 +73,17 @@ export function shownPending<
     images?: readonly string[];
     at: number;
     delivery: PendingDelivery;
+    /** The lines the conversation already had when it was sent: an older
+     *  message with the same text is not this one. */
+    before?: ReadonlySet<string>;
   },
   U extends { id: string; text: string; images?: number; at?: number; voice?: boolean },
->(waiting: readonly P[], users: readonly U[]): Map<string, U> {
+>(waiting: readonly P[], lines: readonly U[]): Map<string, U> {
   const shown = new Map<string, U>();
   const taken = new Set<string>();
+  const usersFor = (p: P) => lines.filter((u) => !p.before?.has(u.id));
   for (const p of waiting) {
-    const same = users.find((u) => !taken.has(u.id) && sameSent(p, u));
+    const same = usersFor(p).find((u) => !taken.has(u.id) && sameSent(p, u));
     if (same) {
       shown.set(p.key, same);
       taken.add(same.id);
@@ -87,7 +91,7 @@ export function shownPending<
   }
   for (const p of waiting) {
     if (shown.has(p.key) || p.delivery !== 'sent') continue;
-    const next = users.find(
+    const next = usersFor(p).find(
       (u) =>
         !taken.has(u.id) &&
         !u.voice &&
@@ -100,6 +104,20 @@ export function shownPending<
     taken.add(next.id);
   }
   return shown;
+}
+
+/**
+ * The delivered messages that can no longer be waiting: Claude Code reads
+ * what you send in order, so once a message sent later is in the
+ * conversation (`readUpTo`, when it was sent), one sent before it was read
+ * too, even if the chat did not recognise its line. Without this it stayed
+ * «En cola» under the newer one (2026-10-30, «apruebo el plan de caja»).
+ */
+export function passedPending<P extends { key: string; at: number; delivery: PendingDelivery }>(
+  waiting: readonly P[],
+  readUpTo: number,
+): Set<string> {
+  return new Set(waiting.filter((p) => p.delivery === 'sent' && p.at < readUpTo).map((p) => p.key));
 }
 
 /** An answer long enough to fold in its bubble (lines or characters). */

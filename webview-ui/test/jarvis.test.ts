@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  bubbleTitle,
   findJarvis,
   jarvisHome,
   jarvisLine,
@@ -108,6 +109,16 @@ describe('its bar and its visor', () => {
     expect(visorMode(true, false, true)).toBe('needs');
     expect(visorMode(true, true, true)).toBe('needs');
     expect(visorMode(false, false, false)).toBeUndefined();
+  });
+
+  it('muted, its round button does not float what it said, only what it needs', () => {
+    const said = view(1, { kind: 'done', lastReplyHead: 'Hecho, señor. «caja» empieza…' });
+    expect(bubbleTitle(said, false, false)).toBe('Hecho, señor. «caja» empieza…');
+    expect(bubbleTitle(said, false, true)).toBe('Abrir a Jarvis');
+    const asks = view(1, { kind: 'needs', yourTurn: 'correrla en dev y avisarme.' });
+    expect(bubbleTitle(asks, false, true)).toBe('correrla en dev y avisarme.');
+    expect(bubbleTitle(said, true, true)).toBe('Minimizar');
+    expect(bubbleTitle(undefined, false, true)).toBe('Jarvis');
   });
 
   it('is called where most of the office works', () => {
