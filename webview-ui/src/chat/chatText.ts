@@ -21,7 +21,16 @@ export function withoutChatHint(text: string): string {
   return (text.slice(0, at) + text.slice(at + CHAT_HINT.length)).trim();
 }
 
-const normalize = (text: string) => withoutChatHint(text).replace(/\s+/g, ' ').trim();
+/** Characters you cannot see that Claude Code drops from what it records: a
+ *  copied «$ bash» carried U+0096 in front, the transcript had none, and the
+ *  message stayed «En cola» under newer ones (2026-10-30). Control and
+ *  format characters, soft hyphen, zero-width ones, the BOM. */
+const INVISIBLE =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g;
+
+const normalize = (text: string) =>
+  withoutChatHint(text).replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
 
 /** How much of a long message has to match: Claude Code may shorten a long
  *  paste in the transcript ("[Pasted text #1 +20 lines]"). */
@@ -48,6 +57,49 @@ export function sameSent(
     if (!normalize(sent.text)) return !normalize(recorded.text);
   }
   return sameMessage(sent.text, recorded.text);
+}
+
+/**
+ * Which pending messages the transcript's new user lines show, by key: the
+ * line with the same text, or else — for one the terminal already took — the
+ * next line of yours written since it was sent, in order (Claude Code reads
+ * queued messages one after the other). So a message it recorded a little
+ * differently is not left «En cola» under the conversation forever.
+ */
+export function shownPending<
+  P extends {
+    key: string;
+    text: string;
+    images?: readonly string[];
+    at: number;
+    delivery: PendingDelivery;
+  },
+  U extends { id: string; text: string; images?: number; at?: number; voice?: boolean },
+>(waiting: readonly P[], users: readonly U[]): Map<string, U> {
+  const shown = new Map<string, U>();
+  const taken = new Set<string>();
+  for (const p of waiting) {
+    const same = users.find((u) => !taken.has(u.id) && sameSent(p, u));
+    if (same) {
+      shown.set(p.key, same);
+      taken.add(same.id);
+    }
+  }
+  for (const p of waiting) {
+    if (shown.has(p.key) || p.delivery !== 'sent') continue;
+    const next = users.find(
+      (u) =>
+        !taken.has(u.id) &&
+        !u.voice &&
+        u.at !== undefined &&
+        u.at >= p.at &&
+        !waiting.some((o) => o !== p && sameSent(o, u)),
+    );
+    if (!next) break; // the ones after it were sent later still
+    shown.set(p.key, next);
+    taken.add(next.id);
+  }
+  return shown;
 }
 
 /** An answer long enough to fold in its bubble (lines or characters). */

@@ -53,3 +53,26 @@ export function terminalCellGrid(term: Terminal, host: HTMLElement): CellGrid {
 export function isTypingInTerminal(el: Element | null): boolean {
   return el instanceof HTMLElement && el.classList.contains(XTERM_HELPER_TEXTAREA_CLASS);
 }
+
+/**
+ * True when `el` is a box you write in that is not a terminal (a chat's,
+ * a dialog's): a pane that shows up must not take the focus from it, or
+ * the rest of what you type lands in that terminal and the office's next
+ * Enter sends it (Jarvis's chat, 2026-10-30).
+ */
+export function isTypingInField(el: Element | null): boolean {
+  if (!(el instanceof HTMLElement) || isTypingInTerminal(el)) return false;
+  if (el.isContentEditable || el instanceof HTMLTextAreaElement) return true;
+  return el instanceof HTMLInputElement && !NOT_TYPED.has(el.type);
+}
+
+const NOT_TYPED = new Set([
+  'button',
+  'checkbox',
+  'radio',
+  'range',
+  'submit',
+  'reset',
+  'file',
+  'color',
+]);

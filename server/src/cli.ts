@@ -47,6 +47,7 @@ import { setBackgroundAgents } from './terminal/backgroundSessions.js';
 import { PtySessionManager } from './terminal/ptySessionManager.js';
 import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
+import { isDrafting } from './terminal/windowInput.js';
 import { setStateGuessingAllowed } from './timerManager.js';
 import { setRecapCallback } from './transcriptParser.js';
 import { setRecordTap } from './transcriptTaps.js';
@@ -302,6 +303,7 @@ async function main(): Promise<void> {
       store,
       registry: supervisors(),
       terminalOf: (id) => ptyManager.get(id),
+      drafting: (id) => isDrafting(id),
     });
     store.on('broadcast', (message: Record<string, unknown>) => supervisorRelay.observe(message));
 

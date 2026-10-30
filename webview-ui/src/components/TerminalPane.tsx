@@ -26,7 +26,7 @@ import {
 } from '../terminal/terminalAddons.js';
 import type { TerminalConnectionStatus } from '../terminal/terminalClient.js';
 import { TerminalConnection } from '../terminal/terminalClient.js';
-import { isTypingInTerminal } from '../terminal/terminalDom.js';
+import { isTypingInField, isTypingInTerminal } from '../terminal/terminalDom.js';
 import { terminalLinkOpener } from '../terminal/terminalLinks.js';
 import { useTerminalColorize, useTerminalScheme } from '../terminal/terminalLook.js';
 import { attachTouchInput } from '../terminal/touchInput.js';
@@ -264,7 +264,7 @@ export function TerminalPane({
       // here.
       if (!term.element) {
         term.open(host);
-        if (autoFocusRef.current) term.focus();
+        if (autoFocusRef.current && !isTypingInField(document.activeElement)) term.focus();
         ensureWebgl();
       }
       try {
@@ -360,7 +360,9 @@ export function TerminalPane({
       const active = document.activeElement;
       const typingInOtherTerminal =
         isTypingInTerminal(active) && !hostRef.current?.contains(active);
-      if ((autoFocus || typingInOtherTerminal) && termRef.current?.element) {
+      // Never from a box you are writing in (a chat's): see isTypingInField.
+      const typingElsewhere = isTypingInField(active);
+      if ((autoFocus || typingInOtherTerminal) && !typingElsewhere && termRef.current?.element) {
         termRef.current.focus();
       }
     });

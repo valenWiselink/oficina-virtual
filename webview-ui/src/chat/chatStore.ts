@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import type { ChatItem } from '../../../core/src/messages.js';
 import { transport } from '../transport/index.js';
-import { type PendingDelivery, sameSent } from './chatText.js';
+import { type PendingDelivery, shownPending } from './chatText.js';
 
 /** Each agent's conversation as chat lines: loaded when its chat opens,
  *  then appended as the session writes. */
@@ -84,11 +84,14 @@ export function picturesOf(itemId: string): string[] | undefined {
 function settlePending(agentId: number, items: readonly ChatItem[]): void {
   const waiting = pending.get(agentId);
   if (!waiting) return;
-  const users = items.filter((i) => i.role === 'user');
+  const shown = shownPending(
+    waiting,
+    items.filter((i) => i.role === 'user'),
+  );
   const left = waiting.filter((p) => {
-    const shown = users.find((u) => sameSent(p, u));
-    if (shown && p.images) sentPictures.set(shown.id, p.images);
-    return !shown;
+    const line = shown.get(p.key);
+    if (line && p.images) sentPictures.set(line.id, p.images);
+    return !line;
   });
   if (left.length === waiting.length) return;
   if (left.length > 0) pending.set(agentId, left);
