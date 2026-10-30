@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import type { ChatItem } from '../../../core/src/messages.js';
 import { transport } from '../transport/index.js';
-import { type PendingDelivery, shownPending } from './chatText.js';
+import { passedPending, type PendingDelivery, shownPending } from './chatText.js';
 
 /** Each agent's conversation as chat lines: loaded when its chat opens,
  *  then appended as the session writes. */
@@ -23,10 +23,17 @@ export interface PendingMessage {
   at: number;
   /** Whether it reached the agent's terminal (sendToAgent). */
   delivery: PendingDelivery;
+  /** The lines of yours the chat already had when it was sent (none known
+   *  when its conversation was not loaded yet). */
+  before?: ReadonlySet<string>;
 }
 
 const pending = new Map<number, PendingMessage[]>();
 let pendingSeq = 0;
+/** Lines of yours that already settled a pending message: not again. */
+const claimed = new Map<number, Set<string>>();
+/** When the latest message the conversation showed was sent. */
+const readUpTo = new Map<number, number>();
 
 function emit(): void {
   for (const l of listeners) l();
@@ -46,6 +53,8 @@ export function addPending(
     at: Date.now(),
     delivery: 'sending',
   };
+  const chat = chats.get(agentId);
+  if (chat) entry.before = new Set(chat.filter((i) => i.role === 'user').map((i) => i.id));
   pending.set(agentId, [...(pending.get(agentId) ?? []), entry]);
   emit();
   return entry.key;
@@ -60,6 +69,8 @@ export function settleDelivery(agentId: number, key: string, sent: boolean): voi
     agentId,
     waiting.map((p) => (p.key === key ? { ...p, delivery } : p)),
   );
+  // Its line may have come before the terminal said it got it.
+  settlePending(agentId);
   emit();
 }
 
@@ -79,20 +90,32 @@ export function picturesOf(itemId: string): string[] | undefined {
   return sentPictures.get(itemId);
 }
 
-/** Drop the pending messages the transcript already shows; their previews
- *  move to the line that shows them. */
-function settlePending(agentId: number, items: readonly ChatItem[]): void {
+/** Drop the pending messages the conversation already shows; their
+ *  previews move to the line that shows them. It looks at the whole
+ *  conversation, not only the lines that just came: a line that arrived
+ *  before its message was settled, or in a reload, still counts. */
+function settlePending(agentId: number, appended: readonly ChatItem[] = []): void {
   const waiting = pending.get(agentId);
   if (!waiting) return;
-  const shown = shownPending(
-    waiting,
-    items.filter((i) => i.role === 'user'),
+  const used = claimed.get(agentId) ?? new Set<string>();
+  const known = chats.get(agentId) ?? [];
+  const ids = new Set(known.map((i) => i.id));
+  const lines = [...known, ...appended.filter((i) => !ids.has(i.id))].filter(
+    (i) => i.role === 'user' && !used.has(i.id),
   );
-  const left = waiting.filter((p) => {
+  const shown = shownPending(waiting, lines);
+  let upTo = readUpTo.get(agentId) ?? -Infinity;
+  for (const p of waiting) {
     const line = shown.get(p.key);
-    if (line && p.images) sentPictures.set(line.id, p.images);
-    return !line;
-  });
+    if (!line) continue;
+    used.add(line.id);
+    upTo = Math.max(upTo, p.at);
+    if (p.images) sentPictures.set(line.id, p.images);
+  }
+  claimed.set(agentId, used);
+  readUpTo.set(agentId, upTo);
+  const passed = passedPending(waiting, upTo);
+  const left = waiting.filter((p) => !shown.has(p.key) && !passed.has(p.key));
   if (left.length === waiting.length) return;
   if (left.length > 0) pending.set(agentId, left);
   else pending.delete(agentId);
@@ -103,7 +126,7 @@ transport.onMessage((msg) => {
     const id = msg.id as number;
     const items = (msg.items as ChatItem[]) ?? [];
     chats.set(id, items);
-    settlePending(id, items);
+    settlePending(id);
     emit();
   } else if (msg.type === 'agentChatAppend') {
     const id = msg.id as number;
@@ -121,8 +144,12 @@ transport.onMessage((msg) => {
 const NO_PENDING: PendingMessage[] = [];
 
 /** The messages you sent from the chat that it has not shown yet. */
+export function pendingMessages(agentId: number): PendingMessage[] {
+  return pending.get(agentId) ?? NO_PENDING;
+}
+
 export function usePendingMessages(agentId: number): PendingMessage[] {
-  return useSyncExternalStore(subscribe, () => pending.get(agentId) ?? NO_PENDING);
+  return useSyncExternalStore(subscribe, () => pendingMessages(agentId));
 }
 
 function subscribe(listener: () => void): () => void {

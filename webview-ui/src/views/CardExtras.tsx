@@ -102,12 +102,19 @@ function ReplyButton({
 function useAgentSend(view: AgentView) {
   const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
   const [tapped, setTapped] = useState<string>();
-  const send = (text: string, onSent: () => void, key?: string) => {
+  const send = (
+    text: string,
+    onSent: () => void,
+    key?: string,
+    track?: () => (sent: boolean) => void,
+  ) => {
     if (state === 'sending') return;
+    const settle = track?.();
     setState('sending');
     setTapped(key);
     const recordAt = view.lastRecordAt;
     void sendToAgent(view.id, text).then((ok) => {
+      settle?.(ok);
       setState(ok ? 'idle' : 'failed');
       setTapped(undefined);
       if (!ok) {
@@ -127,13 +134,16 @@ function NotArrived() {
 
 /** The options its answer offers ("1 · Solo el dropdown") and "Como
  *  recomendás": one tap writes "Andá con la 1." to the agent. `onSent`
- *  only runs when the message really went out. */
+ *  only runs when the message really went out; `track` (the chat) hears of
+ *  it before it goes, and whether it arrived. */
 export function ChoiceReplies({
   view,
   onSent,
+  track,
 }: {
   view: AgentView;
   onSent: (text: string) => void;
+  track?: (text: string) => (sent: boolean) => void;
 }) {
   const { state, tapped, send } = useAgentSend(view);
   const marked = useSentReply(view.id, view.lastRecordAt);
@@ -157,7 +167,7 @@ export function ChoiceReplies({
             sending={state === 'sending'}
             tapped={tapped === key}
             sent={marked === key}
-            onClick={() => send(b.text, () => onSent(b.text), key)}
+            onClick={() => send(b.text, () => onSent(b.text), key, track && (() => track(b.text)))}
           />
         );
       })}
