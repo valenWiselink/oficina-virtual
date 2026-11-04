@@ -15,6 +15,7 @@ import * as path from 'path';
 import type { HookProvider } from '../../core/src/provider.js';
 import { createAgentState } from './agentState.js';
 import type { AgentStateStore } from './agentStateStore.js';
+import type { CalendarWatch } from './calendar/calendarWatch.js';
 import type { DayLog } from './dayLog.js';
 import { DismissalTracker } from './dismissalTracker.js';
 import {
@@ -103,6 +104,8 @@ export class AgentRuntime {
   prWatch?: PrWatch;
   /** The plan's usage limits, from the office's status line (standalone). */
   usageLimits?: UsageLimitsWatch;
+  /** The next meetings, from Claude Code's calendar connector (standalone). */
+  calendar?: CalendarWatch;
   /** Shut the standalone office down in order (set by the CLI). */
   requestShutdown?: () => void;
   private hookEventHandler: HookEventHandler;

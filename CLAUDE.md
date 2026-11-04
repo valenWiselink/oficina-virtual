@@ -192,6 +192,19 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   use wins, so an idle session re-running cannot roll them back) and prints
   them under the prompt. `UsageLimitsWatch` polls that file and sends
   `usageLimits`. Never read the OAuth credentials for this.
+- `calendar/` — the next meetings, from the claude.ai Google Calendar connector
+  (`upcomingMeetings`, tokened clients only). That connector lives inside Claude
+  Code and an `mcp_tool` hook can call it with no model turn, so
+  `calendarQuery.ts` runs `claude -p` with two `UserPromptSubmit` hooks:
+  `list_events`, and a guard that blocks the prompt once the first answered
+  (a block cancels the hooks still running; measured with 2.1.318:
+  `total_cost_usd` 0, 0 turns, no credential of ours). `calendarWatch.ts` polls
+  every 5 min while a tokened page is open and stops for good if a read ever
+  reports a model turn. Only in memory, never logged; read only. Without the
+  connector `connected` stays false and the page shows nothing. It takes
+  `MCP_CONNECTION_NONBLOCKING=0` (else the hook runs before the connector is up)
+  and one fixed cwd (Claude Code leaves a folder per cwd in `~/.claude/projects`,
+  even with no session saved). Test offices: a fake `claude.cmd` first on PATH.
 - `terminal/` — PTYs (`@lydell/node-pty`, prebuilt) streamed to the browser.
 
 Agent tracking also still loads the old office assets and layout: the
@@ -230,6 +243,10 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   sounds itself. The sparkle ("Hecho", a merge) is decoration: off in calm mode.
 - `onboarding/` — first-run welcome (checks, hooks consent, folder, first
   agent) and the guided tour (`data-tour` marks on its targets).
+- `meetings/` — the panel of next meetings at the far left, over the board and
+  the graph. The board keeps a column free for it (`useMeetingsInset`), so it
+  never covers «Te necesita»; minimized, or in an office under 760 px, it is a
+  rail. z-10: Historial and Jarvis open above it.
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.
 - `components/ui/` — Button, Modal, Switch, TextInput, Dropdown.
 

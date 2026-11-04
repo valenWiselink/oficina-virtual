@@ -43,6 +43,7 @@ export type ServerMessage =
   | BackgroundAgentsUpdated
   | SpanishTerminalUpdated
   | UsageLimits
+  | UpcomingMeetings
   | HooksStatus
   | HookHealth
   | HooksConsentRequest
@@ -500,6 +501,20 @@ export interface RateWindow {
   resetsAt: number;
 }
 
+export interface UpcomingMeetings {
+  type: 'upcomingMeetings';
+  connected: boolean;
+  meetings: Meeting[];
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  start: number;
+  end: number;
+  joinUrl?: string;
+}
+
 export interface HooksStatus {
   type: 'hooksStatus';
   providerId: string;
@@ -817,19 +832,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_413;
-  supervision?: AnonymousSchema_414;
+  effort?: AnonymousSchema_421;
+  supervision?: AnonymousSchema_422;
 }
 
-export type AnonymousSchema_413 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_421 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_414 {
-  kind: AnonymousSchema_415;
+export interface AnonymousSchema_422 {
+  kind: AnonymousSchema_423;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_415 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_423 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -878,16 +893,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_440;
+  scope: AnonymousSchema_448;
 }
 
-export interface AnonymousSchema_440 {
-  kind: AnonymousSchema_441;
+export interface AnonymousSchema_448 {
+  kind: AnonymousSchema_449;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_441 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_449 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

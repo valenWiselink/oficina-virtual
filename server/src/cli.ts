@@ -18,6 +18,7 @@ import {
   loadAllFurniture,
   loadAllPets,
 } from './assetReload.js';
+import { CalendarWatch } from './calendar/calendarWatch.js';
 import type { AssetCache, ReloadAssetsSideEffect } from './clientMessageHandler.js';
 import {
   getHooksConsent,
@@ -297,6 +298,10 @@ async function main(): Promise<void> {
       packageRoot,
     });
     runtime.usageLimits.start();
+    // The next meetings: polls only while a tokened page is open.
+    runtime.calendar = new CalendarWatch({
+      broadcast: (message) => store.broadcast({ ...message }),
+    });
 
     // Supervisor agents: who supervises whom, and what reaches them (their
     // agents' permissions, questions and finished turns).
@@ -546,6 +551,7 @@ async function main(): Promise<void> {
       // and keep what the surviving ones still ask in their terminal.
       jarvisKeeper?.stop();
       gpuEars.stop();
+      runtime.calendar?.stop();
       runtime.resumableSessions?.freeze();
       terminalAsks.freeze();
       await ptyManager.disposeAll();

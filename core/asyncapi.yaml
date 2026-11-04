@@ -124,6 +124,7 @@ components:
         - $ref: '#/components/schemas/BackgroundAgentsUpdated'
         - $ref: '#/components/schemas/SpanishTerminalUpdated'
         - $ref: '#/components/schemas/UsageLimits'
+        - $ref: '#/components/schemas/UpcomingMeetings'
         - $ref: '#/components/schemas/HooksStatus'
         - $ref: '#/components/schemas/HookHealth'
         - $ref: '#/components/schemas/HooksConsentRequest'
@@ -1099,6 +1100,46 @@ components:
           const: backgroundAgentsUpdated
         enabled:
           type: boolean
+
+    UpcomingMeetings:
+      description: |
+        The user's next meetings, read from Claude Code's Google Calendar
+        connector. Sent on the connect handshake to a privileged client and
+        broadcast (to privileged clients only) when they change. While
+        `connected` is false the office shows no panel at all.
+      type: object
+      additionalProperties: false
+      required: [type, connected, meetings]
+      properties:
+        type:
+          const: upcomingMeetings
+        connected:
+          description: Whether the connector answered lately.
+          type: boolean
+        meetings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Meeting'
+
+    Meeting:
+      description: One meeting, with only what the panel shows.
+      type: object
+      additionalProperties: false
+      required: [id, title, start, end]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        start:
+          description: When it starts (ms epoch).
+          type: number
+        end:
+          description: When it ends (ms epoch).
+          type: number
+        joinUrl:
+          description: The https link to join it, when it has one.
+          type: string
 
     UsageLimits:
       description: |
