@@ -294,6 +294,7 @@ function registerWebSocketRoute(
     store.on('agentAdded', onAgentAdded);
     store.on('agentRemoved', onAgentRemoved);
     store.on('broadcast', onBroadcast);
+    if (privileged) options.runtime?.calendar?.clientJoined();
 
     // Handle incoming client messages
     socket.on('message', (data: Buffer | string) => {
@@ -321,13 +322,18 @@ function registerWebSocketRoute(
       store.off('agentAdded', onAgentAdded);
       store.off('agentRemoved', onAgentRemoved);
       store.off('broadcast', onBroadcast);
+      if (privileged) options.runtime?.calendar?.clientLeft();
     });
   });
 }
 
 /** Broadcasts a read-only (untokened) client never gets: they name work
- *  repos and PRs, which the read-only view has no use for. */
-const PRIVILEGED_ONLY_BROADCASTS: ReadonlySet<string> = new Set(['prStatus']);
+ *  repos and PRs, or the user's meetings, which the read-only view has no
+ *  use for. */
+export const PRIVILEGED_ONLY_BROADCASTS: ReadonlySet<string> = new Set([
+  'prStatus',
+  'upcomingMeetings',
+]);
 
 // ── Auth Helper ────────────────────────────────────────────────
 

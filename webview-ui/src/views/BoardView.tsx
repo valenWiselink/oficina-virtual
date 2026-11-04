@@ -24,11 +24,14 @@ export function BoardView({
   views,
   actions,
   space,
+  leftInset = '',
 }: {
   views: AgentView[];
   actions: BoardActions;
   /** The workspace on screen (undefined: "Todos" or no workspaces at all). */
   space?: string;
+  /** Room kept free on the left for the meetings panel (classes). */
+  leftInset?: string;
 }) {
   const tint = useDayTint();
   const columns = BOARD_COLUMNS.map((col) => ({
@@ -53,7 +56,7 @@ export function BoardView({
   return (
     <div
       // pt-52: room for the workspace tabs floating over the top-left corner.
-      className="absolute inset-0 overflow-auto p-14 pt-52 pb-80 transition-colors duration-1000"
+      className={`absolute inset-0 overflow-auto p-14 pt-52 pb-80 transition-colors duration-1000 ${leftInset}`}
       style={{ background: `var(${tint})` }}
     >
       <BoardGreeting

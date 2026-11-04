@@ -41,6 +41,8 @@ import { useJarvisSpeech } from './jarvis/useJarvisSpeech.js';
 import { useLaunchDialog } from './launch/LaunchDialog.js';
 import type { TakenLook } from './launch/launchMemory.js';
 import { UsageLimitsMeter } from './limits/UsageLimitsMeter.js';
+import { MeetingsPanel } from './meetings/MeetingsPanel.js';
+import { useMeetingsInset } from './meetings/meetingsStore.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
 import { playCheerSound, useAgentsInView } from './notificationSound.js';
@@ -405,6 +407,7 @@ function App() {
   }, []);
 
   const officeState = getOfficeState();
+  const meetingsInset = useMeetingsInset();
 
   if (!layoutReady) {
     return <LoadingScreen />;
@@ -463,7 +466,12 @@ function App() {
           // board for managing, the live graph for how agents work together.
           <div className="absolute inset-0">
             {view === 'tablero' ? (
-              <BoardView views={workspaces.shown} actions={agentActions} space={workspaces.space} />
+              <BoardView
+                views={workspaces.shown}
+                actions={agentActions}
+                space={workspaces.space}
+                leftInset={isMobile ? '' : meetingsInset}
+              />
             ) : (
               <GraphView views={workspaces.shown} actions={agentActions} under={stripOver} />
             )}
@@ -480,6 +488,9 @@ function App() {
             onSelectAgent={handleSelectAgent}
           />
         )}
+
+        {/* Under what opens on purpose (Historial, Jarvis): z-10 against their 20+. */}
+        {!isMobile && !isDebugMode && <MeetingsPanel />}
 
         {isHistoryOpen && !isDebugMode && (
           <HistoryPanel
