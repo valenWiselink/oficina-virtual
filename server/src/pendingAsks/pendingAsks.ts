@@ -29,6 +29,8 @@ export interface StoredAsk {
   permission?: string;
   closedAt?: number;
   closedHow?: string;
+  /** Brought back by hand: what a browser remembers from before must not close it. */
+  reopened?: boolean;
 }
 
 interface Saved {
@@ -181,16 +183,20 @@ export class PendingAsks {
     if (!ask || ask.closedAt === undefined) return;
     delete ask.closedAt;
     delete ask.closedHow;
+    ask.reopened = true;
     this.changed();
   }
 
-  /** «Hecho» on a card or the visor (or what this browser marked before this list existed). */
-  markTurnsDone(turnIds: readonly string[]): void {
+  /**
+   * «Hecho» on a card or the visor; `sync`: a page reminding the office of what
+   * its browser marked before, which never undoes a later «Reabrir».
+   */
+  markTurnsDone(turnIds: readonly string[], sync = false): void {
     let changed = false;
     for (const turnId of turnIds) {
       this.remember(turnId);
       for (const ask of this.open()) {
-        if (!ask.turnIds.includes(turnId)) continue;
+        if (!ask.turnIds.includes(turnId) || (sync && ask.reopened)) continue;
         this.close(ask, 'Lo marcaste hecho');
         changed = true;
       }

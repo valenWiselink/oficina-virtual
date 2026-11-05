@@ -1890,6 +1890,11 @@ components:
           type: array
           items:
             type: string
+        sync:
+          description: |
+            The page reminding the office of what this browser marked, not a new
+            «Hecho»: it must not close an ask the user reopened afterwards.
+          type: boolean
 
     RequestAgentChat:
       description: Ask for an agent's conversation (its chat view opened).

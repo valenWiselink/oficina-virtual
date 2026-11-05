@@ -146,6 +146,42 @@ describe('the list', () => {
   });
 });
 
+describe('an ask you reopened', () => {
+  const reopened = () => {
+    const asks = list();
+    asks.add({ from: 'Jarvis', text: 'uno', turnId: 't1' });
+    asks.markTurnsDone(['t1']);
+    asks.reopen('p1');
+    return asks;
+  };
+
+  it('stays open when a page reminds the office what its browser marked', () => {
+    const asks = reopened();
+    asks.markTurnsDone(['t1'], true);
+    expect(openTexts(asks)).toEqual(['uno']);
+  });
+
+  it('and after a restart too', () => {
+    reopened();
+    const after = list();
+    after.markTurnsDone(['t1'], true);
+    expect(openTexts(after)).toEqual(['uno']);
+  });
+
+  it('«Hecho» on purpose closes it again', () => {
+    const asks = reopened();
+    asks.markTurnsDone(['t1']);
+    expect(openTexts(asks)).toEqual([]);
+  });
+
+  it('a reminder still closes what was never reopened', () => {
+    const asks = list();
+    asks.add({ from: 'Jarvis', text: 'uno', turnId: 't1' });
+    asks.markTurnsDone(['t1'], true);
+    expect(openTexts(asks)).toEqual([]);
+  });
+});
+
 describe('when a new ask takes the place of an old one', () => {
   const add = (asks: PendingAsks, text: string, from = 'Jarvis') => asks.add({ from, text });
 
