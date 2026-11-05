@@ -329,6 +329,7 @@ export function handleClientMessage(
       if (Array.isArray(msg.ids)) {
         ctx.runtime?.pendingAsks?.markTurnsDone(
           msg.ids.filter((id): id is string => typeof id === 'string'),
+          msg.sync === true,
         );
       }
       break;

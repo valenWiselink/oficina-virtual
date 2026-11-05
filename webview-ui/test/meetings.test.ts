@@ -6,9 +6,11 @@ import type { Meeting } from '../../core/src/messages.ts';
 import {
   formatHour,
   meetingBadge,
+  meetingChip,
   meetingDays,
+  meetingKey,
   meetingState,
-  nextMeeting,
+  meetingToast,
   readMeetingsMessage,
   SOON_MS,
 } from '../src/meetings/meetingsView.ts';
@@ -64,11 +66,120 @@ describe('meeting days', () => {
   it('is empty when nothing is left, which is the empty state', () => {
     assert.deepEqual(meetingDays([], NOW), []);
     assert.deepEqual(meetingDays([meeting(-60)], NOW), []);
-    assert.equal(nextMeeting([meeting(-60)], NOW), undefined);
+  });
+});
+
+describe('the chip beside the tabs', () => {
+  const join = (m: Meeting): Meeting => ({ ...m, joinUrl: 'https://meet.example/x' });
+  const quiet = (m: Meeting): Meeting => ({ ...m, quiet: true });
+
+  it('says nothing with nothing ahead, also if all that is left already ended', () => {
+    assert.equal(meetingChip([], NOW), null);
+    assert.equal(meetingChip([meeting(-60)], NOW), null);
   });
 
-  it('the next one skips what ended while nothing was refreshed', () => {
-    assert.equal(nextMeeting([meeting(-60), meeting(10)], NOW)?.id, 'm10');
+  it('is calm for what is far, with its time and its day', () => {
+    const today = meetingChip([meeting(120)], NOW);
+    assert.equal(today?.level, 'calm');
+    assert.equal(today?.when, '16:00');
+    assert.equal(today?.joinable, false);
+    assert.equal(meetingChip([meeting(24 * 60)], NOW)?.when, 'Mañana 14:00');
+    assert.match(meetingChip([meeting(48 * 60)], NOW)?.when ?? '', /^vie 6 nov 14:00$/);
+  });
+
+  it('counts down from 15 minutes before, with the link at hand', () => {
+    const chip = meetingChip([join(meeting(8))], NOW);
+    assert.equal(chip?.level, 'soon');
+    assert.equal(chip?.when, 'En 8 min');
+    assert.equal(chip?.joinable, true);
+    assert.equal(meetingChip([meeting(16)], NOW)?.level, 'calm');
+  });
+
+  it('is painted while you should be in it, until it ends', () => {
+    const chip = meetingChip([join(meeting(-5))], NOW);
+    assert.equal(chip?.level, 'now');
+    assert.equal(chip?.when, 'Ahora');
+    assert.equal(chip?.joinable, true);
+    assert.equal(meetingChip([meeting(-30, 30)], NOW), null);
+  });
+
+  it('with several at once, the one that started last and the rest counted', () => {
+    const chip = meetingChip([meeting(-30, 60, 'a'), meeting(-5, 60, 'b')], NOW);
+    assert.equal(chip?.meeting.id, 'b');
+    assert.deepEqual(
+      chip?.alsoNow.map((m) => m.id),
+      ['a'],
+    );
+  });
+
+  it('two starting at the same time show as one and one more', () => {
+    const chip = meetingChip([meeting(5, 30, 'a'), meeting(5, 30, 'b')], NOW);
+    assert.equal(chip?.level, 'soon');
+    assert.deepEqual(
+      chip?.alsoNow.map((m) => m.id),
+      ['b'],
+    );
+  });
+
+  it('being in one does not hide that another is about to start... in the list', () => {
+    const chip = meetingChip([meeting(-5, 30, 'a'), meeting(10, 30, 'b')], NOW);
+    assert.equal(chip?.meeting.id, 'a');
+    assert.equal(chip?.level, 'now');
+  });
+
+  it('dismissed, it stops being painted and stays at hand until it ends', () => {
+    const m = join(meeting(-5));
+    const chip = meetingChip([m, meeting(120)], NOW, (key) => key === meetingKey(m));
+    assert.equal(chip?.level, 'calm');
+    assert.equal(chip?.meeting.id, m.id);
+    assert.equal(chip?.when, 'Ahora');
+    assert.equal(chip?.joinable, true);
+  });
+
+  it('dismissing one of two leaves the other painted', () => {
+    const a = meeting(-30, 60, 'a');
+    const b = meeting(-5, 60, 'b');
+    const chip = meetingChip([a, b], NOW, (key) => key === meetingKey(b));
+    assert.equal(chip?.meeting.id, 'a');
+    assert.equal(chip?.level, 'now');
+  });
+
+  it('a moved meeting asks again', () => {
+    const before = meeting(-5, 30, 'a');
+    const moved = meeting(-1, 30, 'a');
+    assert.notEqual(meetingKey(before), meetingKey(moved));
+  });
+
+  it('a quiet one never paints nor counts down', () => {
+    assert.equal(meetingChip([quiet(meeting(-5))], NOW)?.level, 'calm');
+    assert.equal(meetingChip([quiet(meeting(-5))], NOW)?.when, 'Ahora');
+    assert.equal(meetingChip([quiet(meeting(8))], NOW)?.level, 'calm');
+    assert.equal(meetingChip([quiet(meeting(8))], NOW)?.when, 'En 8 min');
+  });
+
+  it('a quiet one does not hide what is really next', () => {
+    const chip = meetingChip([quiet(meeting(-60, 8 * 60, 'feria')), meeting(120, 30, 'real')], NOW);
+    assert.equal(chip?.meeting.id, 'real');
+  });
+});
+
+describe('the toast', () => {
+  const key = (m: Meeting, at: number) => meetingToast(m, at)?.key;
+
+  it('nothing until 5 minutes before', () => {
+    assert.equal(meetingToast(meeting(6), NOW), null);
+    assert.match(key(meeting(5), NOW) ?? '', /:antes$/);
+    assert.equal(meetingToast(meeting(4.5), NOW)?.title, 'En 5 min');
+  });
+
+  it('once more at the start, not half an hour late', () => {
+    assert.match(key(meeting(-1), NOW) ?? '', /:ahora$/);
+    assert.equal(meetingToast(meeting(-11, 60), NOW), null);
+  });
+
+  it('never for a quiet one or one that ended', () => {
+    assert.equal(meetingToast({ ...meeting(2), quiet: true }, NOW), null);
+    assert.equal(meetingToast(meeting(-5, 2), NOW), null);
   });
 });
 

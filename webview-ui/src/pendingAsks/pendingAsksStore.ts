@@ -17,7 +17,8 @@ transport.onMessage((msg) => {
   if (!next) return;
   // The first news of each connection: what this browser marked «Hecho» on its
   // own, so the office never brings back an ask you already handled.
-  if (!current) transport.send({ type: 'markYourTurnsDone', ids: [...allYourTurnsDone()] });
+  if (!current)
+    transport.send({ type: 'markYourTurnsDone', ids: [...allYourTurnsDone()], sync: true });
   // Closed here, by Jarvis or by its PR: the card and the visor stop asking too.
   for (const ask of next.closed) for (const turnId of ask.turnIds ?? []) markYourTurnDone(turnId);
   current = next;

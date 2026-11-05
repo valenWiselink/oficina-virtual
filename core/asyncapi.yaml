@@ -1145,6 +1145,11 @@ components:
         joinUrl:
           description: The https link to join it, when it has one.
           type: string
+        quiet:
+          description: |
+            Nothing says you should be there (free time, not accepted, a reminder
+            just for you, a block of many hours): listed, never painted or announced.
+          type: boolean
 
     PendingAsksList:
       description: |
@@ -1885,6 +1890,11 @@ components:
           type: array
           items:
             type: string
+        sync:
+          description: |
+            The page reminding the office of what this browser marked, not a new
+            «Hecho»: it must not close an ask the user reopened afterwards.
+          type: boolean
 
     RequestAgentChat:
       description: Ask for an agent's conversation (its chat view opened).
