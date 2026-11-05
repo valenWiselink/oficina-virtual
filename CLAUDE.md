@@ -256,10 +256,15 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   sounds itself. The sparkle ("Hecho", a merge) is decoration: off in calm mode.
 - `onboarding/` — first-run welcome (checks, hooks consent, folder, first
   agent) and the guided tour (`data-tour` marks on its targets).
-- `meetings/` — the panel of next meetings at the far left, over the board and
-  the graph. The board keeps a column free for it (`useMeetingsInset`), so it
-  never covers «Te necesita»; minimized, or in an office under 760 px, it is a
-  rail. z-10: Historial and Jarvis open above it.
+- `meetings/` — the next meeting as a chip beside the workspace tabs
+  (`OfficeTopRow`): the next one neutral, a countdown from 15 min before, painted
+  with «Unirse» while you should be in it, until it ends or you dismiss it. A
+  `quiet` meeting (free time, not accepted, just you with no link, 4 h or more) is
+  listed but never painted or announced. A silent Windows toast at 5 min and at
+  the start, only with the office out of view. A click opens the list at the far
+  left: the board keeps a column for it (`useMeetingsInset`), so it never covers
+  «Te necesita»; under 760 px it opens over the board. z-10: Historial and Jarvis
+  open above it.
 - `artifacts/` — the Artifacts panel (toolbar button), over the same spot as
   Historial: opening one closes the other. Not in the phone shell or read-only.
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.

@@ -117,6 +117,52 @@ const init = (status?: string) =>
   });
 const GUARD = JSON.stringify({ decision: 'block', reason: 'oficina-calendario' });
 
+describe('what nothing says you should be at', () => {
+  const others = { attendees: [{ email: 'otro@ejemplo.com' }] };
+  const me = (responseStatus: string) => ({
+    attendees: [
+      { email: 'yo@ejemplo.com', self: true, responseStatus },
+      { email: 'otro@ejemplo.com' },
+    ],
+  });
+  const quiet = (fields: Record<string, unknown>) =>
+    toMeetings([event({ ...others, ...fields })], NOW)[0].quiet;
+
+  it('a meeting you accepted, with others or a link, is not quiet', () => {
+    expect(quiet(me('accepted'))).toBeUndefined();
+    expect(quiet({})).toBeUndefined();
+    const alone = event({ conferenceUrl: 'https://meet.google.com/abc-defg-hij' });
+    expect(toMeetings([alone], NOW)[0].quiet).toBeUndefined();
+  });
+
+  it('time marked free is', () => {
+    expect(quiet({ transparency: 'transparent' })).toBe(true);
+  });
+
+  it('an invitation you did not accept is', () => {
+    expect(quiet(me('needsAction'))).toBe(true);
+    expect(quiet(me('tentative'))).toBe(true);
+  });
+
+  it('a reminder just for you, with no link, is', () => {
+    expect(toMeetings([event()], NOW)[0].quiet).toBe(true);
+    const onlyMe = { attendees: [{ email: 'yo@ejemplo.com', self: true }] };
+    expect(toMeetings([event(onlyMe)], NOW)[0].quiet).toBe(true);
+  });
+
+  it('a block of many hours is, one of a couple is not', () => {
+    const block = { end: { dateTime: new Date(NOW + 5 * HOUR).toISOString() } };
+    expect(quiet(block)).toBe(true);
+    const long = { end: { dateTime: new Date(NOW + 3 * HOUR).toISOString() } };
+    expect(quiet(long)).toBeUndefined();
+  });
+
+  it('whole-day events and those you declined do not reach the page at all', () => {
+    const allDay = event({ start: { date: '2026-11-05' }, end: { date: '2026-11-06' } });
+    expect(toMeetings([allDay, event(me('declined'))], NOW)).toEqual([]);
+  });
+});
+
 describe('CalendarStream', () => {
   it('releases the guard on the answer of the connector, not on its own', () => {
     const stream = new CalendarStream();

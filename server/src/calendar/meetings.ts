@@ -4,6 +4,8 @@ import type { Meeting } from '../../../core/src/messages.js';
 const MEETINGS_MAX = 15;
 const TITLE_MAX = 160;
 export const UNTITLED_MEETING = '(sin título)';
+/** From this long it is a block of the day, not a meeting to be at. */
+const BLOCK_MS = 4 * 3_600_000;
 
 /** Not meetings, though the connector lists them next to the ones that are. */
 const NOT_MEETINGS = new Set(['OUT_OF_OFFICE', 'FOCUS_TIME', 'WORKING_LOCATION', 'BIRTHDAY']);
@@ -35,10 +37,33 @@ function joinLink(event: Fields): string | undefined {
   );
 }
 
-function declined(event: Fields): boolean {
-  if (!Array.isArray(event.attendees)) return false;
-  const me = event.attendees.map(fields).find((a) => a.self === true);
-  return me?.responseStatus === 'declined';
+function myAnswer(event: Fields): unknown {
+  if (!Array.isArray(event.attendees)) return undefined;
+  return event.attendees.map(fields).find((a) => a.self === true)?.responseStatus;
+}
+
+/** Nobody but you is in it. */
+function alone(event: Fields): boolean {
+  return (
+    !Array.isArray(event.attendees) || !event.attendees.map(fields).some((a) => a.self !== true)
+  );
+}
+
+/**
+ * On the calendar, yet nothing says you should be there: time marked free, an
+ * invitation you did not accept, a reminder just for you with no link, a block
+ * of many hours (a fair, a trip). Listed like the rest; the office never paints
+ * the screen or announces these.
+ */
+function isQuiet(event: Fields, length: number, joinUrl: string | undefined): boolean {
+  const answer = myAnswer(event);
+  return (
+    event.transparency === 'transparent' ||
+    answer === 'tentative' ||
+    answer === 'needsAction' ||
+    length >= BLOCK_MS ||
+    (alone(event) && !joinUrl)
+  );
 }
 
 /**
@@ -53,7 +78,7 @@ export function toMeetings(events: unknown, now: number): Meeting[] {
   for (const raw of events) {
     const event = fields(raw);
     if (event.status === 'cancelled' || NOT_MEETINGS.has(String(event.eventType))) continue;
-    if (declined(event)) continue;
+    if (myAnswer(event) === 'declined') continue;
     const start = Date.parse(String(fields(event.start).dateTime));
     const end = Date.parse(String(fields(event.end).dateTime));
     if (Number.isNaN(start) || Number.isNaN(end) || end <= now) continue;
@@ -65,6 +90,7 @@ export function toMeetings(events: unknown, now: number): Meeting[] {
       start,
       end,
       ...(joinUrl ? { joinUrl } : {}),
+      ...(isQuiet(event, end - start, joinUrl) ? { quiet: true } : {}),
     });
   }
   return meetings.sort((a, b) => a.start - b.start).slice(0, MEETINGS_MAX);

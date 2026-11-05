@@ -514,6 +514,7 @@ export interface Meeting {
   start: number;
   end: number;
   joinUrl?: string;
+  quiet?: boolean;
 }
 
 export interface ArtifactsList {
@@ -848,19 +849,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_430;
-  supervision?: AnonymousSchema_431;
+  effort?: AnonymousSchema_431;
+  supervision?: AnonymousSchema_432;
 }
 
-export type AnonymousSchema_430 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_431 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_431 {
-  kind: AnonymousSchema_432;
+export interface AnonymousSchema_432 {
+  kind: AnonymousSchema_433;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_432 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_433 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -909,16 +910,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_457;
+  scope: AnonymousSchema_458;
 }
 
-export interface AnonymousSchema_457 {
-  kind: AnonymousSchema_458;
+export interface AnonymousSchema_458 {
+  kind: AnonymousSchema_459;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_458 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_459 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

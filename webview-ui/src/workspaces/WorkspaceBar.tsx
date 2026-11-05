@@ -71,7 +71,7 @@ export function WorkspaceBar({
 
   return (
     <nav
-      className="absolute left-14 top-10 z-10 flex items-center gap-2 rounded-xl bg-bg-thumb/90 border border-border p-2 max-w-[calc(100%-28px)] overflow-x-auto no-scrollbar"
+      className="pointer-events-auto min-w-0 flex items-center gap-2 rounded-xl bg-bg-thumb/90 border border-border p-2 overflow-x-auto no-scrollbar"
       aria-label="Espacios de trabajo"
     >
       {tabs.map((t) => (

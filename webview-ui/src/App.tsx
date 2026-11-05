@@ -42,8 +42,8 @@ import { useJarvisSpeech } from './jarvis/useJarvisSpeech.js';
 import { useLaunchDialog } from './launch/LaunchDialog.js';
 import type { TakenLook } from './launch/launchMemory.js';
 import { UsageLimitsMeter } from './limits/UsageLimitsMeter.js';
-import { MeetingsPanel } from './meetings/MeetingsPanel.js';
 import { useMeetingsInset } from './meetings/meetingsStore.js';
+import { OfficeTopRow } from './meetings/OfficeTopRow.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
 import { playCheerSound, useAgentsInView } from './notificationSound.js';
@@ -478,7 +478,6 @@ function App() {
             ) : (
               <GraphView views={workspaces.shown} actions={agentActions} under={stripOver} />
             )}
-            {workspaces.bar}
           </div>
         ) : (
           <DebugView
@@ -492,8 +491,9 @@ function App() {
           />
         )}
 
-        {/* Under what opens on purpose (Historial, Jarvis): z-10 against their 20+. */}
-        {!isMobile && !isDebugMode && <MeetingsPanel />}
+        {/* The tabs and the next meeting, in one row. Under what opens on purpose
+            (Historial, Jarvis): z-10 against their 20+. */}
+        {!isDebugMode && <OfficeTopRow bar={workspaces.bar} meetings={!isMobile} />}
 
         {isHistoryOpen && !isDebugMode && (
           <HistoryPanel

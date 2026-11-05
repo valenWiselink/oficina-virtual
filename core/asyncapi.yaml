@@ -1141,6 +1141,11 @@ components:
         joinUrl:
           description: The https link to join it, when it has one.
           type: string
+        quiet:
+          description: |
+            Nothing says you should be there (free time, not accepted, a reminder
+            just for you, a block of many hours): listed, never painted or announced.
+          type: boolean
 
     ArtifactsList:
       description: |

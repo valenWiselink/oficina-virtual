@@ -45,6 +45,8 @@
   --color-warning: #c96a00;
 
   /* Status */
+  --color-meeting-now: #a8421c;
+  --color-meeting-now-text: #ffffff;
   --color-status-permission: #d38b12;
   --color-status-permission-text: #8a5a06;
   --color-status-permission-bg: #fcf0d6;
@@ -92,6 +94,8 @@
   --color-danger: #e2575d;
   --color-warning: #e39a3c;
 
+  --color-meeting-now: #f0996f;
+  --color-meeting-now-text: #24130b;
   --color-status-permission: #e3a43a;
   --color-status-permission-text: #f2c879;
   --color-status-permission-bg: #3a2e1d;
@@ -143,6 +147,8 @@
   --color-reset-text: var(--color-reset-text);
   --color-danger: var(--color-danger);
   --color-warning: var(--color-warning);
+  --color-meeting-now: var(--color-meeting-now);
+  --color-meeting-now-text: var(--color-meeting-now-text);
   --color-status-permission: var(--color-status-permission);
   --color-status-permission-text: var(--color-status-permission-text);
   --color-status-permission-bg: var(--color-status-permission-bg);
