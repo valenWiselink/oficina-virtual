@@ -15,6 +15,7 @@ import * as path from 'path';
 import type { HookProvider } from '../../core/src/provider.js';
 import { createAgentState } from './agentState.js';
 import type { AgentStateStore } from './agentStateStore.js';
+import type { ArtifactWatch } from './artifacts/artifactWatch.js';
 import type { CalendarWatch } from './calendar/calendarWatch.js';
 import type { DayLog } from './dayLog.js';
 import { DismissalTracker } from './dismissalTracker.js';
@@ -106,6 +107,8 @@ export class AgentRuntime {
   usageLimits?: UsageLimitsWatch;
   /** The next meetings, from Claude Code's calendar connector (standalone). */
   calendar?: CalendarWatch;
+  /** The artifacts your agents published, from their transcripts (standalone). */
+  artifacts?: ArtifactWatch;
   /** Shut the standalone office down in order (set by the CLI). */
   requestShutdown?: () => void;
   private hookEventHandler: HookEventHandler;

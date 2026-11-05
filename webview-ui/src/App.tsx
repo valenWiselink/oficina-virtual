@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 
 import { useEditAgent } from './agents/useEditAgent.js';
 import { useSupervisionSync } from './agents/useSupervisionSync.js';
+import { ArtifactsPanel } from './artifacts/ArtifactsPanel.js';
 import { showTerminalOf } from './chat/chatMode.js';
 import { BroadcastDialog } from './command/BroadcastDialog.js';
 import { CommandPalette } from './command/CommandPalette.js';
@@ -136,6 +137,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isArtifactsOpen, setIsArtifactsOpen] = useState(false);
   const [historyTab, setHistoryTab] = useState<HistoryTab>('dia');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
@@ -144,6 +146,7 @@ function App() {
   const [jarvisFocus, setJarvisFocus] = useState(0);
   useCommandPaletteShortcut(() => setIsPaletteOpen(true));
   const openHistory = (tab: HistoryTab) => {
+    setIsArtifactsOpen(false);
     setHistoryTab(tab);
     setIsHistoryOpen(true);
   };
@@ -501,6 +504,9 @@ function App() {
             onOpenAgent={openAgent}
           />
         )}
+        {isArtifactsOpen && !isMobile && !isDebugMode && (
+          <ArtifactsPanel onClose={() => setIsArtifactsOpen(false)} />
+        )}
         {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
         {!isMobile && <FocusBanner />}
         {/* The desktop app's updates (nothing in a browser). */}
@@ -521,7 +527,15 @@ function App() {
             isSettingsOpen={isSettingsOpen}
             onToggleSettings={() => setIsSettingsOpen((v) => !v)}
             isHistoryOpen={isHistoryOpen}
-            onToggleHistory={() => setIsHistoryOpen((v) => !v)}
+            onToggleHistory={() => {
+              setIsHistoryOpen((v) => !v);
+              setIsArtifactsOpen(false);
+            }}
+            isArtifactsOpen={isArtifactsOpen}
+            onToggleArtifacts={() => {
+              setIsArtifactsOpen((v) => !v);
+              setIsHistoryOpen(false);
+            }}
             launchSignal={launchSignal}
             directories={directories}
             onAddDirectory={directoryEditor.add}
@@ -686,7 +700,13 @@ function App() {
         </>
       )}
       {!isMobile && !isDebugMode && (
-        <OfficeCheers views={officeViews} onOpenHistory={() => setIsHistoryOpen(true)} />
+        <OfficeCheers
+          views={officeViews}
+          onOpenHistory={() => {
+            setIsArtifactsOpen(false);
+            setIsHistoryOpen(true);
+          }}
+        />
       )}
       {/* The board answers permissions inside each card; the graph keeps the
           floating cards so a request is never out of reach. */}

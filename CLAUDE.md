@@ -205,6 +205,19 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   `MCP_CONNECTION_NONBLOCKING=0` (else the hook runs before the connector is up)
   and one fixed cwd (Claude Code leaves a folder per cwd in `~/.claude/projects`,
   even with no session saved). Test offices: a fake `claude.cmd` first on PATH.
+- `artifacts/` — the claude.ai artifacts your agents published (`artifactsList`,
+  tokened clients only). No API lists them outside a Claude Code session: the
+  Artifact tool's `list` only exists inside one, so `artifactWatch.ts` reads the
+  transcripts instead (every `.jsonl` under the session roots, sub-agents' too,
+  every 15 s while a tokened page is open, only the bytes added since last time).
+  A publish's `toolUseResult` gives link and title (its text is the fallback);
+  an agent's `list` adds what no transcript publishes, with no agent (`scope`
+  all/shared are skipped: they name what others made); a listing that reached the
+  end, or a `delete`, takes out what is gone. Those shapes are not a documented
+  contract: if they move, detection stops but the index stays. Only `user` and
+  `assistant` records count (`api-request-blob` repeats old messages). Kept in
+  `~/.pixel-agents/artifacts.json`. It never contacts claude.ai, and claude.ai
+  refuses to be framed (`frame-ancestors`), so links open in the browser.
 - `terminal/` — PTYs (`@lydell/node-pty`, prebuilt) streamed to the browser.
 
 Agent tracking also still loads the old office assets and layout: the
@@ -247,6 +260,8 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   the graph. The board keeps a column free for it (`useMeetingsInset`), so it
   never covers «Te necesita»; minimized, or in an office under 760 px, it is a
   rail. z-10: Historial and Jarvis open above it.
+- `artifacts/` — the Artifacts panel (toolbar button), over the same spot as
+  Historial: opening one closes the other. Not in the phone shell or read-only.
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.
 - `components/ui/` — Button, Modal, Switch, TextInput, Dropdown.
 
