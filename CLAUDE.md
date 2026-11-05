@@ -82,7 +82,9 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
 
 ## Server (server/src)
 
-- `cli.ts` — entry: config, token, runtime, HTTP/WS server, DayLog.
+- `cli.ts` — entry: config, token, runtime, HTTP/WS server, DayLog. It prints its
+  tokened URL only to a terminal or the desktop app (`startupUrl`); a redirected
+  stdout gets `?token=[redacted]`, and the launcher reads the token from its file.
 - `agentRuntime.ts` / `agentStateStore.ts` — lifecycle core and the single
   source of truth (typed mutations; `broadcast` fans out to every socket).
 - `transcriptParser.ts`, `fileWatcher.ts`, `subagentWatch.ts` — read the
@@ -222,7 +224,9 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   only), in `~/.pixel-agents/pendientes.json`. `PendingAsksWatch` feeds it:
   what Jarvis asks as it comes (what brings it to the middle of the screen stays
   here), and another agent's only when it closes with one left (until then it is
-  on its card; one closed by its supervisor stays out, the supervisor is told).
+  on its card). Closed by Jarvis it comes in too, and `cerrar_agente` tells Jarvis
+  the id, to close it if it had relayed it; only a workspace supervisor's closing
+  stays out, and its tool tells it to pass the ask on.
   Going down is not closing: the watch stops before the terminals do, and only
   the ✕, `cerrar_agente` and an external session ending count. An ask closes by
   hand, with Jarvis's `cerrar_pendiente`, when its PR merges or its permission is

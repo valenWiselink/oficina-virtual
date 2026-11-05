@@ -9,6 +9,8 @@ import type { AgentRuntime } from '../src/agentRuntime.js';
 import { createAgentState } from '../src/agentState.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
 import { handleClientMessage } from '../src/clientMessageHandler.js';
+import { PendingAsks } from '../src/pendingAsks/pendingAsks.js';
+import { PendingAsksWatch } from '../src/pendingAsks/pendingAsksWatch.js';
 import type { PendingPermission } from '../src/permissionBroker.js';
 import { jarvisPrompt, liveJarvis, Notebook, ONE_JARVIS } from '../src/supervisors/jarvis.js';
 import { type JarvisLaunch, JarvisTools } from '../src/supervisors/jarvisTools.js';
@@ -191,6 +193,72 @@ describe('JarvisTools', () => {
       'No pude abrir',
     );
     expect(launched.map((l) => l.nickname)).toEqual(['Nuevo', 'Falla']);
+  });
+
+  describe('closing an agent with an ask left', () => {
+    /** The office as wired: closing goes through the watch that keeps the ask. */
+    const wired = () => {
+      const made = office();
+      const asks = new PendingAsks({
+        broadcast: () => undefined,
+        file: path.join(dir, 'pendientes.json'),
+      });
+      const watch = new PendingAsksWatch(made.store, asks);
+      const t = new JarvisTools(
+        {
+          ...made.deps,
+          pendingAsks: () => asks,
+          pendingAsksWatch: () => watch,
+          close: (id: number) => {
+            watch.agentClosed(made.store.get(id)!);
+            return true;
+          },
+        },
+        11,
+      );
+      made.store.get(1)!.yourTurn = { id: 't1', text: 'revisar el informe' };
+      return { ...made, asks, t };
+    };
+
+    it('keeps it, and tells Jarvis under which id', () => {
+      const { asks, t } = wired();
+      const answer = t.cerrarAgente('Coral');
+      const [ask] = asks.open();
+      expect(ask).toMatchObject({ from: 'Coral', text: 'revisar el informe' });
+      expect(answer).toContain(`Pendientes como ${ask.id}`);
+      expect(answer).toContain('«revisar el informe»');
+      expect(answer).toContain('cerrar_pendiente');
+    });
+
+    it('says nothing of what Valentín had marked done', () => {
+      const { asks, t } = wired();
+      asks.markTurnsDone(['t1']);
+      expect(t.cerrarAgente('Coral')).toBe('Cerré a «Coral». Su conversación queda guardada.');
+      expect(asks.open()).toEqual([]);
+    });
+
+    it('says nothing of a PR already merged', () => {
+      const { store, asks, t } = wired();
+      store.get(1)!.yourTurn = {
+        id: 't1',
+        text: 'mergear el PR',
+        merged: { number: 3, url: 'u', told: false },
+      };
+      expect(t.cerrarAgente('Coral')).toBe('Cerré a «Coral». Su conversación queda guardada.');
+      expect(asks.open()).toEqual([]);
+    });
+
+    it('with no ask, says nothing', () => {
+      const { store, t } = wired();
+      store.get(1)!.yourTurn = undefined;
+      expect(t.cerrarAgente('Coral')).toBe('Cerré a «Coral». Su conversación queda guardada.');
+    });
+
+    it('without a list in this office, asks Jarvis to pass it on', () => {
+      const { store, t } = office();
+      store.get(1)!.yourTurn = { id: 't1', text: 'revisar el informe' };
+      expect(t.cerrarAgente('Coral')).toContain('pasáselo');
+    });
   });
 
   it('closes only an office agent that finished and waits for nothing', () => {

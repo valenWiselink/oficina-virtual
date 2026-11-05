@@ -59,7 +59,7 @@ import { setRecordTap } from './transcriptTaps.js';
 import { uninstallStatusLine } from './usageLimits/statusLineInstaller.js';
 import { UsageLimitsWatch } from './usageLimits/usageLimitsWatch.js';
 import { gpuEars } from './voice/gpuEars.js';
-import { isLoopbackHost, normalizeHostname } from './wsAuth.js';
+import { isLoopbackHost, normalizeHostname, startupUrl } from './wsAuth.js';
 
 // ── Argument parsing ──────────────────────────────────────────
 
@@ -552,8 +552,9 @@ async function main(): Promise<void> {
     // address; only the consent-bearing toggle needs the token.
     const displayHost =
       args.host === '0.0.0.0' || args.host === '::' || args.host === '' ? '127.0.0.1' : args.host;
+    const officeUrl = `http://${displayHost}:${config.port}/?token=${config.token}`;
     console.log(
-      `\n  Pixel Agents server running at http://${displayHost}:${config.port}/?token=${config.token}\n`,
+      `\n  Pixel Agents server running at ${startupUrl(officeUrl, process.stdout, process.send !== undefined)}\n`,
     );
 
     // ── Graceful shutdown ──

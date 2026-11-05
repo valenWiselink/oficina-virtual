@@ -203,17 +203,19 @@ describe('dist/cli.js entry-point guard', () => {
     tmpHome: string,
     body: (ctx: { output: () => string; port: number }) => Promise<void>,
     host = '127.0.0.1',
+    /** Like `oficina > file`: no terminal, and no parent to talk to. */
+    redirected = false,
   ): Promise<void> {
     const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-cli-workspace-'));
     const port = await getFreePort();
     const child = spawn(process.execPath, [CLI_BUNDLE, '--port', port.toString(), '--host', host], {
       cwd: workspaceDir,
       env: { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: redirected ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe', 'ipc'],
     });
     let output = '';
-    child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
-    child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
+    child.stdout!.on('data', (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr!.on('data', (chunk: Buffer) => (output += chunk.toString()));
     try {
       await waitForCondition(async () => {
         if (child.exitCode !== null) {
@@ -253,7 +255,7 @@ describe('dist/cli.js entry-point guard', () => {
     return (JSON.parse(raw) as { token: string }).token;
   }
 
-  // The printed URL is the ONLY channel by which a real browser obtains the
+  // At a terminal, the printed URL is how a real browser obtains the
   // token, and the token is the whole privilege gate (httpServer.ts
   // standaloneTokenValid). A bare URL, or one carrying the wrong token, ships a
   // silently read-only session: the office renders, and the hooks toggle is
@@ -272,6 +274,21 @@ describe('dist/cli.js entry-point guard', () => {
       expect(response.status).toBe(200);
       expect(await response.text()).toContain('<div id="root">');
     });
+  });
+
+  // instalar/abrir-oficina.ps1 sends this output to a file: the secret must not land there.
+  itBuilt('keeps the token out of a stdout redirected to a file', async () => {
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-cli-redirected-'));
+    await runCliServer(
+      tmpHome,
+      async ({ output }) => {
+        await waitForCondition(() => URL_LINE.test(output()));
+        expect(printedUrl(output()).searchParams.get('token')).toBe('[redacted]');
+        expect(output()).not.toContain(mintedToken(tmpHome));
+      },
+      undefined,
+      true,
+    );
   });
 
   // `--host 0.0.0.0` is a BIND target, not an address to browse to: printing

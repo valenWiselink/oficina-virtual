@@ -15,13 +15,15 @@ function isJarvis(agent: AgentState): boolean {
  * - What Jarvis asks, as it comes: whatever brings it to the middle of the screen
  *   (its «Te toca:», or the PR it handed over) stays here once that goes away.
  * - Another agent's, only when it closes with one left: until then it is on the
- *   board, and it would be shown twice. A supervised one's goes to its supervisor
- *   first, so one closed BY its supervisor stays out: the supervisor was told.
+ *   board, and it would be shown twice. Closed by Jarvis it comes in too, and
+ *   `cerrar_agente` tells Jarvis under which id: the list does not depend on Jarvis
+ *   remembering. Only a workspace supervisor's closing stays out (its tool tells it
+ *   to pass the ask on, and its team is its own).
  * A newer answer of the same agent replaced the older on its card already.
  */
 export class PendingAsksWatch {
   private stopped = false;
-  /** Sessions whose closing the supervisor answers for. */
+  /** Sessions whose closing a workspace supervisor answers for. */
   private readonly closedBySupervisor = new Set<string>();
 
   constructor(
@@ -45,7 +47,7 @@ export class PendingAsksWatch {
     for (const [id, agent] of this.store) this.observe(id, agent);
   }
 
-  /** Call right before a supervisor closes an agent it was told about. */
+  /** Call right before a workspace supervisor closes an agent it was told about. */
   supervisorCloses(sessionId: string): void {
     this.closedBySupervisor.add(sessionId);
   }
