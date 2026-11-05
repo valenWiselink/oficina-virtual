@@ -121,6 +121,17 @@ export function redactTokenQuery(url: string): string {
   return url.replace(/([?&]token=)[^&#]*/g, `$1${TOKEN_QUERY_REDACTED}`);
 }
 
+/**
+ * The start-up line, with the token only for someone who can use it: a person
+ * at a terminal, or the desktop app that started this server (it masks its own
+ * log). Any other stdout is a file: instalar/abrir-oficina.ps1 redirects it to
+ * ~/.pixel-agents/oficina.log, and that kept the token in plain text. The
+ * launcher reads the token from its file; so can anyone else.
+ */
+export function startupUrl(url: string, stdout: { isTTY?: boolean }, hasParent: boolean): string {
+  return stdout.isTTY === true || hasParent ? url : redactTokenQuery(url);
+}
+
 // ── Host allowlist ─────────────────────────────────────────────
 
 const HOST_CHARS = /^[A-Za-z0-9.\-:[\]]+$/;

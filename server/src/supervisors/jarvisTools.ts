@@ -274,9 +274,24 @@ export class JarvisTools extends SupervisorTools {
     if (runningBackground(agent).length > 0) {
       return `«${name}» está esperando algo que corre en segundo plano: no lo cierro todavía.`;
     }
+    const left = agent.yourTurn && !agent.yourTurn.merged ? agent.yourTurn : undefined;
     if (!this.jarvis.close(id)) return `No pude cerrar a «${name}».`;
     this.notebook.add(`Cerré a «${name}».`);
-    return `Cerré a «${name}». Su conversación queda guardada.`;
+    return `Cerré a «${name}». Su conversación queda guardada.${this.leftBehind(left)}`;
+  }
+
+  /** What an agent just closed had asked of Valentín and nobody settled, in words.
+   *  The office has already kept it (PendingAsksWatch), so nothing is lost if
+   *  Jarvis forgets; it says so because Jarvis may have relayed it already. */
+  private leftBehind(left: AgentState['yourTurn']): string {
+    if (!left) return '';
+    const asks = this.jarvis.pendingAsks?.();
+    if (!asks)
+      return ` Le había dejado a Valentín: «${left.text}»: pasáselo si todavía no lo hiciste.`;
+    const ask = asks.byTurn(left.id);
+    if (!ask) return ''; // He had marked it done before.
+    if (ask.closedAt !== undefined) return '';
+    return ` Le había dejado a Valentín: «${ask.text}». Quedó en sus Pendientes como ${ask.id}: si ya se lo pasaste con un pedido tuyo, cerralo con cerrar_pendiente.`;
   }
 
   pasarResultado(de: string, a: string, nota?: string): string {

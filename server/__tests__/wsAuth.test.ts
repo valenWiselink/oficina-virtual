@@ -15,6 +15,7 @@ import {
   redactTokenQuery,
   standaloneHandshakeVerdict,
   standaloneTokenValid,
+  startupUrl,
   timingSafeStringEqual,
 } from '../src/wsAuth.js';
 
@@ -95,6 +96,23 @@ describe('isAllowedWebSocketOrigin', () => {
   it('rejects unparseable origins and a missing host', () => {
     expect(isAllowedWebSocketOrigin('://nonsense', '127.0.0.1:3100')).toBe(false);
     expect(isAllowedWebSocketOrigin('http://127.0.0.1:3100', undefined)).toBe(false);
+  });
+});
+
+describe('startupUrl', () => {
+  const url = 'http://127.0.0.1:3100/?token=abc-123';
+
+  it('shows the token to a person at a terminal', () => {
+    expect(startupUrl(url, { isTTY: true }, false)).toBe(url);
+  });
+
+  it('and to the desktop app that started the server', () => {
+    expect(startupUrl(url, {}, true)).toBe(url);
+  });
+
+  it('never to a stdout redirected to a file', () => {
+    expect(startupUrl(url, {}, false)).toBe('http://127.0.0.1:3100/?token=[redacted]');
+    expect(startupUrl(url, { isTTY: false }, false)).not.toContain('abc-123');
   });
 });
 

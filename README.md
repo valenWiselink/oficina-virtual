@@ -198,7 +198,7 @@ Si estaba abierta, apagala desde Ajustes y volvé a abrirla.
 
 ## Si algo no anda
 
-- Lo que imprime el servidor queda en `~/.pixel-agents/oficina.log`.
+- Lo que imprime el servidor queda en `~/.pixel-agents/oficina.log` (sin el token).
 - El agente no arranca: revisá que `claude` funcione en una terminal común.
 - La oficina se entera tarde de los permisos: activá Ajustes → Detección al instante.
 

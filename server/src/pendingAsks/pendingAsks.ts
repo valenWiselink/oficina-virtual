@@ -170,6 +170,11 @@ export class PendingAsks {
     return this.asks.find((a) => a.id === full);
   }
 
+  /** The ask a transcript answer brought, if it is on the list. */
+  byTurn(turnId: string): StoredAsk | undefined {
+    return this.asks.find((a) => a.turnIds.includes(turnId));
+  }
+
   closeById(id: string, how: string): StoredAsk | undefined {
     const ask = this.find(id);
     if (!ask || ask.closedAt !== undefined) return undefined;
