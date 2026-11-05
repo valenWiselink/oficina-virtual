@@ -39,6 +39,9 @@ describe('the chat store settles what you sent against the conversation', () => 
     // line came before the chat could pair it; then «algo que requiera mi
     // atencion?» went and was read too. The first one stayed at the bottom,
     // «En cola», under the newer one.
+    // Its own clock: two messages sent in the same millisecond tie, and this
+    // test failed now and then (CI, 2026-11-05). Nobody types that fast.
+    vi.useFakeTimers();
     deliver({ type: 'agentChat', id: agent, items: [you('u0', 'el pase de candado', 1)] });
     deliver({
       type: 'agentChatAppend',
@@ -48,6 +51,7 @@ describe('the chat store settles what you sent against the conversation', () => 
     settleDelivery(agent, addPending(agent, 'apruebo el plan de caja'), true);
     expect(texts(agent)).toEqual(['apruebo el plan de caja']);
 
+    vi.advanceTimersByTime(1000);
     const later = addPending(agent, 'algo que requiera mi atencion?');
     settleDelivery(agent, later, true);
     deliver({
