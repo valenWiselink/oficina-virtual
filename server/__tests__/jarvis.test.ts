@@ -259,7 +259,16 @@ describe('the MCP server', () => {
     ];
     expect(await toolNames(12)).toEqual(shared);
     expect(await toolNames(11)).toEqual(
-      [...shared, 'anotar', 'bitacora', 'carpetas', 'pasar_resultado'].sort(),
+      [
+        ...shared,
+        'anotar',
+        'bitacora',
+        'carpetas',
+        'cerrar_pendiente',
+        'dejar_pendiente',
+        'pasar_resultado',
+        'pendientes',
+      ].sort(),
     );
   });
 });

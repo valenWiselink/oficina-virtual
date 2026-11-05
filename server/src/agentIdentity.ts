@@ -286,6 +286,11 @@ export function yourTurnOf(
     : `revisar ${prs.size} PRs: ${numbers.join(', ')}${where}`;
 }
 
+/** That line as written (its `code` spans intact), for the command it may bring. */
+export function teTocaRawLine(reply: string | undefined): string | undefined {
+  return reply?.match(YOUR_TURN_LINE)?.[1]?.trim() || undefined;
+}
+
 /** The answer's own «Te toca: …» line, without its label (no PR guessing). */
 export function teTocaLine(reply: string): string | undefined {
   const line = reply.match(YOUR_TURN_LINE)?.[1]?.replace(/[*_`]/g, '').trim();
