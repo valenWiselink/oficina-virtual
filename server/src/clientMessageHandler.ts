@@ -315,6 +315,25 @@ export function handleClientMessage(
       break;
     }
 
+    case 'closePendingAsk': {
+      ctx.runtime?.pendingAsks?.closeById(String(msg.id), 'Lo marcaste hecho');
+      break;
+    }
+
+    case 'reopenPendingAsk': {
+      ctx.runtime?.pendingAsks?.reopen(String(msg.id));
+      break;
+    }
+
+    case 'markYourTurnsDone': {
+      if (Array.isArray(msg.ids)) {
+        ctx.runtime?.pendingAsks?.markTurnsDone(
+          msg.ids.filter((id): id is string => typeof id === 'string'),
+        );
+      }
+      break;
+    }
+
     case 'requestAgentChat': {
       // The chat view opened: the latest part of that agent's conversation,
       // to this office only (new lines follow as agentChatAppend).
@@ -972,6 +991,11 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   if (ctx.privileged && calendar) send({ ...calendar.message() });
   const artifacts = ctx.runtime?.artifacts;
   if (ctx.privileged && artifacts) send({ ...artifacts.message() });
+  const pendingAsks = ctx.runtime?.pendingAsks;
+  if (ctx.privileged && pendingAsks) {
+    ctx.runtime?.pendingAsksWatch?.sync();
+    send({ ...pendingAsks.message() });
+  }
   // For the first-run welcome: can an agent start here at all? And is the
   // "Te toca" rule already in the global CLAUDE.md (welcome and Ajustes)?
   if (ctx.privileged) {

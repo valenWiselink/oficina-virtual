@@ -49,6 +49,8 @@ import { useMobileShell } from './mobile/useMobileShell.js';
 import { playCheerSound, useAgentsInView } from './notificationSound.js';
 import { OfficeState } from './office/engine/officeState.js';
 import { useOnboarding } from './onboarding/useOnboarding.js';
+import { PendingAsksPanel } from './pendingAsks/PendingAsksPanel.js';
+import { usePendingAsks } from './pendingAsks/pendingAsksStore.js';
 import { agentLabel } from './permissions/agentLabel.js';
 import { PermissionCards } from './permissions/PermissionCards.js';
 import { usePermissionCards } from './permissions/usePermissionCards.js';
@@ -136,8 +138,10 @@ function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isArtifactsOpen, setIsArtifactsOpen] = useState(false);
+  // Historial, Artifacts and Pendientes share a spot: one open at a time.
+  const [leftPanel, setLeftPanel] = useState<'historial' | 'artifacts' | 'pendientes' | null>(null);
+  const toggleLeftPanel = (panel: NonNullable<typeof leftPanel>) =>
+    setLeftPanel((open) => (open === panel ? null : panel));
   const [historyTab, setHistoryTab] = useState<HistoryTab>('dia');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
@@ -146,9 +150,8 @@ function App() {
   const [jarvisFocus, setJarvisFocus] = useState(0);
   useCommandPaletteShortcut(() => setIsPaletteOpen(true));
   const openHistory = (tab: HistoryTab) => {
-    setIsArtifactsOpen(false);
     setHistoryTab(tab);
-    setIsHistoryOpen(true);
+    setLeftPanel('historial');
   };
   const [isDebugMode, setIsDebugMode] = useState(false);
 
@@ -243,6 +246,8 @@ function App() {
     nameOf: nameOfAgent,
   });
   const { requestAdopt, adoptDialog } = useAdopt(nameOfAgent);
+  // Closing an ask anywhere ends its «Te toca» on the card and the visor: redraw.
+  usePendingAsks();
   const agentViews = useAgentViews({
     getOfficeState,
     agents,
@@ -435,6 +440,7 @@ function App() {
         },
         onYourTurnDone: (turnId) => {
           markYourTurnDone(turnId);
+          transport.send({ type: 'markYourTurnsDone', ids: [turnId] });
           const done = agentViews.find((v) => v.yourTurnId === turnId);
           if (done) requestCelebration(done.id);
           void playCheerSound();
@@ -495,17 +501,20 @@ function App() {
         {/* Under what opens on purpose (Historial, Jarvis): z-10 against their 20+. */}
         {!isMobile && !isDebugMode && <MeetingsPanel />}
 
-        {isHistoryOpen && !isDebugMode && (
+        {leftPanel === 'historial' && !isDebugMode && (
           <HistoryPanel
             tab={historyTab}
             onTabChange={setHistoryTab}
             views={officeViews}
-            onClose={() => setIsHistoryOpen(false)}
+            onClose={() => setLeftPanel(null)}
             onOpenAgent={openAgent}
           />
         )}
-        {isArtifactsOpen && !isMobile && !isDebugMode && (
-          <ArtifactsPanel onClose={() => setIsArtifactsOpen(false)} />
+        {leftPanel === 'artifacts' && !isMobile && !isDebugMode && (
+          <ArtifactsPanel onClose={() => setLeftPanel(null)} />
+        )}
+        {leftPanel === 'pendientes' && !isMobile && !isDebugMode && (
+          <PendingAsksPanel onClose={() => setLeftPanel(null)} />
         )}
         {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
         {!isMobile && <FocusBanner />}
@@ -526,16 +535,12 @@ function App() {
             onViewChange={setView}
             isSettingsOpen={isSettingsOpen}
             onToggleSettings={() => setIsSettingsOpen((v) => !v)}
-            isHistoryOpen={isHistoryOpen}
-            onToggleHistory={() => {
-              setIsHistoryOpen((v) => !v);
-              setIsArtifactsOpen(false);
-            }}
-            isArtifactsOpen={isArtifactsOpen}
-            onToggleArtifacts={() => {
-              setIsArtifactsOpen((v) => !v);
-              setIsHistoryOpen(false);
-            }}
+            isHistoryOpen={leftPanel === 'historial'}
+            onToggleHistory={() => toggleLeftPanel('historial')}
+            isArtifactsOpen={leftPanel === 'artifacts'}
+            onToggleArtifacts={() => toggleLeftPanel('artifacts')}
+            isPendingAsksOpen={leftPanel === 'pendientes'}
+            onTogglePendingAsks={() => toggleLeftPanel('pendientes')}
             launchSignal={launchSignal}
             directories={directories}
             onAddDirectory={directoryEditor.add}
@@ -700,13 +705,7 @@ function App() {
         </>
       )}
       {!isMobile && !isDebugMode && (
-        <OfficeCheers
-          views={officeViews}
-          onOpenHistory={() => {
-            setIsArtifactsOpen(false);
-            setIsHistoryOpen(true);
-          }}
-        />
+        <OfficeCheers views={officeViews} onOpenHistory={() => setLeftPanel('historial')} />
       )}
       {/* The board answers permissions inside each card; the graph keeps the
           floating cards so a request is never out of reach. */}

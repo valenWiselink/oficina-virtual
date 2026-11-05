@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useArtifacts } from '../artifacts/artifactsStore.js';
 import type { Directory } from '../hooks/useExtensionMessages.js';
 import { UsageLimitsMeter } from '../limits/UsageLimitsMeter.js';
+import { usePendingAsks } from '../pendingAsks/pendingAsksStore.js';
 import { isBrowserRuntime } from '../runtime.js';
 import type { OfficeView } from '../views/useOfficeView.js';
 import { LaunchDrawer } from './LaunchDrawer.js';
@@ -18,6 +19,8 @@ interface BottomToolbarProps {
   isHistoryOpen: boolean;
   isArtifactsOpen: boolean;
   onToggleArtifacts: () => void;
+  isPendingAsksOpen: boolean;
+  onTogglePendingAsks: () => void;
   onToggleHistory: () => void;
   directories: Directory[];
   /** Drawer's pinned `+ Directory` row — opens the Directory modal empty. */
@@ -42,6 +45,8 @@ export function BottomToolbar({
   isHistoryOpen,
   isArtifactsOpen,
   onToggleArtifacts,
+  isPendingAsksOpen,
+  onTogglePendingAsks,
   onToggleHistory,
   directories,
   onAddDirectory,
@@ -52,6 +57,8 @@ export function BottomToolbar({
   launchSignal = 0,
 }: BottomToolbarProps) {
   const hasArtifacts = useArtifacts() !== null;
+  const pendingAsks = usePendingAsks();
+  const pendingCount = pendingAsks?.open.length ?? 0;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [lastSignal, setLastSignal] = useState(launchSignal);
   // Adjusting state on a prop change during render (React's documented way).
@@ -186,7 +193,28 @@ export function BottomToolbar({
           className="flex items-center gap-4"
         >
           <Icon name="auto_awesome_mosaic" />
-          Artifacts
+          <span className="hidden @min-[760px]:inline">Artifacts</span>
+        </Button>
+      )}
+      {pendingAsks && (
+        <Button
+          variant={isPendingAsksOpen ? 'active' : 'ghost'}
+          onClick={onTogglePendingAsks}
+          title={
+            pendingCount > 0
+              ? `Tenés ${pendingCount} ${pendingCount === 1 ? 'pedido pendiente' : 'pedidos pendientes'}`
+              : 'Nada pendiente de tu lado'
+          }
+          aria-label={`Pendientes: ${pendingCount}`}
+          className="flex items-center gap-4"
+        >
+          <Icon name="checklist" />
+          <span className="hidden @min-[760px]:inline">Pendientes</span>
+          {pendingCount > 0 && (
+            <span className="text-2xs font-semibold rounded-full px-5 bg-status-permission text-white tabular-nums">
+              {pendingCount}
+            </span>
+          )}
         </Button>
       )}
       <Button

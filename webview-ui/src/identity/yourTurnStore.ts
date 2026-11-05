@@ -22,6 +22,11 @@ export function isYourTurnDone(turnId: string): boolean {
   return done.includes(turnId);
 }
 
+/** Everything this browser marked, for the office's list of pending asks. */
+export function allYourTurnsDone(): readonly string[] {
+  return done;
+}
+
 export function markYourTurnDone(turnId: string): void {
   if (done.includes(turnId)) return;
   done = [...done, turnId].slice(-MAX_KEPT);

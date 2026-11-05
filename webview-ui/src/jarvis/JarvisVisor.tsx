@@ -157,7 +157,7 @@ export function JarvisVisor({
           </Button>
         </div>
         <div className="text-2xs text-text-2">
-          Esc para {needs ? 'cerrarlo · sigue en su burbuja' : 'callarlo'}
+          Esc para {needs ? 'cerrarlo · sigue en Pendientes' : 'callarlo'}
         </div>
       </section>
     </>
