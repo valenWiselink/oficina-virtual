@@ -18,6 +18,7 @@ export function closeOfficeAgent(
   const { store, runtime } = deps;
   const agent = store.get(id);
   if (!agent || !runtime) return false;
+  runtime.pendingAsksWatch?.agentClosed(agent);
   if (agent.bgId) {
     // A background session would outlive its terminal: closing the agent
     // stops it and takes it off Claude Code's list (the transcript stays).

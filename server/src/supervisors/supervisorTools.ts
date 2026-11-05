@@ -19,6 +19,8 @@ import {
 import { spokenName } from '../agentIdentity.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
+import type { PendingAsks } from '../pendingAsks/pendingAsks.js';
+import type { PendingAsksWatch } from '../pendingAsks/pendingAsksWatch.js';
 import type { PendingPermission, PermissionBroker } from '../permissionBroker.js';
 import { sendToTerminal } from '../terminal/handOff.js';
 import type { AgentState } from '../types.js';
@@ -65,6 +67,9 @@ export interface ToolDeps {
   folders?: () => Array<{ name: string; path: string }>;
   /** Valentín's word on permissions (Jarvis only; valentinConsent.ts). */
   consent?: ConsentDesk;
+  /** Late-bound: the office wires them after the tools. */
+  pendingAsks?: () => PendingAsks | undefined;
+  pendingAsksWatch?: () => PendingAsksWatch | undefined;
 }
 
 const HEAD_CHARS = 160;
@@ -320,9 +325,10 @@ export class SupervisorTools {
       return `No lo cierro: «${name}» está ${state.words}. Cerralo cuando termine.`;
     }
     const left = agent.yourTurn && !agent.yourTurn.merged ? agent.yourTurn.text : undefined;
+    this.deps.pendingAsksWatch?.()?.supervisorCloses(agent.sessionId);
     if (!this.deps.close(id)) return `No pude cerrar a «${name}».`;
     return left
-      ? `Cerré a «${name}» (su conversación queda guardada). Le había dejado a Valentín: «Te toca: ${left}» (si todavía no se lo pasaste, pasáselo).`
+      ? `Cerré a «${name}» (su conversación queda guardada). Le había dejado a Valentín: «Te toca: ${left}» (si todavía no se lo pasaste, pasáselo con tu propio «Te toca:» o con dejar_pendiente: no queda en sus Pendientes por sí solo).`
       : `Cerré a «${name}». Su conversación queda guardada.`;
   }
 }

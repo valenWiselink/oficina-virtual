@@ -291,6 +291,7 @@ export function launchStandaloneAgent(
     // server shuts down the list is frozen, so dying terminals stay in it.)
     runtime.resumableSessions?.remove(sessionId);
     if (store.has(id)) {
+      runtime.pendingAsksWatch?.agentClosed(agent);
       runtime.unregisterAgent(agent.sessionId);
       runtime.closeAgent(id);
     }

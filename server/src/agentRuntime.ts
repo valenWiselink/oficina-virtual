@@ -41,6 +41,8 @@ import type { HookEvent } from './hookEventHandler.js';
 import { HookEventHandler } from './hookEventHandler.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { PathSet, pathsMatch } from './pathKey.js';
+import type { PendingAsks } from './pendingAsks/pendingAsks.js';
+import type { PendingAsksWatch } from './pendingAsks/pendingAsksWatch.js';
 import type { PrWatch } from './prWatch.js';
 import { duplicateSessionAgents } from './sessionDedupe.js';
 import { SessionRouter } from './sessionRouter.js';
@@ -109,6 +111,9 @@ export class AgentRuntime {
   calendar?: CalendarWatch;
   /** The artifacts your agents published, from their transcripts (standalone). */
   artifacts?: ArtifactWatch;
+  /** What is pending of the user, and what feeds it (standalone). */
+  pendingAsks?: PendingAsks;
+  pendingAsksWatch?: PendingAsksWatch;
   /** Shut the standalone office down in order (set by the CLI). */
   requestShutdown?: () => void;
   private hookEventHandler: HookEventHandler;
@@ -306,6 +311,8 @@ export class AgentRuntime {
         // Unnamed background spawns die with their lead's session too.
         this.subagentWatch.removeByLead(agentId);
         if (agent.isExternal) {
+          // Its session ended: what it left for you must not go with it.
+          this.pendingAsksWatch?.agentClosed(agent);
           this.unregisterAgent(agent.sessionId);
           this.removeAgent(agentId);
         }

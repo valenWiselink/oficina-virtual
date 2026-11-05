@@ -37,6 +37,8 @@ import {
 import { DayLog } from './dayLog.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { HookHealth, setCurrentHookHealth } from './hookHealth.js';
+import { PendingAsks } from './pendingAsks/pendingAsks.js';
+import { PendingAsksWatch } from './pendingAsks/pendingAsksWatch.js';
 import { createPermissionBroker } from './permissionWiring.js';
 import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/claudeHookInstaller.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
@@ -304,6 +306,12 @@ async function main(): Promise<void> {
     runtime.calendar = new CalendarWatch({
       broadcast: (message) => store.broadcast({ ...message }),
     });
+    // What is pending of you: Jarvis's «Te toca:» and what closed agents left.
+    runtime.pendingAsks = new PendingAsks({
+      broadcast: (message) => store.broadcast({ ...message }),
+    });
+    runtime.pendingAsksWatch = new PendingAsksWatch(store, runtime.pendingAsks);
+    runtime.pendingAsksWatch.start();
     // The artifacts your agents published: read while a tokened page is open.
     runtime.artifacts = new ArtifactWatch({
       broadcast: (message) => store.broadcast({ ...message }),
@@ -563,6 +571,8 @@ async function main(): Promise<void> {
       gpuEars.stop();
       runtime.calendar?.stop();
       runtime.artifacts?.stop();
+      // Before the terminals go: going down is not each agent closing.
+      runtime.pendingAsksWatch?.stop();
       runtime.resumableSessions?.freeze();
       terminalAsks.freeze();
       await ptyManager.disposeAll();

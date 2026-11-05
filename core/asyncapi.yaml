@@ -126,6 +126,7 @@ components:
         - $ref: '#/components/schemas/UsageLimits'
         - $ref: '#/components/schemas/UpcomingMeetings'
         - $ref: '#/components/schemas/ArtifactsList'
+        - $ref: '#/components/schemas/PendingAsksList'
         - $ref: '#/components/schemas/HooksStatus'
         - $ref: '#/components/schemas/HookHealth'
         - $ref: '#/components/schemas/HooksConsentRequest'
@@ -171,6 +172,9 @@ components:
         - $ref: '#/components/schemas/WebviewReady'
         - $ref: '#/components/schemas/RequestAgentChat'
         - $ref: '#/components/schemas/ShutdownOffice'
+        - $ref: '#/components/schemas/ClosePendingAsk'
+        - $ref: '#/components/schemas/ReopenPendingAsk'
+        - $ref: '#/components/schemas/MarkYourTurnsDone'
         - $ref: '#/components/schemas/LaunchAgent'
         - $ref: '#/components/schemas/FocusAgent'
         - $ref: '#/components/schemas/CloseAgent'
@@ -1147,6 +1151,60 @@ components:
             just for you, a block of many hours): listed, never painted or announced.
           type: boolean
 
+    PendingAsksList:
+      description: |
+        What is pending of the user, whoever asked it. Sent on the connect
+        handshake to a privileged client and broadcast (to privileged clients
+        only) when it changes.
+      type: object
+      additionalProperties: false
+      required: [type, open, closed]
+      properties:
+        type:
+          const: pendingAsks
+        open:
+          description: Still pending, what has waited longest first.
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAskEntry'
+        closed:
+          description: The latest closed ones, newest first; they can be reopened.
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAskEntry'
+
+    PendingAskEntry:
+      description: One thing asked of the user.
+      type: object
+      additionalProperties: false
+      required: [id, from, text, at]
+      properties:
+        id:
+          type: string
+        from:
+          description: Who asks it.
+          type: string
+        text:
+          type: string
+        at:
+          description: Since when (ms epoch).
+          type: number
+        command:
+          description: A command it brings, to copy.
+          type: string
+        closedAt:
+          type: number
+        closedHow:
+          description: How it left the list, in words.
+          type: string
+        turnIds:
+          description: |
+            On a closed one, the answers that asked it: their «Te toca» is over on
+            the card and the visor too, wherever it was closed.
+          type: array
+          items:
+            type: string
+
     ArtifactsList:
       description: |
         The claude.ai artifacts the user's agents published, newest first, found
@@ -1795,6 +1853,43 @@ components:
       properties:
         type:
           const: shutdownOffice
+
+    ClosePendingAsk:
+      description: The user marks a pending ask as done.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: closePendingAsk
+        id:
+          type: string
+
+    ReopenPendingAsk:
+      description: The user brings a closed ask back to the list.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: reopenPendingAsk
+        id:
+          type: string
+
+    MarkYourTurnsDone:
+      description: |
+        Answers whose «Te toca» the user marked done on a card or the visor. Their
+        asks close, and never come back.
+      type: object
+      additionalProperties: false
+      required: [type, ids]
+      properties:
+        type:
+          const: markYourTurnsDone
+        ids:
+          type: array
+          items:
+            type: string
 
     RequestAgentChat:
       description: Ask for an agent's conversation (its chat view opened).

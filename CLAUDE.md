@@ -218,6 +218,17 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   `assistant` records count (`api-request-blob` repeats old messages). Kept in
   `~/.pixel-agents/artifacts.json`. It never contacts claude.ai, and claude.ai
   refuses to be framed (`frame-ancestors`), so links open in the browser.
+- `pendingAsks/` — what is pending of the user (`pendingAsks`, tokened clients
+  only), in `~/.pixel-agents/pendientes.json`. `PendingAsksWatch` feeds it:
+  what Jarvis asks as it comes (what brings it to the middle of the screen stays
+  here), and another agent's only when it closes with one left (until then it is
+  on its card; one closed by its supervisor stays out, the supervisor is told).
+  Going down is not closing: the watch stops before the terminals do, and only
+  the ✕, `cerrar_agente` and an external session ending count. An ask closes by
+  hand, with Jarvis's `cerrar_pendiente`, when its PR merges or its permission is
+  decided, or when a newer one names the same PR (real transcripts: 75 of 96
+  consecutive asks naming PRs shared one). Same text: no new row. Closed ones can
+  be reopened. `dejar_pendiente` adds one without bringing Jarvis to the middle.
 - `terminal/` — PTYs (`@lydell/node-pty`, prebuilt) streamed to the browser.
 
 Agent tracking also still loads the old office assets and layout: the
@@ -265,8 +276,9 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   left: the board keeps a column for it (`useMeetingsInset`), so it never covers
   «Te necesita»; under 760 px it opens over the board. z-10: Historial and Jarvis
   open above it.
-- `artifacts/` — the Artifacts panel (toolbar button), over the same spot as
-  Historial: opening one closes the other. Not in the phone shell or read-only.
+- `artifacts/`, `pendingAsks/` — panels from the toolbar, over the same spot as
+  Historial: one at a time (`leftPanel` in `App.tsx`). «Pendientes» carries the
+  count. Not in the phone shell or read-only.
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.
 - `components/ui/` — Button, Modal, Switch, TextInput, Dropdown.
 

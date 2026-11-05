@@ -27,7 +27,7 @@ import type { PtySessionManager } from '../terminal/ptySessionManager.js';
 import { launchAgent } from '../terminal/standaloneAgentLauncher.js';
 import { windowEnters } from '../terminal/windowInput.js';
 import type { AgentState } from '../types.js';
-import { Notebook } from './jarvis.js';
+import { JARVIS_NAME, Notebook } from './jarvis.js';
 import { describeRequest } from './supervisorRelay.js';
 import { SupervisorTools, type ToolDeps, VALENTIN_DECIDES } from './supervisorTools.js';
 import type { HumanLine } from './valentinConsent.js';
@@ -95,6 +95,38 @@ export class JarvisTools extends SupervisorTools {
     desk.show(request.requestId);
     this.showToValentin(request.requestId);
     return `Esto lo decide Valentín (${verdict.reason}), y te lo puede autorizar de palabra. La oficina ya le muestra este permiso en el medio de la pantalla, con Aprobar y Rechazar. Preguntáselo en una línea «Te toca:»: que «${spokenName(agent)}» quiere ${describeRequest(request.toolName, request.toolInput)}, y tu recomendación. Si te contesta que sí, por voz o en tu chat, volvé a llamar a aprobar_permiso con este mismo id: la oficina verifica que el sí sea suyo.`;
+  }
+
+  /** What Valentín has pending right now, with the ids to close it. */
+  pendientes(): string {
+    const asks = this.jarvis.pendingAsks?.();
+    if (!asks) return 'Esta oficina no lleva la lista de pendientes.';
+    const open = asks.open();
+    if (open.length === 0) return 'Valentín no tiene nada pendiente en la lista.';
+    return open
+      .map((a) => `- ${a.id} · de ${a.from} · ${new Date(a.at).toLocaleString('es-AR')}: ${a.text}`)
+      .join('\n');
+  }
+
+  dejarPendiente(texto: string, comando?: string): string {
+    const asks = this.jarvis.pendingAsks?.();
+    if (!asks) return 'Esta oficina no lleva la lista de pendientes.';
+    const ask = asks.add({ from: JARVIS_NAME, text: texto, command: comando?.trim() || undefined });
+    if (!ask) return 'Falta el texto: qué tiene que hacer Valentín.';
+    return `Quedó en sus Pendientes como ${ask.id}, sin interrumpirlo. Cerralo con cerrar_pendiente cuando compruebes que se hizo.`;
+  }
+
+  cerrarPendiente(id: string, motivo?: string): string {
+    const asks = this.jarvis.pendingAsks?.();
+    if (!asks) return 'Esta oficina no lleva la lista de pendientes.';
+    const known = asks.find(id);
+    if (!known) return `No hay ningún pendiente «${id}». Abiertos:\n${this.pendientes()}`;
+    if (known.closedAt !== undefined) {
+      return `${known.id} ya estaba cerrado (${known.closedHow ?? 'sin motivo'}).`;
+    }
+    const why = motivo?.trim();
+    asks.closeById(known.id, why ? `Lo cerró ${JARVIS_NAME}: ${why}` : `Lo cerró ${JARVIS_NAME}`);
+    return `Cerré ${known.id}: «${known.text}». Valentín lo puede reabrir si no era así.`;
   }
 
   override rechazarPermiso(requestId: string, motivo?: string): string {
@@ -341,6 +373,41 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
         'Tu libreta: lo que abriste, cerraste y pasaste, y lo que anotaste (decisiones, pendientes). Lo más nuevo, al final.',
     },
     () => text(tools.bitacora()),
+  );
+  server.registerTool(
+    'pendientes',
+    {
+      description:
+        'Lo que Valentín tiene pendiente en su lista de la oficina, con quién lo pidió, desde cuándo y el id para cerrarlo.',
+    },
+    () => text(tools.pendientes()),
+  );
+  server.registerTool(
+    'dejar_pendiente',
+    {
+      description:
+        'Deja un pedido en los Pendientes de Valentín SIN interrumpirlo: no aparece en el medio de la pantalla ni se dice en voz alta. Para lo que puede esperar; lo urgente va en una línea «Te toca:».',
+      inputSchema: {
+        texto: z.string().describe('Qué tiene que hacer él, en una línea'),
+        comando: z
+          .string()
+          .optional()
+          .describe('El comando a correr, si lo hay: tendrá un botón para copiarlo'),
+      },
+    },
+    ({ texto, comando }) => text(tools.dejarPendiente(texto, comando)),
+  );
+  server.registerTool(
+    'cerrar_pendiente',
+    {
+      description:
+        'Cierra un pendiente de Valentín cuando comprobaste que se hizo (o que ya no hace falta). Queda entre los cerrados y él lo puede reabrir.',
+      inputSchema: {
+        id: z.string().describe('Su id, como lo muestra pendientes (por ejemplo p3)'),
+        motivo: z.string().optional().describe('Cómo lo comprobaste, en pocas palabras'),
+      },
+    },
+    ({ id, motivo }) => text(tools.cerrarPendiente(id, motivo)),
   );
   server.registerTool(
     'anotar',

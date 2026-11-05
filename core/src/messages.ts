@@ -45,6 +45,7 @@ export type ServerMessage =
   | UsageLimits
   | UpcomingMeetings
   | ArtifactsList
+  | PendingAsksList
   | HooksStatus
   | HookHealth
   | HooksConsentRequest
@@ -86,6 +87,9 @@ export type ClientMessage =
   | WebviewReady
   | RequestAgentChat
   | ShutdownOffice
+  | ClosePendingAsk
+  | ReopenPendingAsk
+  | MarkYourTurnsDone
   | LaunchAgent
   | FocusAgent
   | CloseAgent
@@ -532,6 +536,23 @@ export interface ArtifactEntry {
   folder?: string;
 }
 
+export interface PendingAsksList {
+  type: 'pendingAsks';
+  open: PendingAskEntry[];
+  closed: PendingAskEntry[];
+}
+
+export interface PendingAskEntry {
+  id: string;
+  from: string;
+  text: string;
+  at: number;
+  command?: string;
+  closedAt?: number;
+  closedHow?: string;
+  turnIds?: string[];
+}
+
 export interface HooksStatus {
   type: 'hooksStatus';
   providerId: string;
@@ -841,6 +862,21 @@ export interface ShutdownOffice {
   type: 'shutdownOffice';
 }
 
+export interface ClosePendingAsk {
+  type: 'closePendingAsk';
+  id: string;
+}
+
+export interface ReopenPendingAsk {
+  type: 'reopenPendingAsk';
+  id: string;
+}
+
+export interface MarkYourTurnsDone {
+  type: 'markYourTurnsDone';
+  ids: string[];
+}
+
 export interface LaunchAgent {
   type: 'launchAgent';
   directoryPath?: string;
@@ -849,19 +885,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_431;
-  supervision?: AnonymousSchema_432;
+  effort?: AnonymousSchema_450;
+  supervision?: AnonymousSchema_451;
 }
 
-export type AnonymousSchema_431 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_450 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_432 {
-  kind: AnonymousSchema_433;
+export interface AnonymousSchema_451 {
+  kind: AnonymousSchema_452;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_433 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_452 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -910,16 +946,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_458;
+  scope: AnonymousSchema_477;
 }
 
-export interface AnonymousSchema_458 {
-  kind: AnonymousSchema_459;
+export interface AnonymousSchema_477 {
+  kind: AnonymousSchema_478;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_459 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_478 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

@@ -136,6 +136,8 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
         broker: options.permissionBroker,
         terminalOf: (id) => options.ptyManager?.get(id),
         consent,
+        pendingAsks: () => options.runtime?.pendingAsks,
+        pendingAsksWatch: () => options.runtime?.pendingAsksWatch,
         ...jarvisPowers(options),
       },
       allowedHostnames,
@@ -330,12 +332,13 @@ function registerWebSocketRoute(
 }
 
 /** Broadcasts a read-only (untokened) client never gets: they name work
- *  repos and PRs, or the user's meetings and private artifacts, which the
- *  read-only view has no use for. */
+ *  repos and PRs, or the user's meetings, private artifacts and pending asks,
+ *  which the read-only view has no use for. */
 export const PRIVILEGED_ONLY_BROADCASTS: ReadonlySet<string> = new Set([
   'prStatus',
   'upcomingMeetings',
   'artifactsList',
+  'pendingAsks',
 ]);
 
 // ── Auth Helper ────────────────────────────────────────────────
