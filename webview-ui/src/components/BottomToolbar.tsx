@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { useArtifacts } from '../artifacts/artifactsStore.js';
 import type { Directory } from '../hooks/useExtensionMessages.js';
 import { UsageLimitsMeter } from '../limits/UsageLimitsMeter.js';
 import { isBrowserRuntime } from '../runtime.js';
@@ -15,6 +16,8 @@ interface BottomToolbarProps {
   onToggleSettings: () => void;
   /** Today's history panel. */
   isHistoryOpen: boolean;
+  isArtifactsOpen: boolean;
+  onToggleArtifacts: () => void;
   onToggleHistory: () => void;
   directories: Directory[];
   /** Drawer's pinned `+ Directory` row — opens the Directory modal empty. */
@@ -37,6 +40,8 @@ export function BottomToolbar({
   isSettingsOpen,
   onToggleSettings,
   isHistoryOpen,
+  isArtifactsOpen,
+  onToggleArtifacts,
   onToggleHistory,
   directories,
   onAddDirectory,
@@ -46,6 +51,7 @@ export function BottomToolbar({
   onLaunch,
   launchSignal = 0,
 }: BottomToolbarProps) {
+  const hasArtifacts = useArtifacts() !== null;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [lastSignal, setLastSignal] = useState(launchSignal);
   // Adjusting state on a prop change during render (React's documented way).
@@ -172,6 +178,17 @@ export function BottomToolbar({
         <Icon name="history" />
         Historial
       </Button>
+      {hasArtifacts && (
+        <Button
+          variant={isArtifactsOpen ? 'active' : 'ghost'}
+          onClick={onToggleArtifacts}
+          title="Los artifacts que publicaron tus agentes"
+          className="flex items-center gap-4"
+        >
+          <Icon name="auto_awesome_mosaic" />
+          Artifacts
+        </Button>
+      )}
       <Button
         variant={isSettingsOpen ? 'active' : 'ghost'}
         className="flex items-center gap-4"

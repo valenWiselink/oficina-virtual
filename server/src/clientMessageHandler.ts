@@ -970,6 +970,8 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   if (ctx.privileged && limits) send({ ...limits.message() });
   const calendar = ctx.runtime?.calendar;
   if (ctx.privileged && calendar) send({ ...calendar.message() });
+  const artifacts = ctx.runtime?.artifacts;
+  if (ctx.privileged && artifacts) send({ ...artifacts.message() });
   // For the first-run welcome: can an agent start here at all? And is the
   // "Te toca" rule already in the global CLAUDE.md (welcome and Ajustes)?
   if (ctx.privileged) {

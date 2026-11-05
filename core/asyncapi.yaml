@@ -125,6 +125,7 @@ components:
         - $ref: '#/components/schemas/SpanishTerminalUpdated'
         - $ref: '#/components/schemas/UsageLimits'
         - $ref: '#/components/schemas/UpcomingMeetings'
+        - $ref: '#/components/schemas/ArtifactsList'
         - $ref: '#/components/schemas/HooksStatus'
         - $ref: '#/components/schemas/HookHealth'
         - $ref: '#/components/schemas/HooksConsentRequest'
@@ -1139,6 +1140,48 @@ components:
           type: number
         joinUrl:
           description: The https link to join it, when it has one.
+          type: string
+
+    ArtifactsList:
+      description: |
+        The claude.ai artifacts the user's agents published, newest first, found
+        in their transcripts. Sent on the connect handshake to a privileged
+        client and broadcast (to privileged clients only) when it changes.
+      type: object
+      additionalProperties: false
+      required: [type, artifacts, scanning]
+      properties:
+        type:
+          const: artifactsList
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactEntry'
+        scanning:
+          description: The transcripts have not all been read yet (first run), so more may come.
+          type: boolean
+
+    ArtifactEntry:
+      description: One artifact, with only what the panel shows.
+      type: object
+      additionalProperties: false
+      required: [id, url, title, at]
+      properties:
+        id:
+          type: string
+        url:
+          description: Its claude.ai link. Opening it still asks for the owner's session.
+          type: string
+        title:
+          type: string
+        at:
+          description: Its last publish (ms epoch).
+          type: number
+        agent:
+          description: The name of the session that published it last, when known.
+          type: string
+        folder:
+          description: That session's working folder, when known.
           type: string
 
     UsageLimits:

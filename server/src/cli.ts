@@ -10,8 +10,10 @@
 
 import * as path from 'path';
 
+import { agentLooks } from './agentLooks.js';
 import { AgentRuntime } from './agentRuntime.js';
 import { AgentStateStore } from './agentStateStore.js';
+import { ArtifactWatch } from './artifacts/artifactWatch.js';
 import {
   buildAssetCache,
   loadAllCharacters,
@@ -302,6 +304,14 @@ async function main(): Promise<void> {
     runtime.calendar = new CalendarWatch({
       broadcast: (message) => store.broadcast({ ...message }),
     });
+    // The artifacts your agents published: read while a tokened page is open.
+    runtime.artifacts = new ArtifactWatch({
+      broadcast: (message) => store.broadcast({ ...message }),
+      roots: () => claudeProvider.getAllSessionRoots?.() ?? [],
+      nameOf: (sessionId) =>
+        [...store.values()].find((a) => a.sessionId === sessionId)?.nickname ??
+        (agentLooks().get(sessionId)?.nickname || undefined),
+    });
 
     // Supervisor agents: who supervises whom, and what reaches them (their
     // agents' permissions, questions and finished turns).
@@ -552,6 +562,7 @@ async function main(): Promise<void> {
       jarvisKeeper?.stop();
       gpuEars.stop();
       runtime.calendar?.stop();
+      runtime.artifacts?.stop();
       runtime.resumableSessions?.freeze();
       terminalAsks.freeze();
       await ptyManager.disposeAll();

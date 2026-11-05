@@ -101,9 +101,15 @@ export function readRecaps(
       });
     }
   }
-  // The office names its background sessions "oficina-<name>-<hex>": that is
-  // no title to tell the session by.
-  const ownName = customTitle && /^oficina-.+-[0-9a-f]{4}$/.test(customTitle);
-  out.title = (ownName ? undefined : customTitle) ?? aiTitle ?? customTitle;
+  out.title = pickSessionTitle(customTitle, aiTitle);
   return out;
+}
+
+/**
+ * The title that tells a session: /rename beats Claude's generated one, except
+ * for the "oficina-<name>-<hex>" the office names its background sessions.
+ */
+export function pickSessionTitle(custom?: string, ai?: string): string | undefined {
+  const ownName = custom && /^oficina-.+-[0-9a-f]{4}$/.test(custom);
+  return (ownName ? undefined : custom) ?? ai ?? custom;
 }
