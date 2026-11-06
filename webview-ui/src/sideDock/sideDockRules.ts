@@ -37,7 +37,7 @@ export function dockShape(panel: boolean, meetings: boolean): DockShape {
  * - meetings alone: 260px, and only from 760px of office (or peeked);
  * - a panel: about a third of the office, 260–380px;
  * - both: stacked (the list on top, as tall as it needs up to 40%) in a
- *   normal office, side by side from 1280px, where there is room for both.
+ *   normal office, side by side from 1600px, where there is room for both.
  */
 export function dockClasses(shape: DockShape, peek: boolean): string {
   const base = 'shrink-0 min-h-0 flex gap-8 ml-14 mt-10 mb-80';
@@ -49,6 +49,6 @@ export function dockClasses(shape: DockShape, peek: boolean): string {
     case 'panel':
       return `${base} w-[clamp(260px,32%,380px)] flex-col`;
     case 'both':
-      return `${base} w-[clamp(260px,32%,380px)] flex-col @min-[1280px]:w-auto @min-[1280px]:flex-row`;
+      return `${base} w-[clamp(260px,32%,380px)] flex-col @min-[1600px]:w-auto @min-[1600px]:flex-row`;
   }
 }

@@ -11,8 +11,8 @@ import { dockClasses, dockShape } from './sideDockRules.js';
 
 /** In the stacked column the list keeps to its size; side by side, its own 260px. */
 const MEETINGS_BOTH =
-  'min-h-0 max-h-[40%] flex-col @min-[1280px]:w-[260px] @min-[1280px]:max-h-full';
-const PANEL_BOTH = 'flex-1 min-h-0 min-w-0 flex @min-[1280px]:flex-none @min-[1280px]:w-[380px]';
+  'min-h-0 max-h-[40%] flex-col @min-[1600px]:w-[260px] @min-[1600px]:max-h-full';
+const PANEL_BOTH = 'flex-1 min-h-0 min-w-0 flex @min-[1600px]:flex-none @min-[1600px]:w-[380px]';
 
 /**
  * The office's left column: the panel open on purpose (Pendientes, Historial,

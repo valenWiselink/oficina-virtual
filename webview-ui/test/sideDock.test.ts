@@ -62,6 +62,6 @@ describe('the left column', () => {
   it('stacks both, and puts them side by side in a wide office', () => {
     const both = dockClasses('both', false);
     assert.match(both, /\bflex-col\b/);
-    assert.match(both, /@min-\[1280px\]:flex-row/);
+    assert.match(both, /@min-\[1600px\]:flex-row/);
   });
 });
