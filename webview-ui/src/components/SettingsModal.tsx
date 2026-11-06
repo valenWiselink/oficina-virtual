@@ -13,6 +13,7 @@ import { transport } from '../transport/index.js';
 import { hasDesktopUpdates } from '../updates/desktopUpdates.js';
 import { UpdateHelpRows } from '../updates/UpdateHelpRows.js';
 import { setOperatorName, useOperatorName } from '../views/officeMemory.js';
+import { setWorkspacesOn, useWorkspacesOn } from '../workspaces/workspaceTabsSetting.js';
 import { TerminalSchemePicker } from './TerminalSchemePicker.js';
 import { Button } from './ui/Button.js';
 import { Modal } from './ui/Modal.js';
@@ -77,6 +78,7 @@ export function SettingsModal({
   const calm = useCalmMode();
   const appTheme = useAppThemeChoice();
   const operatorName = useOperatorName();
+  const workspacesOn = useWorkspacesOn();
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Ajustes" width={500}>
@@ -113,6 +115,12 @@ export function SettingsModal({
           />
         )}
         <TerminalSchemePicker />
+        <Switch
+          label="Espacios de trabajo"
+          description="Las pestañas de arriba y «Mover a…». Apagado, ves a todos los agentes; tus espacios quedan guardados"
+          checked={workspacesOn}
+          onChange={() => setWorkspacesOn(!workspacesOn)}
+        />
         <Switch
           label="Modo calma"
           description="Sin efectos decorativos: queda sólo lo que dice el estado"

@@ -76,15 +76,26 @@ export function dismissMeeting(key: string): void {
 }
 
 /**
- * The room the board leaves for the open list, so it never covers the first
- * column (the office region is the @container). Closed, it needs none: the
- * chip lives in the row of the tabs.
+ * Open by hand in an office too narrow for the list to stay by itself: it
+ * shows until closed, and is not remembered (the next narrow office starts
+ * without it).
  */
-export function useMeetingsInset(): string {
-  const msg = useUpcomingMeetings();
-  const isMinimized = useMeetingsMinimized();
-  if (!msg?.connected || isMinimized) return '';
-  return '@min-[760px]:pl-[288px]';
+let peek = false;
+
+export function useMeetingsPeek(): boolean {
+  return useSyncExternalStore(subscribe, () => peek);
+}
+
+export function setMeetingsPeek(next: boolean): void {
+  if (next === peek) return;
+  peek = next;
+  notify();
+}
+
+/** The list's own ✕: a peek just ends; otherwise the list stays closed. */
+export function closeMeetingsList(): void {
+  if (peek) setMeetingsPeek(false);
+  else setMeetingsMinimized(true);
 }
 
 export function setMeetingsMinimized(next: boolean): void {
