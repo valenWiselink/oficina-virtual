@@ -37,6 +37,7 @@ import {
 import { DayLog } from './dayLog.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { HookHealth, setCurrentHookHealth } from './hookHealth.js';
+import { AskMerger } from './pendingAsks/askMerger.js';
 import { PendingAsks } from './pendingAsks/pendingAsks.js';
 import { PendingAsksWatch } from './pendingAsks/pendingAsksWatch.js';
 import { createPermissionBroker } from './permissionWiring.js';
@@ -50,6 +51,7 @@ import { officeJarvisKeeper } from './supervisors/jarvisWiring.js';
 import { supervisors } from './supervisors/supervision.js';
 import { SupervisorRelay } from './supervisors/supervisorRelay.js';
 import { setBackgroundAgents } from './terminal/backgroundSessions.js';
+import { sendToTerminal } from './terminal/handOff.js';
 import { PtySessionManager } from './terminal/ptySessionManager.js';
 import { ResumableSessions } from './terminal/resumableSessions.js';
 import { resumeOfficeSessions } from './terminal/standaloneAgentLauncher.js';
@@ -314,6 +316,16 @@ async function main(): Promise<void> {
     });
     runtime.pendingAsksWatch = new PendingAsksWatch(store, runtime.pendingAsks);
     runtime.pendingAsksWatch.start();
+    // «Mergear» on a pending ask: gh merges it, and Jarvis hears it in its terminal.
+    runtime.askMerger = new AskMerger({
+      asks: () => runtime.pendingAsks,
+      tellJarvis: (text) => {
+        for (const [id, agent] of store.entries()) {
+          const terminal = agent.supervision?.kind === 'all' ? ptyManager.get(id) : undefined;
+          if (terminal) sendToTerminal(terminal, text);
+        }
+      },
+    });
     // The artifacts your agents published: read while a tokened page is open.
     runtime.artifacts = new ArtifactWatch({
       broadcast: (message) => store.broadcast({ ...message }),

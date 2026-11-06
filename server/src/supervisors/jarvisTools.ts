@@ -19,7 +19,7 @@ import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
 import { listDirectories, normalizeDirectoryPath, validateDirectoryPath } from '../directories.js';
 import { collectDirectorySuggestions } from '../directorySuggestions.js';
 import { hostDirectory } from '../hostDirectory.js';
-import { prUrlsOf } from '../pendingAsks/pendingAsks.js';
+import { clockAt, prUrlsOf } from '../pendingAsks/pendingAsks.js';
 import type { PendingPermission } from '../permissionBroker.js';
 import { claudeProvider } from '../providers/index.js';
 import { closeOfficeAgent } from '../terminal/closeAgent.js';
@@ -116,15 +116,29 @@ export class JarvisTools extends SupervisorTools {
       .join('\n');
   }
 
-  dejarPendiente(texto: string, comando?: string): string {
+  dejarPendiente(
+    texto: string,
+    comando?: string,
+    more: { paraAntesDe?: string; noAntesDe?: string; porQue?: string; siNo?: string } = {},
+  ): string {
     const asks = this.jarvis.pendingAsks?.();
     if (!asks) return 'Esta oficina no lleva la lista de pendientes.';
+    const now = Date.now();
+    const due = more.paraAntesDe ? clockAt(more.paraAntesDe, now) : undefined;
+    const notBefore = more.noAntesDe ? clockAt(more.noAntesDe, now) : undefined;
+    if (due === null || notBefore === null) {
+      return 'Las horas van como HH:MM de 24 h (por ejemplo 14:45 o 23:00). No lo dejé: probá de nuevo.';
+    }
     const noted = asks.open().filter((a) => a.question);
     const ask = asks.add({
       from: JARVIS_NAME,
       text: texto,
       command: comando?.trim() || undefined,
       prUrls: prUrlsOf(texto),
+      due,
+      notBefore,
+      why: more.porQue,
+      ifNot: more.siNo,
     });
     if (!ask) return 'Falta el texto: qué tiene que hacer Valentín.';
     const twin = noted
@@ -422,16 +436,38 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
     'dejar_pendiente',
     {
       description:
-        'Deja un pedido en los Pendientes de Valentín SIN interrumpirlo: no aparece en el medio de la pantalla ni se dice en voz alta. Para lo que puede esperar; lo urgente va en una línea «Te toca:».',
+        'Deja un pedido en los Pendientes de Valentín SIN interrumpirlo: no aparece en el medio de la pantalla ni se dice en voz alta. Para lo que puede esperar; lo urgente va en una línea «Te toca:». Su vista «Ahora» le muestra primero lo que vence antes, frena a más agentes o va a producción: dale la hora y el motivo cuando los sepas. Si es un merge, pasá el comando `gh pr merge <número> --repo <dueño/repo> --merge` (con --match-head-commit si corresponde): tendrá un botón «Mergear».',
       inputSchema: {
         texto: z.string().describe('Qué tiene que hacer él, en una línea'),
         comando: z
           .string()
           .optional()
           .describe('El comando a correr, si lo hay: tendrá un botón para copiarlo'),
+        para_antes_de: z
+          .string()
+          .optional()
+          .describe(
+            'Hora límite de hoy, HH:MM (24 h): por ejemplo 14:45 para algo de antes de la demo',
+          ),
+        no_antes_de: z
+          .string()
+          .optional()
+          .describe(
+            'No mostrárselo adelante antes de esta hora, HH:MM: por ejemplo 23:00 para el pase de la noche',
+          ),
+        por_que: z.string().optional().describe('Por qué ahora, en pocas palabras'),
+        si_no: z.string().optional().describe('Qué pasa si no lo hace, en pocas palabras'),
       },
     },
-    ({ texto, comando }) => text(tools.dejarPendiente(texto, comando)),
+    ({ texto, comando, para_antes_de, no_antes_de, por_que, si_no }) =>
+      text(
+        tools.dejarPendiente(texto, comando, {
+          paraAntesDe: para_antes_de,
+          noAntesDe: no_antes_de,
+          porQue: por_que,
+          siNo: si_no,
+        }),
+      ),
   );
   server.registerTool(
     'cerrar_pendiente',

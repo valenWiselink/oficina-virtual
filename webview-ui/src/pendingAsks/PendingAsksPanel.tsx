@@ -14,7 +14,7 @@ import { askWhen, splitOpen } from './pendingAsksView.js';
 const COPIED_MS = 1500;
 
 /** Copies the command an ask brings, and says so for a moment. */
-function CopyCommand({ command }: { command: string }) {
+export function CopyCommand({ command }: { command: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const copy = () => {
     const done = (next: 'copied' | 'failed') => {
@@ -53,7 +53,7 @@ function OpenAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
 
 /** One that looks done (its PR merged, the agent waiting for it closed): one
  *  click closes it, the other keeps it. */
-function SeemsDoneAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
+export function SeemsDoneAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
   return (
     <li className="flex flex-col gap-3 px-6 py-6 border-b border-border last:border-b-0">
       <span className="text-xs text-text-2 break-words">{ask.text}</span>
@@ -73,7 +73,7 @@ function SeemsDoneAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
   );
 }
 
-function ClosedAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
+export function ClosedAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
   return (
     <li className="flex items-start gap-8 px-6 py-5">
       <span className="flex flex-col gap-1 min-w-0 flex-1">

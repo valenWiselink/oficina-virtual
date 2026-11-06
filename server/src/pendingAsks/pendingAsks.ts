@@ -4,6 +4,8 @@ import * as path from 'path';
 
 import type { PendingAskEntry, PendingAsksList } from '../../../core/src/messages.js';
 import { SERVER_JSON_DIR } from '../constants.js';
+import { prStateOf } from '../mergedAsk.js';
+import { type MergeTarget, mergeTargetOf } from './mergeTarget.js';
 
 export const PENDING_ASKS_FILE = 'pendientes.json';
 const TEXT_MAX = 240;
@@ -38,7 +40,17 @@ export interface StoredAsk {
   prUrls?: string[];
   /** Why it looks done though nobody closed it («Se mergeó el PR #12»). */
   seemsDone?: string;
+  /** It has to be done before this (ms). */
+  due?: number;
+  /** Not before this (ms): «a las 23», or put off with «Más tarde». */
+  notBefore?: number;
+  /** Why now, and what happens if not (Jarvis, dejar_pendiente). */
+  why?: string;
+  ifNot?: string;
 }
+
+/** What Jarvis can say about an ask beyond its text (dejar_pendiente). */
+export type AskTiming = Pick<StoredAsk, 'due' | 'notBefore' | 'why' | 'ifNot'>;
 
 interface Saved {
   version: 1;
@@ -58,6 +70,10 @@ export interface NewAsk {
   question?: boolean;
   prUrls?: string[];
   seemsDone?: string;
+  due?: number;
+  notBefore?: number;
+  why?: string;
+  ifNot?: string;
 }
 
 interface PendingAsksDeps {
@@ -102,6 +118,23 @@ function sharePr(a: string, b: string): boolean {
   return prRefs(a).some((x) =>
     theirs.some((y) => x.number === y.number && (!x.repo || !y.repo || x.repo === y.repo)),
   );
+}
+
+/**
+ * «23:00» as a moment: today at that time on this machine's clock, or
+ * tomorrow when today's has long passed (said at 23:30, «09:00» is the
+ * morning). Null when it is not HH:MM.
+ */
+export function clockAt(hhmm: string, now: number): number | null {
+  const m = /^\s*(\d{1,2})(?::|\.|h)?(\d{2})?\s*(?:h|hs)?\s*$/i.exec(hhmm);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2] ?? 0);
+  if (h > 23 || min > 59) return null;
+  const at = new Date(now);
+  at.setHours(h, min, 0, 0);
+  if (at.getTime() < now - 6 * 3600_000) at.setDate(at.getDate() + 1);
+  return at.getTime();
 }
 
 /** «#12» for a PR URL. */
@@ -184,6 +217,10 @@ export class PendingAsks {
       ...(ask.question ? { question: true } : {}),
       ...(ask.prUrls?.length ? { prUrls: [...new Set(ask.prUrls)] } : {}),
       ...(ask.seemsDone ? { seemsDone: ask.seemsDone } : {}),
+      ...(ask.due !== undefined ? { due: ask.due } : {}),
+      ...(ask.notBefore !== undefined ? { notBefore: ask.notBefore } : {}),
+      ...(ask.why?.trim() ? { why: ask.why.trim().slice(0, TEXT_MAX) } : {}),
+      ...(ask.ifNot?.trim() ? { ifNot: ask.ifNot.trim().slice(0, TEXT_MAX) } : {}),
     };
     for (const older of this.open()) {
       if (sharePr(older.text, text)) this.close(older, `${REPLACED_BY} ${stored.id}`);
@@ -261,8 +298,22 @@ export class PendingAsks {
 
   /** The PRs the open ones name, for the office to watch. */
   prUrls(): string[] {
-    const urls = this.open().flatMap((a) => [...(a.prUrls ?? []), ...(a.prUrl ? [a.prUrl] : [])]);
+    const urls = this.open().flatMap((a) => {
+      const merge = mergeTargetOf(a)?.url;
+      return [...(a.prUrls ?? []), ...(a.prUrl ? [a.prUrl] : []), ...(merge ? [merge] : [])];
+    });
     return [...new Set(urls)];
+  }
+
+  /** A PR changed state: what looks done, and which «Mergear» buttons still make sense. */
+  prChanged(url: string, stateOf: (url: string) => string | undefined): void {
+    this.settlePrs(stateOf);
+    if (this.open().some((a) => mergeTargetOf(a)?.url === url)) this.changed();
+  }
+
+  /** It was merged from its «Mergear» button. */
+  merged(id: string): StoredAsk | undefined {
+    return this.closeById(id, 'Lo mergeaste desde la oficina');
   }
 
   /**
@@ -286,6 +337,14 @@ export class PendingAsks {
       changed = true;
     }
     if (changed) this.changed();
+  }
+
+  /** «Más tarde»: it leaves the front until `until`. */
+  snooze(id: string, until: number): void {
+    const ask = this.find(id);
+    if (!ask || ask.closedAt !== undefined) return;
+    ask.notBefore = until;
+    this.changed();
   }
 
   /** «Sigue pendiente»: it did not look done to him after all. */
@@ -356,13 +415,31 @@ export class PendingAsks {
   }
 }
 
+/** The PR its «Mergear» button merges: only while it is not merged or closed. */
+export function openMergeTarget(ask: StoredAsk): MergeTarget | undefined {
+  if (ask.closedAt !== undefined) return undefined;
+  const target = mergeTargetOf(ask);
+  const state = target ? prStateOf(target.url) : undefined;
+  return state === 'merged' || state === 'closed' ? undefined : target;
+}
+
 function toEntry(ask: StoredAsk): PendingAskEntry {
+  const merge = openMergeTarget(ask);
+  const open = ask.closedAt === undefined;
   return {
     id: ask.id,
     from: ask.from,
     text: ask.text,
     at: ask.at,
     ...(ask.command ? { command: ask.command } : {}),
+    ...(open && ask.due !== undefined ? { due: ask.due } : {}),
+    ...(open && ask.notBefore !== undefined ? { notBefore: ask.notBefore } : {}),
+    ...(open && ask.why ? { why: ask.why } : {}),
+    ...(open && ask.ifNot ? { ifNot: ask.ifNot } : {}),
+    ...(open && ask.question ? { question: true } : {}),
+    ...(merge
+      ? { mergeUrl: merge.url, mergeCommand: `gh pr merge ${merge.url} ${merge.args.join(' ')}` }
+      : {}),
     ...(ask.seemsDone && ask.closedAt === undefined ? { seemsDone: ask.seemsDone } : {}),
     ...(ask.closedAt !== undefined ? { closedAt: ask.closedAt } : {}),
     ...(ask.closedHow ? { closedHow: ask.closedHow } : {}),

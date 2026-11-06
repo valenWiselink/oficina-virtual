@@ -127,6 +127,7 @@ components:
         - $ref: '#/components/schemas/UpcomingMeetings'
         - $ref: '#/components/schemas/ArtifactsList'
         - $ref: '#/components/schemas/PendingAsksList'
+        - $ref: '#/components/schemas/PendingAskMerge'
         - $ref: '#/components/schemas/HooksStatus'
         - $ref: '#/components/schemas/HookHealth'
         - $ref: '#/components/schemas/HooksConsentRequest'
@@ -175,6 +176,8 @@ components:
         - $ref: '#/components/schemas/ClosePendingAsk'
         - $ref: '#/components/schemas/ReopenPendingAsk'
         - $ref: '#/components/schemas/KeepPendingAsk'
+        - $ref: '#/components/schemas/SnoozePendingAsk'
+        - $ref: '#/components/schemas/MergePendingAsk'
         - $ref: '#/components/schemas/MarkYourTurnsDone'
         - $ref: '#/components/schemas/LaunchAgent'
         - $ref: '#/components/schemas/FocusAgent'
@@ -1158,6 +1161,24 @@ components:
             just for you, a block of many hours): listed, never painted or announced.
           type: boolean
 
+    PendingAskMerge:
+      description: |
+        How a «Mergear» on a pending ask went, to the page that asked for it
+        (mergePendingAsk). On success the ask is closed already.
+      type: object
+      additionalProperties: false
+      required: [type, id, ok, message]
+      properties:
+        type:
+          const: pendingAskMerge
+        id:
+          type: string
+        ok:
+          type: boolean
+        message:
+          description: One line for the card, in Spanish.
+          type: string
+
     PendingAsksList:
       description: |
         What is pending of the user, whoever asked it. Sent on the connect
@@ -1203,6 +1224,31 @@ components:
           description: |
             On an open one, why it looks done though nobody closed it («Se
             mergeó el PR #12», «"icono" ya se cerró…»): one click closes it.
+          type: string
+        due:
+          description: On an open one, when it has to be done by (ms epoch).
+          type: number
+        notBefore:
+          description: |
+            On an open one, not before this (ms epoch): «a las 23», or put off
+            with «Más tarde». It stays out of «Ahora» until shortly before.
+          type: number
+        why:
+          description: On an open one, why it matters now (Jarvis said so).
+          type: string
+        ifNot:
+          description: On an open one, what happens if it is not done.
+          type: string
+        question:
+          description: On an open one, a question of Jarvis's to answer (sí / no).
+          type: boolean
+        mergeUrl:
+          description: |
+            On an open one, the open PR it asks to merge: the «Mergear» button
+            (mergePendingAsk) merges it.
+          type: string
+        mergeCommand:
+          description: What that button runs, to show before confirming.
           type: string
         closedAt:
           type: number
@@ -1896,6 +1942,34 @@ components:
       properties:
         type:
           const: keepPendingAsk
+        id:
+          type: string
+
+    SnoozePendingAsk:
+      description: The user's «Más tarde», the ask leaves «Ahora» for a while.
+      type: object
+      additionalProperties: false
+      required: [type, id, minutes]
+      properties:
+        type:
+          const: snoozePendingAsk
+        id:
+          type: string
+        minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+
+    MergePendingAsk:
+      description: |
+        «Mergear» on a pending ask: the office runs `gh pr merge` on its PR
+        (mergeUrl). The answer comes back as pendingAskMerge.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: mergePendingAsk
         id:
           type: string
 

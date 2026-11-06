@@ -131,7 +131,7 @@ export class PendingAsksWatch {
       if (message.state === 'merged' && typeof message.url === 'string') {
         this.asks.closeByPr(message.url, 'Se mergeó el PR');
       }
-      this.asks.settlePrs(prStateOf);
+      if (typeof message.url === 'string') this.asks.prChanged(message.url, prStateOf);
     } else if (message.type === 'agentIdentity' && typeof message.id === 'number') {
       const agent = this.store.get(message.id);
       if (agent) this.observe(message.id, agent);
