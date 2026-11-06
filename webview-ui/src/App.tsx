@@ -42,7 +42,6 @@ import { useJarvisSpeech } from './jarvis/useJarvisSpeech.js';
 import { useLaunchDialog } from './launch/LaunchDialog.js';
 import type { TakenLook } from './launch/launchMemory.js';
 import { UsageLimitsMeter } from './limits/UsageLimitsMeter.js';
-import { useMeetingsInset } from './meetings/meetingsStore.js';
 import { OfficeTopRow } from './meetings/OfficeTopRow.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
@@ -55,6 +54,9 @@ import { agentLabel } from './permissions/agentLabel.js';
 import { PermissionCards } from './permissions/PermissionCards.js';
 import { usePermissionCards } from './permissions/usePermissionCards.js';
 import { isBrowserRuntime } from './runtime.js';
+import { SideDock } from './sideDock/SideDock.js';
+import { toggledPanel } from './sideDock/sideDockRules.js';
+import { setSidePanel, useSidePanel } from './sideDock/sidePanelStore.js';
 import { transport } from './transport/index.js';
 import { UpdateCorner } from './updates/UpdateCorner.js';
 import type { AgentKind } from './views/agentViews.js';
@@ -73,6 +75,7 @@ import { useOfficeKeys } from './views/useOfficeKeys.js';
 import { useOfficeView } from './views/useOfficeView.js';
 import { useWorkspaceLayer } from './workspaces/useWorkspaceLayer.js';
 import { useWorkspaces } from './workspaces/workspaceStore.js';
+import { useWorkspacesOn } from './workspaces/workspaceTabsSetting.js';
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null };
@@ -138,10 +141,12 @@ function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
-  // Historial, Artifacts and Pendientes share a spot: one open at a time.
-  const [leftPanel, setLeftPanel] = useState<'historial' | 'artifacts' | 'pendientes' | null>(null);
+  // Historial, Artifacts and Pendientes share the left column's spot: one open
+  // at a time, and the one open comes back with the office.
+  const leftPanel = useSidePanel();
+  const setLeftPanel = setSidePanel;
   const toggleLeftPanel = (panel: NonNullable<typeof leftPanel>) =>
-    setLeftPanel((open) => (open === panel ? null : panel));
+    setSidePanel(toggledPanel(leftPanel, panel));
   const [historyTab, setHistoryTab] = useState<HistoryTab>('dia');
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
@@ -322,8 +327,10 @@ function App() {
     ],
   );
   // Workspaces: the views show one group of agents at a time (desktop).
+  // Off in Ajustes, the tabs go and everyone shows (the workspaces stay saved).
+  const workspacesOn = useWorkspacesOn();
   const workspaces = useWorkspaceLayer({
-    enabled: !isMobile && !isDebugMode,
+    enabled: !isMobile && !isDebugMode && workspacesOn,
     views: officeViews,
     terminalAgentIds,
     shownAgentId: terminalDrawer.shownAgentId,
@@ -415,7 +422,6 @@ function App() {
   }, []);
 
   const officeState = getOfficeState();
-  const meetingsInset = useMeetingsInset();
 
   if (!layoutReady) {
     return <LoadingScreen />;
@@ -459,6 +465,23 @@ function App() {
       />
     ) : null;
 
+  // What the left column holds besides the meetings (desktop only).
+  const closeSidePanel = () => setLeftPanel(null);
+  const sidePanel =
+    isMobile || isDebugMode ? null : leftPanel === 'historial' ? (
+      <HistoryPanel
+        tab={historyTab}
+        onTabChange={setHistoryTab}
+        views={officeViews}
+        onClose={closeSidePanel}
+        onOpenAgent={openAgent}
+      />
+    ) : leftPanel === 'artifacts' ? (
+      <ArtifactsPanel onClose={closeSidePanel} />
+    ) : leftPanel === 'pendientes' ? (
+      <PendingAsksPanel onClose={closeSidePanel} />
+    ) : null;
+
   // The office region is shared by both shells: desktop mounts it as the
   // flexing left half of the split view (the terminal panel docks beside it);
   // mobile mounts it as the first page of the sliding track.
@@ -468,67 +491,85 @@ function App() {
       className={`@container relative overflow-hidden flex flex-col ${isMobile ? 'w-full h-full' : 'flex-1 min-w-0 min-h-0'}`}
       style={officeRoom(stripOver)}
     >
-      {/* The office itself; Jarvis's bar sits under it, in flow. */}
-      <div className="relative flex-1 min-h-0">
-        {!isDebugMode ? (
-          // The two views replace the pixel office (decided 2026-10-19): the
-          // board for managing, the live graph for how agents work together.
-          <div className="absolute inset-0">
-            {view === 'tablero' ? (
-              <BoardView
-                views={workspaces.shown}
-                actions={agentActions}
-                space={workspaces.space}
-                leftInset={isMobile ? '' : meetingsInset}
-              />
-            ) : (
-              <GraphView views={workspaces.shown} actions={agentActions} under={stripOver} />
-            )}
-          </div>
-        ) : (
-          <DebugView
-            agents={agents}
-            selectedAgent={selectedAgent}
-            agentTools={agentTools}
-            agentStatuses={agentStatuses}
-            subagentTools={subagentTools}
-            officeState={officeState}
-            onSelectAgent={handleSelectAgent}
+      {/* The office itself: the left column (what you keep open: Pendientes,
+          Historial, Artifacts, the meetings) beside the stage, in flow, so it
+          never lies over the board, the tabs or Jarvis (asked 2026-11-06). */}
+      <div className="relative flex-1 min-h-0 flex">
+        {!isMobile && !isDebugMode && <SideDock panel={sidePanel} meetings />}
+        <div className="relative flex-1 min-w-0">
+          {!isDebugMode ? (
+            // The two views replace the pixel office (decided 2026-10-19): the
+            // board for managing, the live graph for how agents work together.
+            <div className="absolute inset-0">
+              {view === 'tablero' ? (
+                <BoardView
+                  views={workspaces.shown}
+                  actions={agentActions}
+                  space={workspaces.space}
+                />
+              ) : (
+                <GraphView views={workspaces.shown} actions={agentActions} under={stripOver} />
+              )}
+            </div>
+          ) : (
+            <DebugView
+              agents={agents}
+              selectedAgent={selectedAgent}
+              agentTools={agentTools}
+              agentStatuses={agentStatuses}
+              subagentTools={subagentTools}
+              officeState={officeState}
+              onSelectAgent={handleSelectAgent}
+            />
+          )}
+
+          {/* The tabs and the next meeting, in one row. Under what opens on
+              purpose (Jarvis): z-10 against their 20+. */}
+          {!isDebugMode && <OfficeTopRow bar={workspaces.bar} meetings={!isMobile} />}
+
+          {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
+          {!isMobile && <FocusBanner />}
+          {/* The desktop app's updates (nothing in a browser). */}
+          {!isMobile && <UpdateCorner views={agentViews} permissions={permissionCards.cards} />}
+
+          {officeReadOnly && (
+            <div className="absolute mobile-safe-top left-1/2 -translate-x-1/2 z-10 text-sm text-text-muted pointer-events-none select-none whitespace-nowrap">
+              Solo lectura
+            </div>
+          )}
+
+          {/* Mobile: Settings floats top-left (the layout editor stays desktop-
+              only — its tools are drag/hover-driven). */}
+          {isMobile && !isDebugMode && !officeReadOnly && (
+            <div className="absolute mobile-safe-top left-8 z-20 flex items-center gap-6">
+              <Button
+                size="sm"
+                variant={isSettingsOpen ? 'active' : 'default'}
+                className="border-border! shadow-soft"
+                onClick={() => setIsSettingsOpen((v) => !v)}
+              >
+                Ajustes
+              </Button>
+              <UsageLimitsMeter floating />
+            </div>
+          )}
+
+          <ConnectionIndicator />
+          {/* Claude Code's hooks failing to reach us: say so, offer to reinstall. */}
+          <HookHealthNotice
+            onReinstall={
+              officeReadOnly || !('claude' in hooksInstalled)
+                ? undefined
+                : () =>
+                    transport.send({ type: 'setHooksEnabled', providerId: 'claude', enabled: true })
+            }
           />
-        )}
-
-        {/* The tabs and the next meeting, in one row. Under what opens on purpose
-            (Historial, Jarvis): z-10 against their 20+. */}
-        {!isDebugMode && <OfficeTopRow bar={workspaces.bar} meetings={!isMobile} />}
-
-        {leftPanel === 'historial' && !isDebugMode && (
-          <HistoryPanel
-            tab={historyTab}
-            onTabChange={setHistoryTab}
-            views={officeViews}
-            onClose={() => setLeftPanel(null)}
-            onOpenAgent={openAgent}
-          />
-        )}
-        {leftPanel === 'artifacts' && !isMobile && !isDebugMode && (
-          <ArtifactsPanel onClose={() => setLeftPanel(null)} />
-        )}
-        {leftPanel === 'pendientes' && !isMobile && !isDebugMode && (
-          <PendingAsksPanel onClose={() => setLeftPanel(null)} />
-        )}
-        {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
-        {!isMobile && <FocusBanner />}
-        {/* The desktop app's updates (nothing in a browser). */}
-        {!isMobile && <UpdateCorner views={agentViews} permissions={permissionCards.cards} />}
-
-        {officeReadOnly && (
-          <div className="absolute mobile-safe-top left-1/2 -translate-x-1/2 z-10 text-sm text-text-muted pointer-events-none select-none whitespace-nowrap">
-            Solo lectura
-          </div>
-        )}
+          {jarvisBubble}
+        </div>
 
         {/* A read-only office gets no toolbar: launching, layout editing and every
-          setting would be refused by the server anyway. */}
+          setting would be refused by the server anyway. Bottom-left, under the
+          column (which ends above it), so its buttons stay put as panels open. */}
         {!isMobile && !officeReadOnly && (
           <BottomToolbar
             view={view}
@@ -550,33 +591,7 @@ function App() {
             onLaunch={requestLaunch}
           />
         )}
-
-        {/* Mobile: Settings floats top-left (the layout editor stays desktop-
-            only — its tools are drag/hover-driven). */}
-        {isMobile && !isDebugMode && !officeReadOnly && (
-          <div className="absolute mobile-safe-top left-8 z-20 flex items-center gap-6">
-            <Button
-              size="sm"
-              variant={isSettingsOpen ? 'active' : 'default'}
-              className="border-border! shadow-soft"
-              onClick={() => setIsSettingsOpen((v) => !v)}
-            >
-              Ajustes
-            </Button>
-            <UsageLimitsMeter floating />
-          </div>
-        )}
-
-        <ConnectionIndicator />
-        {/* Claude Code's hooks failing to reach us: say so, offer to reinstall. */}
-        <HookHealthNotice
-          onReinstall={
-            officeReadOnly || !('claude' in hooksInstalled)
-              ? undefined
-              : () =>
-                  transport.send({ type: 'setHooksEnabled', providerId: 'claude', enabled: true })
-          }
-        />
+        {/* Jarvis's visor dims the whole office, the column included. */}
         {!isDebugMode && (
           <JarvisVisor
             jarvis={jarvis}
@@ -585,7 +600,6 @@ function App() {
             onAnswer={() => setJarvisFocus((n) => n + 1)}
           />
         )}
-        {jarvisBubble}
       </div>
     </div>
   );

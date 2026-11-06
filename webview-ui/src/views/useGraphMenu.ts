@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { showChatOf } from '../chat/chatMode.js';
-import { useWorkspaces } from '../workspaces/workspaceStore.js';
+import { useOffersMove } from '../workspaces/workspaceTabsSetting.js';
 import type { AgentView } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
 import type { Pt } from './graphCamera.js';
@@ -81,7 +81,7 @@ function runItem(id: MenuItemId, menu: OpenMenu, d: MenuDeps): boolean {
 export function useGraphMenu(d: MenuDeps) {
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const hasPins = useHasPins();
-  const workspaces = useWorkspaces().workspaces.length > 0;
+  const workspaces = useOffersMove();
   const a = d.actions;
   const can: MenuAbilities = {
     answer: !!a.onAllow && !!a.onDeny,

@@ -13,7 +13,7 @@ import { ApproveButtons } from '../permissions/ApproveButtons.js';
 import { describeToolInput } from '../permissions/describeToolInput.js';
 import { useWritableAgents } from '../terminal/agentInput.js';
 import { MoveMenu } from '../workspaces/MoveMenu.js';
-import { useWorkspaces } from '../workspaces/workspaceStore.js';
+import { useOffersMove } from '../workspaces/workspaceTabsSetting.js';
 import { type AgentView, KIND_COLOR, waitedFor } from './agentViews.js';
 import {
   AgentNote,
@@ -86,7 +86,7 @@ export function BoardCard({
   const [editingNote, setEditingNote] = useState(false);
   const [outfitOpen, setOutfitOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
-  const hasWorkspaces = useWorkspaces().workspaces.length > 0;
+  const hasWorkspaces = useOffersMove();
   const replies = offersQuickReplies(view, writable);
   const compact = offersCompact(view, writable);
   const fidget = !calm && !cheering && isImpatient(view, now);

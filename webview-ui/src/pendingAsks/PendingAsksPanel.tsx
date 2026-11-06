@@ -75,7 +75,7 @@ export function PendingAsksPanel({ onClose }: { onClose: () => void }) {
   const closed = list?.closed ?? [];
   return (
     <aside
-      className="absolute top-14 left-14 bottom-80 z-20 w-[min(400px,calc(100%-28px))] soft-panel flex flex-col overflow-hidden"
+      className="flex-1 min-w-0 min-h-0 soft-panel flex flex-col overflow-hidden"
       aria-label="Lo pendiente de tu lado"
     >
       <header className="flex items-center gap-6 px-12 pt-10 pb-6">

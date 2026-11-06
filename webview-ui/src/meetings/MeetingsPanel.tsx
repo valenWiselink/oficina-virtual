@@ -55,25 +55,14 @@ function MeetingRow({ meeting, now }: { meeting: Meeting; now: number }) {
   );
 }
 
-/** The next meetings, under the chip at the far left of the office. */
-export function MeetingsPanel({
-  meetings,
-  peek,
-  onClose,
-}: {
-  meetings: Meeting[];
-  /** Open by hand over a narrow office: there it has no column of its own. */
-  peek: boolean;
-  onClose: () => void;
-}) {
+/** The next meetings, in the office's left column (SideDock sizes it). */
+export function MeetingsPanel({ meetings, onClose }: { meetings: Meeting[]; onClose: () => void }) {
   const now = useNow();
   const days = meetingDays(meetings, now);
   return (
     <aside
       aria-label="Próximas reuniones"
-      className={`absolute left-14 top-52 z-10 w-[260px] max-h-[calc(100%-174px)] flex-col overflow-hidden soft-panel ${
-        peek ? 'flex' : 'hidden @min-[760px]:flex'
-      }`}
+      className="w-full max-h-full min-h-0 flex flex-col overflow-hidden soft-panel"
     >
       <header className="flex items-center gap-5 pl-10 pr-4 py-5 border-b border-border">
         <span className="material-symbols-sharp text-sm text-accent" aria-hidden="true">
