@@ -7,7 +7,7 @@ import { PendingAsksPanel } from '../pendingAsks/PendingAsksPanel.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
 import { type AgentView, KIND_COLOR } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
-import { callsForYou, controlOrder, stripTitle } from './controlRules.js';
+import { callsForYou, controlOrder, stripTitle, toClose } from './controlRules.js';
 import { permissionSummary } from './permissionSummary.js';
 
 /** The agenda: the meetings list, or why there is none. */
@@ -61,30 +61,53 @@ function JarvisColumn({
 function AgentChip({ view, actions }: { view: AgentView; actions: BoardActions }) {
   const ask = permissionSummary(view);
   const urgent = callsForYou(view);
+  const spare = toClose(view);
+  const status = spare ? 'Para cerrar' : view.statusText;
   return (
     <li
       className={`min-w-0 flex flex-col gap-4 rounded-lg border px-8 py-5 ${
-        urgent ? 'border-status-permission bg-status-permission-bg' : 'border-border bg-bg-thumb'
+        urgent
+          ? 'border-status-permission bg-status-permission-bg'
+          : spare
+            ? 'border-dashed border-border bg-transparent opacity-80'
+            : 'border-border bg-bg-thumb'
       } ${ask ? 'max-w-[360px]' : 'max-w-[240px]'}`}
     >
-      <button
-        type="button"
-        onClick={() => actions.onSelect(view.id)}
-        title={`${view.name}: ${view.statusText}`}
-        className="min-w-0 flex items-center gap-6 border-0 bg-transparent p-0 cursor-pointer text-left"
-      >
-        <span
-          className="w-7 h-7 rounded-full shrink-0"
-          style={{ background: KIND_COLOR[view.kind] }}
-          aria-hidden="true"
-        />
-        <span className="text-xs font-semibold text-text truncate">{view.name}</span>
-        <span
-          className={`text-2xs truncate ${urgent ? 'text-status-permission-text' : 'text-text-muted'}`}
+      <span className="min-w-0 flex items-center gap-6">
+        <button
+          type="button"
+          onClick={() => actions.onSelect(view.id)}
+          title={
+            spare
+              ? `${view.name}: terminó, entregó y está quieto sin nada pendiente para vos. Jarvis ya sabe que puede cerrarlo.`
+              : `${view.name}: ${view.statusText}`
+          }
+          className="min-w-0 flex items-center gap-6 border-0 bg-transparent p-0 cursor-pointer text-left"
         >
-          {view.statusText}
-        </span>
-      </button>
+          <span
+            className="w-7 h-7 rounded-full shrink-0"
+            style={{ background: KIND_COLOR[view.kind] }}
+            aria-hidden="true"
+          />
+          <span className="text-xs font-semibold text-text truncate">{view.name}</span>
+          <span
+            className={`text-2xs truncate ${urgent ? 'text-status-permission-text' : 'text-text-muted'}`}
+          >
+            {status}
+          </span>
+        </button>
+        {spare && actions.onClose && (
+          <button
+            type="button"
+            onClick={() => actions.onClose?.(view.id)}
+            title={`Cerrar a ${view.name} (su conversación queda guardada)`}
+            aria-label={`Cerrar a ${view.name}`}
+            className="shrink-0 border-0 bg-transparent p-0 text-xs leading-none text-text-muted hover:text-text cursor-pointer"
+          >
+            ×
+          </button>
+        )}
+      </span>
       {ask && view.permission && actions.onAllow && actions.onDeny && (
         <>
           <span className="text-2xs text-text line-clamp-2" title={ask.detail ?? ask.title}>

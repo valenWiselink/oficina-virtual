@@ -41,3 +41,8 @@ export function closePendingAsk(id: string): void {
 export function reopenPendingAsk(id: string): void {
   transport.send({ type: 'reopenPendingAsk', id });
 }
+
+/** «Sigue pendiente»: it only looked done. */
+export function keepPendingAsk(id: string): void {
+  transport.send({ type: 'keepPendingAsk', id });
+}

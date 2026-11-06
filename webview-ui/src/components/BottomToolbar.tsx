@@ -4,6 +4,7 @@ import { useArtifacts } from '../artifacts/artifactsStore.js';
 import type { Directory } from '../hooks/useExtensionMessages.js';
 import { UsageLimitsMeter } from '../limits/UsageLimitsMeter.js';
 import { usePendingAsks } from '../pendingAsks/pendingAsksStore.js';
+import { splitOpen } from '../pendingAsks/pendingAsksView.js';
 import { isBrowserRuntime } from '../runtime.js';
 import type { OfficeView } from '../views/useOfficeView.js';
 import { LaunchDrawer } from './LaunchDrawer.js';
@@ -58,7 +59,7 @@ export function BottomToolbar({
 }: BottomToolbarProps) {
   const hasArtifacts = useArtifacts() !== null;
   const pendingAsks = usePendingAsks();
-  const pendingCount = pendingAsks?.open.length ?? 0;
+  const pendingCount = splitOpen(pendingAsks?.open ?? []).waiting.length;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [lastSignal, setLastSignal] = useState(launchSignal);
   // Adjusting state on a prop change during render (React's documented way).

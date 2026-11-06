@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 
 import type { AgentKind } from '../src/views/agentViews.ts';
-import { callsForYou, controlOrder, stripTitle } from '../src/views/controlRules.ts';
+import { callsForYou, controlOrder, stripTitle, toClose } from '../src/views/controlRules.ts';
 
 const agent = (name: string, kind: AgentKind, permission?: object) => ({ name, kind, permission });
 
@@ -51,5 +51,33 @@ describe('the Control strip', () => {
       stripTitle([agent('a', 'needs'), agent('b', 'work', {})]),
       'Agentes (2) · 2 te necesitan',
     );
+  });
+});
+
+describe('an agent the office finds no longer needed', () => {
+  const spare = (name: string) => ({ name, kind: 'done' as AgentKind, closeSuggestedAt: 1 });
+
+  it('goes last, after the idle, and says «para cerrar»', () => {
+    const order = controlOrder([spare('demo'), agent('quieto', 'idle'), agent('listo', 'done')]);
+    assert.deepEqual(
+      order.map((a) => a.name),
+      ['listo', 'quieto', 'demo'],
+    );
+    assert.equal(toClose(order[2]), true);
+    assert.equal(toClose(order[0]), false);
+  });
+
+  it('a held permission still comes first', () => {
+    const held = { ...spare('raro'), permission: {} };
+    assert.equal(toClose(held), false);
+    assert.equal(callsForYou(held), true);
+  });
+
+  it('is counted in the title', () => {
+    assert.equal(
+      stripTitle([agent('a', 'needs'), spare('b'), spare('c')]),
+      'Agentes (3) · 1 te necesita · 2 para cerrar',
+    );
+    assert.equal(stripTitle([spare('b')]), 'Agentes (1) · 1 para cerrar');
   });
 });

@@ -209,6 +209,9 @@ function observeLastReply(agent: AgentState, record: Record<string, unknown>): b
   const headBefore = replyHead(agent.lastReply);
   const extrasBefore = JSON.stringify([agent.replyLink, agent.replyChoices]);
   agent.lastReply = text;
+  agent.lastReplyId = typeof record.uuid === 'string' ? record.uuid : undefined;
+  const replyAt = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : NaN;
+  agent.lastReplyAt = Number.isNaN(replyAt) ? undefined : replyAt;
   const headChanged = replyHead(text) !== headBefore;
   const before = agent.yourTurn;
   rememberPrLinks((agent.prLinks ??= new Map()), text);
@@ -462,6 +465,7 @@ export function identityMessage(id: number, agent: AgentState): Record<string, u
     lastReplyHead: replyHead(agent.lastReply),
     saysAloud: spokenReply(agent) ? true : undefined,
     lastRecordAt: agent.lastRecordAt,
+    closeSuggestedAt: agent.closeSuggestedAt,
     backgroundTasks: runningBackground(agent).length,
     backgroundLabel: runningBackground(agent).at(-1)?.label,
   };

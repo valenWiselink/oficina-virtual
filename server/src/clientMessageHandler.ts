@@ -325,6 +325,11 @@ export function handleClientMessage(
       break;
     }
 
+    case 'keepPendingAsk': {
+      ctx.runtime?.pendingAsks?.keep(String(msg.id));
+      break;
+    }
+
     case 'markYourTurnsDone': {
       if (Array.isArray(msg.ids)) {
         ctx.runtime?.pendingAsks?.markTurnsDone(

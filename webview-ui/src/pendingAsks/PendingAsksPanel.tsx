@@ -3,8 +3,13 @@ import { useState } from 'react';
 import type { PendingAskEntry } from '../../../core/src/messages.js';
 import { Button } from '../components/ui/Button.js';
 import { useNow } from '../hooks/useNow.js';
-import { closePendingAsk, reopenPendingAsk, usePendingAsks } from './pendingAsksStore.js';
-import { askWhen } from './pendingAsksView.js';
+import {
+  closePendingAsk,
+  keepPendingAsk,
+  reopenPendingAsk,
+  usePendingAsks,
+} from './pendingAsksStore.js';
+import { askWhen, splitOpen } from './pendingAsksView.js';
 
 const COPIED_MS = 1500;
 
@@ -46,6 +51,28 @@ function OpenAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
   );
 }
 
+/** One that looks done (its PR merged, the agent waiting for it closed): one
+ *  click closes it, the other keeps it. */
+function SeemsDoneAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
+  return (
+    <li className="flex flex-col gap-3 px-6 py-6 border-b border-border last:border-b-0">
+      <span className="text-xs text-text-2 break-words">{ask.text}</span>
+      <span className="text-2xs text-text-muted">
+        {ask.from} · {askWhen(ask.at, now)} ·{' '}
+        <span className="text-status-success">{ask.seemsDone}</span>
+      </span>
+      <div className="flex flex-wrap items-center gap-6 pt-2">
+        <Button size="sm" onClick={() => closePendingAsk(ask.id)}>
+          Cerrar
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => keepPendingAsk(ask.id)}>
+          Sigue pendiente
+        </Button>
+      </div>
+    </li>
+  );
+}
+
 function ClosedAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
   return (
     <li className="flex items-start gap-8 px-6 py-5">
@@ -71,7 +98,7 @@ function ClosedAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
 export function PendingAsksPanel({ onClose }: { onClose?: () => void }) {
   const list = usePendingAsks();
   const now = useNow();
-  const open = list?.open ?? [];
+  const { waiting: open, seemsDone } = splitOpen(list?.open ?? []);
   const closed = list?.closed ?? [];
   return (
     <aside
@@ -100,6 +127,18 @@ export function PendingAsksPanel({ onClose }: { onClose?: () => void }) {
               <OpenAsk key={ask.id} ask={ask} now={now} />
             ))}
           </ul>
+        )}
+        {seemsDone.length > 0 && (
+          <section className="mt-8 px-6" aria-label="Parece resuelto">
+            <h3 className="m-0 pb-2 text-xs font-semibold text-text-muted">
+              Parece resuelto ({seemsDone.length})
+            </h3>
+            <ul className="m-0 p-0 list-none">
+              {seemsDone.map((ask) => (
+                <SeemsDoneAsk key={ask.id} ask={ask} now={now} />
+              ))}
+            </ul>
+          </section>
         )}
         {closed.length > 0 && (
           <details className="mt-8 px-6">

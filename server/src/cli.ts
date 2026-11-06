@@ -45,6 +45,7 @@ import { claudeProvider, copyHookScript, hookProviderById } from './providers/in
 import { watchAgentPrs } from './prWatchWiring.js';
 import { PixelAgentsServer } from './server.js';
 import { setSpanishTerminal } from './spinnerSettings.js';
+import { CloseWatch } from './supervisors/closeWatch.js';
 import { officeJarvisKeeper } from './supervisors/jarvisWiring.js';
 import { supervisors } from './supervisors/supervision.js';
 import { SupervisorRelay } from './supervisors/supervisorRelay.js';
@@ -295,6 +296,7 @@ async function main(): Promise<void> {
     for (const root of claudeProvider.getAllSessionRoots?.() ?? []) dayLog.readRecapsFrom(root);
     runtime.prWatch = watchAgentPrs(store, runtime.dayLog, {
       terminalOf: (id) => ptyManager.get(id),
+      more: () => runtime.pendingAsks?.prUrls() ?? [],
     });
     // The plan's usage limits, read from the office's status line (opt-in).
     runtime.usageLimits = new UsageLimitsWatch({
@@ -341,6 +343,16 @@ async function main(): Promise<void> {
     // Approval cards: PermissionRequest hooks wait here for a decision from the
     // office while the terminal prompt stays answerable in parallel.
     const { broker: permissionBroker, asks: terminalAsks } = createPermissionBroker(store);
+
+    // Agents that finished and nobody needs: marked «para cerrar», Jarvis told once.
+    const closeWatch = new CloseWatch({
+      store,
+      asks: () => runtime.pendingAsks,
+      permissionsOf: (agent) =>
+        permissionBroker.pending().filter((p) => p.sessionId === agent.sessionId).length,
+      tell: (id, line) => supervisorRelay.notify(id, line),
+    });
+    closeWatch.start();
 
     // Whether Claude Code's hooks reach us: the transcripts list every one of
     // ours it cut or saw fail; past a threshold the office says so.
@@ -574,6 +586,7 @@ async function main(): Promise<void> {
       runtime.artifacts?.stop();
       // Before the terminals go: going down is not each agent closing.
       runtime.pendingAsksWatch?.stop();
+      closeWatch.stop();
       runtime.resumableSessions?.freeze();
       terminalAsks.freeze();
       await ptyManager.disposeAll();

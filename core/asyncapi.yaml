@@ -174,6 +174,7 @@ components:
         - $ref: '#/components/schemas/ShutdownOffice'
         - $ref: '#/components/schemas/ClosePendingAsk'
         - $ref: '#/components/schemas/ReopenPendingAsk'
+        - $ref: '#/components/schemas/KeepPendingAsk'
         - $ref: '#/components/schemas/MarkYourTurnsDone'
         - $ref: '#/components/schemas/LaunchAgent'
         - $ref: '#/components/schemas/FocusAgent'
@@ -708,6 +709,12 @@ components:
         lastRecordAt:
           type: number
           description: Time of the session's latest record (ms since epoch).
+        closeSuggestedAt:
+          type: number
+          description: |
+            Since when it looks no longer needed (ms since epoch): it finished
+            its turn, has nothing left for the user and has been quiet a while.
+            Its supervisors were told once. Absent = keep it.
         backgroundTasks:
           type: integer
           description: |
@@ -1191,6 +1198,11 @@ components:
           type: number
         command:
           description: A command it brings, to copy.
+          type: string
+        seemsDone:
+          description: |
+            On an open one, why it looks done though nobody closed it («Se
+            mergeó el PR #12», «"icono" ya se cerró…»): one click closes it.
           type: string
         closedAt:
           type: number
@@ -1873,6 +1885,17 @@ components:
       properties:
         type:
           const: reopenPendingAsk
+        id:
+          type: string
+
+    KeepPendingAsk:
+      description: The user says an ask that looks done is still pending.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: keepPendingAsk
         id:
           type: string
 

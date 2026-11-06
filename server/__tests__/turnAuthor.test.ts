@@ -131,3 +131,28 @@ describe('a prompt Claude Code recorded as pasted', () => {
     expect(promptAuthor(pasted(NOTICE))).toBe('office');
   });
 });
+
+describe('when he last wrote to it, and when it last answered', () => {
+  const at = (iso: string) => ({ timestamp: iso });
+
+  it('his prompts and what he sends mid-turn are dated; notices are not', () => {
+    const agent = feed(
+      { ...prompt('¿Cómo va Coral?'), ...at('2026-11-06T17:00:00Z') },
+      { ...prompt(NOTICE), ...at('2026-11-06T17:05:00Z') },
+    );
+    expect(agent.valentinPromptAt).toBe(Date.parse('2026-11-06T17:00:00Z'));
+    observeIdentity(agent, { ...queued('y apurate'), ...at('2026-11-06T17:06:00Z') });
+    expect(agent.valentinPromptAt).toBe(Date.parse('2026-11-06T17:06:00Z'));
+  });
+
+  it('a second prompt of his is news for the office', () => {
+    const agent = feed({ ...prompt('uno'), ...at('2026-11-06T17:00:00Z') });
+    expect(observeIdentity(agent, { ...prompt('dos'), ...at('2026-11-06T17:01:00Z') })).toBe(true);
+  });
+
+  it('the answer keeps its record id and time', () => {
+    const agent = feed({ ...answer('¿Lo mergeo?'), uuid: 'r1', ...at('2026-11-06T17:02:00Z') });
+    expect(agent.lastReplyId).toBe('r1');
+    expect(agent.lastReplyAt).toBe(Date.parse('2026-11-06T17:02:00Z'));
+  });
+});

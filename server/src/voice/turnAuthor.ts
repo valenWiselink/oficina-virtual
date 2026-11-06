@@ -51,14 +51,25 @@ export function observeTurnAuthor(agent: AgentState, record: Record<string, unkn
     return false;
   }
   const before = agent.turnByValentin === true;
+  const promptBefore = agent.valentinPromptAt;
   if (record.type === 'user') {
     const who = authorOf(promptTexts(record));
     if (who) agent.turnByValentin = who === 'valentin';
+    if (who === 'valentin') noteValentin(agent, record);
   } else if (record.type === 'attachment') {
     const queued = record.attachment as Record<string, unknown> | undefined;
     if (queued?.type === 'queued_command' && typeof queued.prompt === 'string') {
-      if (promptAuthor(queued.prompt) === 'valentin') agent.turnByValentin = true;
+      if (promptAuthor(queued.prompt) === 'valentin') {
+        agent.turnByValentin = true;
+        noteValentin(agent, record);
+      }
     }
   }
-  return before !== (agent.turnByValentin === true);
+  return before !== (agent.turnByValentin === true) || promptBefore !== agent.valentinPromptAt;
+}
+
+/** When he wrote (the record's time): what Jarvis asked before is answered. */
+function noteValentin(agent: AgentState, record: Record<string, unknown>): void {
+  const at = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : NaN;
+  if (!Number.isNaN(at)) agent.valentinPromptAt = Math.max(agent.valentinPromptAt ?? 0, at);
 }

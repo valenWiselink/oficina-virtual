@@ -21,6 +21,16 @@ export function askWhen(at: number, now: number): string {
     .replace(/[.,]/g, '');
 }
 
+/** What still waits on you, and what only looks done (shown apart, not counted). */
+export function splitOpen<T extends { seemsDone?: string }>(
+  open: readonly T[],
+): { waiting: T[]; seemsDone: T[] } {
+  return {
+    waiting: open.filter((a) => !a.seemsDone),
+    seemsDone: open.filter((a) => !!a.seemsDone),
+  };
+}
+
 export function readPendingAsksMessage(msg: Record<string, unknown>): PendingAsksList | null {
   if (msg.type !== 'pendingAsks' || !Array.isArray(msg.open) || !Array.isArray(msg.closed)) {
     return null;

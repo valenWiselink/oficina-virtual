@@ -19,6 +19,7 @@ import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
 import { listDirectories, normalizeDirectoryPath, validateDirectoryPath } from '../directories.js';
 import { collectDirectorySuggestions } from '../directorySuggestions.js';
 import { hostDirectory } from '../hostDirectory.js';
+import { prUrlsOf } from '../pendingAsks/pendingAsks.js';
 import type { PendingPermission } from '../permissionBroker.js';
 import { claudeProvider } from '../providers/index.js';
 import { closeOfficeAgent } from '../terminal/closeAgent.js';
@@ -104,16 +105,36 @@ export class JarvisTools extends SupervisorTools {
     const open = asks.open();
     if (open.length === 0) return 'Valentín no tiene nada pendiente en la lista.';
     return open
-      .map((a) => `- ${a.id} · de ${a.from} · ${new Date(a.at).toLocaleString('es-AR')}: ${a.text}`)
+      .map((a) => {
+        const notes = [
+          a.question ? 'una pregunta tuya sin «Te toca:» que anotó la oficina' : undefined,
+          a.seemsDone ? `parece resuelto: ${a.seemsDone}; comprobalo y cerralo` : undefined,
+        ].filter(Boolean);
+        const note = notes.length > 0 ? ` (${notes.join('; ')})` : '';
+        return `- ${a.id} · de ${a.from} · ${new Date(a.at).toLocaleString('es-AR')}: ${a.text}${note}`;
+      })
       .join('\n');
   }
 
   dejarPendiente(texto: string, comando?: string): string {
     const asks = this.jarvis.pendingAsks?.();
     if (!asks) return 'Esta oficina no lleva la lista de pendientes.';
-    const ask = asks.add({ from: JARVIS_NAME, text: texto, command: comando?.trim() || undefined });
+    const noted = asks.open().filter((a) => a.question);
+    const ask = asks.add({
+      from: JARVIS_NAME,
+      text: texto,
+      command: comando?.trim() || undefined,
+      prUrls: prUrlsOf(texto),
+    });
     if (!ask) return 'Falta el texto: qué tiene que hacer Valentín.';
-    return `Quedó en sus Pendientes como ${ask.id}, sin interrumpirlo. Cerralo con cerrar_pendiente cuando compruebes que se hizo.`;
+    const twin = noted
+      .filter((a) => a.id !== ask.id)
+      .map((a) => `${a.id} («${a.text}»)`)
+      .join(', ');
+    const hint = twin
+      ? ` La oficina ya le había anotado una pregunta tuya: ${twin}. Si es lo mismo, cerrala con cerrar_pendiente.`
+      : '';
+    return `Quedó en sus Pendientes como ${ask.id}, sin interrumpirlo. Cerralo con cerrar_pendiente cuando compruebes que se hizo.${hint}`;
   }
 
   cerrarPendiente(id: string, motivo?: string): string {

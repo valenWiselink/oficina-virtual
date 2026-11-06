@@ -184,6 +184,11 @@ export class SupervisorRelay {
     );
   }
 
+  /** Office news about one agent for its supervisors (closeWatch.ts). */
+  notify(id: number, line: (name: string) => string): void {
+    this.tell(id, line);
+  }
+
   /** Queue a line for every supervisor of agent `id`. */
   private tell(id: number, line: (name: string) => string): void {
     const agent = this.deps.store.get(id);

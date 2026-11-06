@@ -31,6 +31,13 @@ export interface StoredAsk {
   closedHow?: string;
   /** Brought back by hand: what a browser remembers from before must not close it. */
   reopened?: boolean;
+  /** A question Jarvis left without «Te toca:» (openQuestion.ts): his next
+   *  words to Jarvis answer it. */
+  question?: boolean;
+  /** Every PR it names: once they are all merged, it probably is done. */
+  prUrls?: string[];
+  /** Why it looks done though nobody closed it («Se mergeó el PR #12»). */
+  seemsDone?: string;
 }
 
 interface Saved {
@@ -48,6 +55,9 @@ export interface NewAsk {
   command?: string;
   prUrl?: string;
   permission?: string;
+  question?: boolean;
+  prUrls?: string[];
+  seemsDone?: string;
 }
 
 interface PendingAsksDeps {
@@ -94,6 +104,20 @@ function sharePr(a: string, b: string): boolean {
   );
 }
 
+/** «#12» for a PR URL. */
+const prLabel = (url: string): string => `#${url.split('/').pop() ?? ''}`;
+
+/** The PR URLs an ask names: its own links, and «#12» when the agent's
+ *  answers linked that number before (`known`, mergedAsk.ts). */
+export function prUrlsOf(text: string, known?: ReadonlyMap<number, string>): string[] {
+  const urls = [...text.matchAll(PR_URL)].map((m) => m[0]);
+  for (const m of text.replace(PR_URL, ' ').matchAll(PR_NUMBER)) {
+    const url = known?.get(Number(m[1]));
+    if (url) urls.push(url);
+  }
+  return [...new Set(urls)];
+}
+
 const folded = (text: string): string => text.trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
@@ -125,9 +149,12 @@ export class PendingAsks {
     return { type: 'pendingAsks', open: this.open().map(toEntry), closed: closed.map(toEntry) };
   }
 
-  /** Still pending, oldest first: what has waited longest stays on top. */
+  /** Still pending, oldest first: what has waited longest stays on top —
+   *  below it what only looks done, waiting for a last look. */
   open(): StoredAsk[] {
-    return this.asks.filter((a) => a.closedAt === undefined).sort((a, b) => a.at - b.at);
+    return this.asks
+      .filter((a) => a.closedAt === undefined)
+      .sort((a, b) => Number(!!a.seemsDone) - Number(!!b.seemsDone) || a.at - b.at);
   }
 
   hasSeen(turnId: string): boolean {
@@ -154,6 +181,9 @@ export class PendingAsks {
       ...(ask.command ? { command: ask.command } : {}),
       ...(ask.prUrl ? { prUrl: ask.prUrl } : {}),
       ...(ask.permission ? { permission: ask.permission } : {}),
+      ...(ask.question ? { question: true } : {}),
+      ...(ask.prUrls?.length ? { prUrls: [...new Set(ask.prUrls)] } : {}),
+      ...(ask.seemsDone ? { seemsDone: ask.seemsDone } : {}),
     };
     for (const older of this.open()) {
       if (sharePr(older.text, text)) this.close(older, `${REPLACED_BY} ${stored.id}`);
@@ -217,6 +247,53 @@ export class PendingAsks {
 
   closeByPermission(keep: string | undefined, how: string): void {
     this.closeWhere((a) => !!a.permission && a.permission !== keep, how);
+  }
+
+  /** He wrote to Jarvis at `at`: the questions it left before that are answered. */
+  closeAnswered(at: number): void {
+    this.closeWhere((a) => !!a.question && a.at < at, 'Le contestaste a Jarvis');
+  }
+
+  /** Whether `from` left one at or after `since` (open or not). */
+  addedSince(from: string, since: number): boolean {
+    return this.asks.some((a) => a.from === from && a.at >= since);
+  }
+
+  /** The PRs the open ones name, for the office to watch. */
+  prUrls(): string[] {
+    const urls = this.open().flatMap((a) => [...(a.prUrls ?? []), ...(a.prUrl ? [a.prUrl] : [])]);
+    return [...new Set(urls)];
+  }
+
+  /**
+   * A PR settled: an open ask whose PRs are now all settled, one of them
+   * merged, looks done. Only looks: «mergear #12 y publicar» has a second
+   * half, so it waits for «Hecho» (or Jarvis) instead of closing by itself.
+   */
+  settlePrs(stateOf: (url: string) => string | undefined): void {
+    let changed = false;
+    for (const ask of this.open()) {
+      const urls = ask.prUrls ?? [];
+      if (ask.seemsDone || urls.length === 0) continue;
+      const states = urls.map(stateOf);
+      if (!states.every((s) => s === 'merged' || s === 'closed')) continue;
+      const merged = urls.filter((_, i) => states[i] === 'merged').map(prLabel);
+      if (merged.length === 0) continue;
+      ask.seemsDone =
+        merged.length === 1
+          ? `Se mergeó el PR ${merged[0]}`
+          : `Se mergearon los PRs ${merged.join(', ')}`;
+      changed = true;
+    }
+    if (changed) this.changed();
+  }
+
+  /** «Sigue pendiente»: it did not look done to him after all. */
+  keep(id: string): void {
+    const ask = this.find(id);
+    if (!ask || ask.closedAt !== undefined || !ask.seemsDone) return;
+    delete ask.seemsDone;
+    this.changed();
   }
 
   private closeWhere(matches: (ask: StoredAsk) => boolean, how: string): void {
@@ -286,6 +363,7 @@ function toEntry(ask: StoredAsk): PendingAskEntry {
     text: ask.text,
     at: ask.at,
     ...(ask.command ? { command: ask.command } : {}),
+    ...(ask.seemsDone && ask.closedAt === undefined ? { seemsDone: ask.seemsDone } : {}),
     ...(ask.closedAt !== undefined ? { closedAt: ask.closedAt } : {}),
     ...(ask.closedHow ? { closedHow: ask.closedHow } : {}),
     ...(ask.closedAt !== undefined && ask.turnIds.length > 0 ? { turnIds: ask.turnIds } : {}),

@@ -20,9 +20,17 @@ interface Rankable {
   kind: AgentKind;
   /** A held permission: it needs you, whatever its kind says. */
   permission?: unknown;
+  /** Finished and no longer needed («para cerrar»): last of all. */
+  closeSuggestedAt?: number;
 }
 
-const rankOf = (v: Rankable) => (v.permission ? 0 : RANK[v.kind]);
+const TO_CLOSE = 4;
+
+const rankOf = (v: Rankable) =>
+  v.permission ? 0 : v.closeSuggestedAt !== undefined ? TO_CLOSE : RANK[v.kind];
+
+/** Whether the office finds it no longer needed. */
+export const toClose = (v: Rankable): boolean => rankOf(v) === TO_CLOSE;
 
 /** The agents in the strip's order; within a rank, as the office lists them. */
 export function controlOrder<T extends Rankable>(views: readonly T[]): T[] {
@@ -39,6 +47,12 @@ export const callsForYou = (v: Rankable): boolean => rankOf(v) === 0;
 export function stripTitle(views: readonly Rankable[]): string {
   if (views.length === 0) return 'Agentes';
   const needs = views.filter(callsForYou).length;
-  const all = `Agentes (${views.length})`;
-  return needs === 0 ? all : `${all} · ${needs} ${needs === 1 ? 'te necesita' : 'te necesitan'}`;
+  const spare = views.filter(toClose).length;
+  return [
+    `Agentes (${views.length})`,
+    needs > 0 ? `${needs} ${needs === 1 ? 'te necesita' : 'te necesitan'}` : undefined,
+    spare > 0 ? `${spare} para cerrar` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }

@@ -130,6 +130,13 @@ export interface AgentState {
   tasks?: AgentTask[];
   /** Latest text answer of the main conversation (for handing it to another agent). */
   lastReply?: string;
+  /** The record that answer came in (its uuid) and when (ms). */
+  lastReplyId?: string;
+  lastReplyAt?: number;
+  /** When Valentín last wrote or spoke to it (ms, from the record). */
+  valentinPromptAt?: number;
+  /** Since when it looks finished and no longer needed (closeWatch.ts). */
+  closeSuggestedAt?: number;
   /** The current (or last) turn answers Valentín: he started it or wrote in
    *  it, not an «[Oficina]» notice (voice/turnAuthor.ts). */
   turnByValentin?: boolean;
