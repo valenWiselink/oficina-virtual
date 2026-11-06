@@ -56,30 +56,44 @@ function MeetingRow({ meeting, now }: { meeting: Meeting; now: number }) {
 }
 
 /** The next meetings, in the office's left column (SideDock sizes it). */
-export function MeetingsPanel({ meetings, onClose }: { meetings: Meeting[]; onClose: () => void }) {
+export function MeetingsPanel({
+  meetings,
+  onClose,
+  title = 'Próximas reuniones',
+  fill = false,
+}: {
+  meetings: Meeting[];
+  /** Absent where the list is part of the view (Control): nothing to close. */
+  onClose?: () => void;
+  title?: string;
+  /** As tall as its place (Control), not only as its rows. */
+  fill?: boolean;
+}) {
   const now = useNow();
   const days = meetingDays(meetings, now);
   return (
     <aside
       aria-label="Próximas reuniones"
-      className="w-full max-h-full min-h-0 flex flex-col overflow-hidden soft-panel"
+      className={`w-full ${fill ? 'h-full' : 'max-h-full'} min-h-0 flex flex-col overflow-hidden soft-panel`}
     >
       <header className="flex items-center gap-5 pl-10 pr-4 py-5 border-b border-border">
         <span className="material-symbols-sharp text-sm text-accent" aria-hidden="true">
           event
         </span>
-        <h2 className="m-0 flex-1 text-sm font-semibold text-text">Próximas reuniones</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar reuniones"
-          title="Cerrar"
-          className="w-24 h-24 flex items-center justify-center rounded-md border-0 bg-transparent cursor-pointer text-text-muted hover:bg-btn-hover hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          <span className="material-symbols-sharp text-base" aria-hidden="true">
-            chevron_left
-          </span>
-        </button>
+        <h2 className="m-0 flex-1 text-sm font-semibold text-text">{title}</h2>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar reuniones"
+            title="Cerrar"
+            className="w-24 h-24 flex items-center justify-center rounded-md border-0 bg-transparent cursor-pointer text-text-muted hover:bg-btn-hover hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <span className="material-symbols-sharp text-base" aria-hidden="true">
+              chevron_left
+            </span>
+          </button>
+        )}
       </header>
       {days.length === 0 ? (
         <p className="m-0 px-10 py-12 text-sm text-text-muted">

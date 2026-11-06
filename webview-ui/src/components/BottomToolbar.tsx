@@ -10,7 +10,7 @@ import { LaunchDrawer } from './LaunchDrawer.js';
 import { Button } from './ui/Button.js';
 
 interface BottomToolbarProps {
-  /** Which view fills the office: the board or the live graph. */
+  /** Which view fills the office: the board, the live graph or Control. */
   view: OfficeView;
   onViewChange: (view: OfficeView) => void;
   isSettingsOpen: boolean;
@@ -156,6 +156,7 @@ export function BottomToolbar({
           [
             ['tablero', 'view_kanban', 'Tablero', 'Agentes por estado'],
             ['grafo', 'hub', 'Grafo', 'Cómo trabajan entre ellos'],
+            ['control', 'dashboard', 'Control', 'Pendientes, agenda y Jarvis; los agentes, abajo'],
           ] as const
         ).map(([id, icon, label, title]) => (
           <button
@@ -196,7 +197,8 @@ export function BottomToolbar({
           <span className="hidden @min-[760px]:inline">Artifacts</span>
         </Button>
       )}
-      {pendingAsks && (
+      {/* Control already shows them, large: no button for the column. */}
+      {pendingAsks && view !== 'control' && (
         <Button
           variant={isPendingAsksOpen ? 'active' : 'ghost'}
           onClick={onTogglePendingAsks}

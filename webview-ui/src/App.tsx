@@ -63,6 +63,7 @@ import type { AgentKind } from './views/agentViews.js';
 import type { BoardActions } from './views/BoardCard.js';
 import { BoardView } from './views/BoardView.js';
 import { requestCelebration } from './views/celebrate.js';
+import { ControlView } from './views/ControlView.js';
 import { DayKeeper } from './views/DayKeeper.js';
 import { revealOnGraph } from './views/graphReveal.js';
 import { GraphView } from './views/GraphView.js';
@@ -164,6 +165,8 @@ function App() {
   // full-screen pages with the cards in a bottom bar. Desktop keeps the
   // right-docked drawer.
   const isMobile = useIsMobile();
+  // Control is a desktop layout: a phone shows the board instead.
+  const shownView = isMobile && view === 'control' ? 'tablero' : view;
   // Software keyboard: whether it is up (the key bar shows), and the height
   // to clamp the shell to so the terminal shrinks (and the PTY resizes)
   // instead of hiding its input line under the keys (iOS only — Android
@@ -455,8 +458,9 @@ function App() {
 
   // Jarvis floats in the office's bottom-right corner (asked 2026-10-28: the
   // band across the foot took room from the office); its chat opens above it.
+  // Control keeps its chat fixed in a column of its own: no bubble there.
   const jarvisBubble =
-    !isDebugMode && (terminalAvailable || jarvis) ? (
+    !isDebugMode && shownView !== 'control' && (terminalAvailable || jarvis) ? (
       <JarvisBubble
         jarvis={jarvis}
         actions={agentActions}
@@ -478,7 +482,8 @@ function App() {
       />
     ) : leftPanel === 'artifacts' ? (
       <ArtifactsPanel onClose={closeSidePanel} />
-    ) : leftPanel === 'pendientes' ? (
+    ) : leftPanel === 'pendientes' && shownView !== 'control' ? (
+      // Control already shows them, large.
       <PendingAsksPanel onClose={closeSidePanel} />
     ) : null;
 
@@ -495,17 +500,28 @@ function App() {
           Historial, Artifacts, the meetings) beside the stage, in flow, so it
           never lies over the board, the tabs or Jarvis (asked 2026-11-06). */}
       <div className="relative flex-1 min-h-0 flex">
-        {!isMobile && !isDebugMode && <SideDock panel={sidePanel} meetings />}
+        {!isMobile && !isDebugMode && (
+          <SideDock panel={sidePanel} meetings={shownView !== 'control'} />
+        )}
         <div className="relative flex-1 min-w-0">
           {!isDebugMode ? (
-            // The two views replace the pixel office (decided 2026-10-19): the
-            // board for managing, the live graph for how agents work together.
+            // The views replace the pixel office (decided 2026-10-19): the
+            // board for managing, the live graph for how agents work together,
+            // and Control for what you have to do (2026-11-06).
             <div className="absolute inset-0">
-              {view === 'tablero' ? (
+              {shownView === 'tablero' ? (
                 <BoardView
                   views={workspaces.shown}
                   actions={agentActions}
                   space={workspaces.space}
+                />
+              ) : shownView === 'control' ? (
+                <ControlView
+                  views={workspaces.shown}
+                  actions={agentActions}
+                  jarvis={jarvis}
+                  onSummonJarvis={summonJarvis}
+                  jarvisFocus={jarvisFocus}
                 />
               ) : (
                 <GraphView views={workspaces.shown} actions={agentActions} under={stripOver} />
@@ -723,7 +739,7 @@ function App() {
       )}
       {/* The board answers permissions inside each card; the graph keeps the
           floating cards so a request is never out of reach. */}
-      {view !== 'tablero' && (
+      {shownView === 'grafo' && (
         <PermissionCards
           // Jarvis asks in its visor and its bar.
           cards={permissionCards.cards.filter((c) => c.id === undefined || c.id !== jarvisId)}

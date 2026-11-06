@@ -10,7 +10,6 @@ import { useOutfit } from '../identity/clawdOutfit.js';
 import { useTellMerged } from '../identity/mergeToldStore.js';
 import { seenAt } from '../identity/seenStore.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
-import { describeToolInput } from '../permissions/describeToolInput.js';
 import { useWritableAgents } from '../terminal/agentInput.js';
 import { MoveMenu } from '../workspaces/MoveMenu.js';
 import { useOffersMove } from '../workspaces/workspaceTabsSetting.js';
@@ -29,6 +28,7 @@ import type { CardMotion } from './cardMotion.js';
 import { isImpatient, offersCompact, offersQuickReplies } from './cardRules.js';
 import { useCheer } from './celebrate.js';
 import { clawdColor } from './clawdColor.js';
+import { permissionSummary } from './permissionSummary.js';
 import { isUnread } from './unread.js';
 import { effortLabel, modelShortName, usageDetail } from './usageText.js';
 
@@ -52,14 +52,6 @@ export interface BoardActions {
   /** Show its terminal (not its chat): where a permission the office no
    *  longer holds is answered. */
   onOpenTerminal?: (id: number) => void;
-}
-
-/** First line of what a held permission would run, for the inline request. */
-function permissionSummary(view: AgentView): { title: string; detail?: string } | null {
-  const p = view.permission;
-  if (!p) return null;
-  const d = describeToolInput(p.toolName, p.toolInput);
-  return { title: d.title, detail: d.sections.find((s) => s.code)?.text };
 }
 
 /** One agent on the board: who it is, what it does, and what you can do with it.
