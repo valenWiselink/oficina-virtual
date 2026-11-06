@@ -1,14 +1,10 @@
 import { type RefObject, useEffect, useRef, useState } from 'react';
 
-import { ChatPane } from '../chat/ChatPane.js';
 import { Button } from '../components/ui/Button.js';
-import { sendToAgent } from '../terminal/agentInput.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
-import { clock, MAX_DICTATION_MS } from './dictation.js';
-import { heardNoteMs, heardNoteOf, useFleetingNote } from './heardNote.js';
-import { type EarsState, useJarvisEars } from './jarvisEars.js';
-import { dismissJarvisNotice, useJarvisNotice } from './jarvisNotice.js';
+import { HeardNote, JarvisChat, JarvisStatusLines } from './JarvisChat.js';
+import { useJarvisChatState } from './jarvisChatState.js';
 import {
   fitPanel,
   PANEL_MIN_CSS,
@@ -20,10 +16,7 @@ import {
   useJarvisPanelSize,
 } from './jarvisPanelSize.js';
 import { JarvisRing } from './JarvisRing.js';
-import { bubbleTitle, jarvisLine, jarvisMood } from './jarvisRules.js';
-import { requestJarvisVoice, setJarvisMuted, useJarvisVoice } from './jarvisVoice.js';
-import { talkToJarvis } from './talk.js';
-
+import { bubbleTitle } from './jarvisRules.js';
 /** Whether its panel was open, for this tab (a reload keeps it). */
 const OPEN_KEY = 'jarvis:abierto';
 
@@ -41,57 +34,6 @@ function keepOpen(open: boolean): void {
   } catch {
     // Storage blocked: it just opens closed next time.
   }
-}
-
-/** How long it has been listening, «0:42». */
-function ListenClock({ since }: { since: number | undefined }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(timer);
-  }, []);
-  return <span className="tabular-nums">{clock(Math.max(0, now - (since ?? now)))}</span>;
-}
-
-/** What its ears are doing, in words (undefined: nothing to say). What it
- *  heard is not here: that is a fleeting note (heardNote.ts). */
-function earsLineOf(ears: EarsState): string | undefined {
-  if (ears.phase === 'listening')
-    return `Te escucho, tomate tu tiempo: no corto por silencio. Cuando termines, apretá de nuevo el micrófono o Alt+J y se lo paso (se corta solo a los ${clock(MAX_DICTATION_MS)}).`;
-  if (ears.phase === 'transcribing') return 'Escribiendo lo que dijiste…';
-  if (ears.phase === 'preparing')
-    return `Preparando el oído de Jarvis${ears.percent !== undefined ? ` (${ears.percent} %)` : ''}: la primera vez baja el modelo de voz.`;
-  if (ears.error) return ears.error;
-  return undefined;
-}
-
-/** What it heard, for a moment: hovering holds it, a tap closes it. */
-function HeardNote({
-  text,
-  note,
-  boxed,
-}: {
-  text: string;
-  note: ReturnType<typeof useFleetingNote>;
-  /** Beside the bubble (a box of its own) or a line in the chat's status row. */
-  boxed: boolean;
-}) {
-  return (
-    <div className="anim-float-up" role="status">
-      <button
-        type="button"
-        title="Tocá para cerrarlo"
-        onClick={note.dismiss}
-        onMouseEnter={() => note.hold(true)}
-        onMouseLeave={() => note.hold(false)}
-        className={`w-full text-left border-0 cursor-pointer transition-opacity duration-500 motion-reduce:transition-none ${
-          note.phase === 'fading' ? 'opacity-0' : 'opacity-100'
-        } ${boxed ? 'soft-panel px-12 py-8' : 'bg-transparent p-0'}`}
-      >
-        <span className="block text-2xs text-text-2 line-clamp-3">{text}</span>
-      </button>
-    </div>
-  );
 }
 
 /** The height of the office the panel floats in. */
@@ -154,42 +96,6 @@ function PanelEdge({
   );
 }
 
-/** Talk to it: press to start, again to finish and send (also Alt+J). */
-function MicButton({ jarvisId, ears }: { jarvisId: number; ears: EarsState }) {
-  if (ears.phase === 'listening') {
-    return (
-      <Button
-        size="md"
-        aria-pressed
-        aria-label="Escuchando: terminar y mandárselo a Jarvis (Alt+J)"
-        title="Terminar y mandar (Alt+J)"
-        className="h-40 shrink-0 flex items-center gap-6 bg-danger! border-danger! text-white! hover:opacity-90"
-        onClick={() => talkToJarvis(jarvisId)}
-      >
-        <span className="w-8 h-8 rounded-full bg-white soft-pulse" aria-hidden="true" />
-        <ListenClock since={ears.since} />
-        <span className="material-symbols-sharp text-lg" aria-hidden="true">
-          stop
-        </span>
-      </Button>
-    );
-  }
-  return (
-    <Button
-      size="icon_lg"
-      className="shrink-0"
-      aria-label="Hablarle a Jarvis (Alt+J)"
-      title="Hablarle (Alt+J): apretá para empezar y otra vez para terminar"
-      disabled={ears.phase === 'transcribing' || ears.phase === 'preparing'}
-      onClick={() => talkToJarvis(jarvisId)}
-    >
-      <span className="material-symbols-sharp text-lg" aria-hidden="true">
-        mic
-      </span>
-    </Button>
-  );
-}
-
 /**
  * Jarvis as a floating assistant in the office's corner (asked 2026-10-28,
  * after the Wiselink webapp's help bubble): a round button that opens its
@@ -223,12 +129,8 @@ export function JarvisBubble({
   const bubble = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
   const [size, setSize] = useJarvisPanelSize();
-  const voice = useJarvisVoice();
-  const ears = useJarvisEars();
-  const voiceNotice = useJarvisNotice();
-  // Which engine speaks is no news while you muted it (it shows if you unmute).
-  const notice = voice.muted ? undefined : voiceNotice;
-  useEffect(() => requestJarvisVoice(), []);
+  const state = useJarvisChatState(jarvis, open);
+  const { voice, notice, earsLine, note, noteText, mood, listening, needsYou } = state;
 
   useEffect(() => {
     if (!open) {
@@ -246,42 +148,10 @@ export function JarvisBubble({
     requestAnimationFrame(() => setComposerFocus((n) => n + 1));
   }, [focusSignal]);
 
-  const mood = jarvis ? (voice.speaking ? 'busy' : jarvisMood(jarvis)) : 'away';
-  const listening = ears.phase === 'listening';
-  const needsYou = !!jarvis && (jarvis.kind === 'needs' || !!jarvis.permission);
-  const earsLine = earsLineOf(ears);
-  const note = useFleetingNote(
-    ears.heard ? ears.heardAt : undefined,
-    heardNoteMs(ears.heard ?? ''),
-  );
-  const noteText = note.phase === 'gone' ? undefined : heardNoteOf(ears, open);
-  const speaks = !!voice.status && voice.status.engine !== 'off';
-  const turnId = jarvis?.kind === 'needs' ? jarvis.yourTurnId : undefined;
   const close = () => {
     setOpen(false);
     bubble.current?.focus();
   };
-
-  const statusLines = (
-    <>
-      {notice && (
-        <div className="flex items-start gap-8" role="status">
-          <p className="m-0 flex-1 min-w-0 text-2xs text-warning">{notice}</p>
-          <Button size="sm" variant="ghost" onClick={dismissJarvisNotice}>
-            Entendido
-          </Button>
-        </div>
-      )}
-      {earsLine && (
-        <p
-          className={`m-0 text-2xs ${ears.error && ears.phase === 'idle' ? 'text-danger' : 'text-text-2'}`}
-          role="status"
-        >
-          {earsLine}
-        </p>
-      )}
-    </>
-  );
 
   return (
     <>
@@ -298,119 +168,44 @@ export function JarvisBubble({
           }}
         >
           <PanelEdge panel={panel} size={size} onSize={setSize} />
-          <header className="shrink-0 flex items-start gap-10 px-14 py-10 border-b border-border bg-bg-dark">
-            <JarvisRing mood={mood} size={30} />
-            <div className="flex-1 min-w-0">
-              <div className="text-2xs font-bold tracking-[0.14em] text-jarvis">JARVIS</div>
-              <p
-                className="m-0 text-xs leading-snug text-text-2 line-clamp-2"
-                title={jarvis ? jarvisLine(jarvis) : undefined}
-              >
-                {jarvis ? jarvisLine(jarvis) : 'No está en la oficina.'}
-              </p>
-            </div>
-            <div className="shrink-0 flex items-center gap-2 -mr-6">
-              {jarvis && speaks && (
+          <JarvisChat
+            jarvis={jarvis}
+            actions={actions}
+            state={state}
+            onSummon={onSummon}
+            composerFocus={composerFocus}
+            headerButtons={
+              <>
                 <Button
                   size="icon"
                   className="w-32! h-32!"
                   variant="ghost"
-                  aria-pressed={voice.muted}
-                  aria-label={voice.muted ? 'Que Jarvis hable' : 'Silenciar a Jarvis'}
-                  title={voice.muted ? 'Que hable' : 'Silenciarlo'}
-                  onClick={() => setJarvisMuted(!voice.muted)}
+                  aria-pressed={size.max}
+                  aria-label={
+                    size.max ? 'Volver al alto de antes' : 'Agrandar el chat hasta arriba'
+                  }
+                  title={size.max ? 'Volver al alto de antes' : 'Hasta arriba'}
+                  onClick={() => setSize(toggleMax(size, roomOf(panel)))}
                 >
                   <span className="material-symbols-sharp text-lg" aria-hidden="true">
-                    {voice.muted ? 'volume_off' : 'volume_up'}
+                    {size.max ? 'close_fullscreen' : 'open_in_full'}
                   </span>
                 </Button>
-              )}
-              <Button
-                size="icon"
-                className="w-32! h-32!"
-                variant="ghost"
-                aria-pressed={size.max}
-                aria-label={size.max ? 'Volver al alto de antes' : 'Agrandar el chat hasta arriba'}
-                title={size.max ? 'Volver al alto de antes' : 'Hasta arriba'}
-                onClick={() => setSize(toggleMax(size, roomOf(panel)))}
-              >
-                <span className="material-symbols-sharp text-lg" aria-hidden="true">
-                  {size.max ? 'close_fullscreen' : 'open_in_full'}
-                </span>
-              </Button>
-              <Button
-                size="icon"
-                className="w-32! h-32!"
-                variant="ghost"
-                aria-label="Minimizar a Jarvis (Esc)"
-                title="Minimizar (Esc)"
-                onClick={close}
-              >
-                <span className="material-symbols-sharp text-lg" aria-hidden="true">
-                  remove
-                </span>
-              </Button>
-            </div>
-          </header>
-          {jarvis && (
-            // It has no card: what a card offers (terminal, Editar, ✕) lives here.
-            // Editar relaunches it with its current role.
-            <div className="shrink-0 flex flex-wrap items-center gap-4 px-10 py-4 border-b border-border">
-              {turnId && actions.onYourTurnDone && (
-                <Button size="sm" onClick={() => actions.onYourTurnDone?.(turnId)}>
-                  Hecho
-                </Button>
-              )}
-              <span className="flex-1" />
-              {actions.onOpenTerminal && (
                 <Button
-                  size="sm"
+                  size="icon"
+                  className="w-32! h-32!"
                   variant="ghost"
-                  onClick={() => actions.onOpenTerminal?.(jarvis.id)}
+                  aria-label="Minimizar a Jarvis (Esc)"
+                  title="Minimizar (Esc)"
+                  onClick={close}
                 >
-                  Ver su terminal
+                  <span className="material-symbols-sharp text-lg" aria-hidden="true">
+                    remove
+                  </span>
                 </Button>
-              )}
-              {actions.onEdit && (
-                <Button size="sm" variant="ghost" onClick={() => actions.onEdit?.(jarvis.id)}>
-                  Editar
-                </Button>
-              )}
-              {actions.onClose && (
-                <Button size="sm" variant="ghost" onClick={() => actions.onClose?.(jarvis.id)}>
-                  Cerrar a Jarvis
-                </Button>
-              )}
-            </div>
-          )}
-          {(notice || earsLine || noteText) && (
-            <div className="shrink-0 flex flex-col gap-4 px-14 py-6 border-b border-border">
-              {statusLines}
-              {noteText && <HeardNote text={noteText} note={note} boxed={false} />}
-            </div>
-          )}
-          {jarvis ? (
-            <div className="relative flex-1 min-h-0">
-              <ChatPane
-                view={jarvis}
-                actions={actions}
-                onSend={(text, images) => sendToAgent(jarvis.id, text, images)}
-                onShowTerminal={() => actions.onOpenTerminal?.(jarvis.id)}
-                composerLeading={<MicButton jarvisId={jarvis.id} ears={ears} />}
-                focusSignal={composerFocus}
-              />
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center gap-12 px-24 text-center">
-              <JarvisRing mood="away" size={48} />
-              <p className="m-0 text-sm text-text-2">Jarvis no está en la oficina.</p>
-              {onSummon && (
-                <Button size="md" variant="accent" onClick={onSummon}>
-                  Llamar a Jarvis
-                </Button>
-              )}
-            </div>
-          )}
+              </>
+            }
+          />
         </aside>
       )}
 
@@ -418,7 +213,9 @@ export function JarvisBubble({
       {!open && (notice || earsLine || noteText) && (
         <div className="absolute right-84 bottom-16 z-30 w-[min(340px,calc(100%-100px))] flex flex-col gap-8">
           {(notice || earsLine) && (
-            <div className="soft-panel px-12 py-8 flex flex-col gap-4">{statusLines}</div>
+            <div className="soft-panel px-12 py-8 flex flex-col gap-4">
+              <JarvisStatusLines state={state} />
+            </div>
           )}
           {noteText && <HeardNote text={noteText} note={note} boxed />}
         </div>

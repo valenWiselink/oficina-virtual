@@ -68,7 +68,7 @@ function ClosedAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
  * asks and since when. It answers «¿necesitás algo de mí?» without asking. In the
  * same spot as Historial: they open on purpose, one at a time.
  */
-export function PendingAsksPanel({ onClose }: { onClose: () => void }) {
+export function PendingAsksPanel({ onClose }: { onClose?: () => void }) {
   const list = usePendingAsks();
   const now = useNow();
   const open = list?.open ?? [];
@@ -85,9 +85,11 @@ export function PendingAsksPanel({ onClose }: { onClose: () => void }) {
         <h2 className="m-0 flex-1 text-sm font-semibold text-text">
           Pendientes{open.length > 0 ? ` (${open.length})` : ''}
         </h2>
-        <Button variant="ghost" size="icon" onClick={onClose} title="Cerrar" aria-label="Cerrar">
-          ×
-        </Button>
+        {onClose && (
+          <Button variant="ghost" size="icon" onClick={onClose} title="Cerrar" aria-label="Cerrar">
+            ×
+          </Button>
+        )}
       </header>
       <div className="overflow-y-auto flex-1 min-h-0 px-6 pb-8">
         {open.length === 0 ? (

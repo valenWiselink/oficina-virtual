@@ -16,7 +16,7 @@ export interface PaletteCommand {
 export interface PaletteActions {
   onOpenAgent: (id: number) => void;
   onNewAgent: () => void;
-  onSetView: (view: 'tablero' | 'grafo') => void;
+  onSetView: (view: 'tablero' | 'grafo' | 'control') => void;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
   onBroadcast: () => void;
@@ -65,6 +65,13 @@ export function buildCommands(
       run: () => actions.onSetView('tablero'),
     },
     { id: 'grafo', label: 'Ver grafo', icon: 'hub', run: () => actions.onSetView('grafo') },
+    {
+      id: 'control',
+      label: 'Ver control',
+      icon: 'dashboard',
+      keywords: 'tablero de control pendientes agenda jarvis',
+      run: () => actions.onSetView('control'),
+    },
     {
       id: 'historial',
       label: 'Historial',
