@@ -41,6 +41,7 @@ import type { HookEvent } from './hookEventHandler.js';
 import { HookEventHandler } from './hookEventHandler.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { PathSet, pathsMatch } from './pathKey.js';
+import type { AskMerger } from './pendingAsks/askMerger.js';
 import type { PendingAsks } from './pendingAsks/pendingAsks.js';
 import type { PendingAsksWatch } from './pendingAsks/pendingAsksWatch.js';
 import type { PrWatch } from './prWatch.js';
@@ -114,6 +115,8 @@ export class AgentRuntime {
   /** What is pending of the user, and what feeds it (standalone). */
   pendingAsks?: PendingAsks;
   pendingAsksWatch?: PendingAsksWatch;
+  /** «Mergear» on a pending ask (standalone). */
+  askMerger?: AskMerger;
   /** Shut the standalone office down in order (set by the CLI). */
   requestShutdown?: () => void;
   private hookEventHandler: HookEventHandler;

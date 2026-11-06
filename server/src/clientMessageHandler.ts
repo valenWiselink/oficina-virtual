@@ -325,6 +325,31 @@ export function handleClientMessage(
       break;
     }
 
+    case 'keepPendingAsk': {
+      ctx.runtime?.pendingAsks?.keep(String(msg.id));
+      break;
+    }
+
+    case 'snoozePendingAsk': {
+      const minutes = Math.round(Number(msg.minutes));
+      if (Number.isFinite(minutes) && minutes >= 1 && minutes <= 1440) {
+        ctx.runtime?.pendingAsks?.snooze(String(msg.id), Date.now() + minutes * 60_000);
+      }
+      break;
+    }
+
+    case 'mergePendingAsk': {
+      // Valentín's own click: gh merges the ask's PR; the answer goes to this page.
+      const merger = ctx.runtime?.askMerger;
+      const id = String(msg.id);
+      if (!merger) {
+        send({ type: 'pendingAskMerge', id, ok: false, message: 'Esta oficina no mergea.' });
+        break;
+      }
+      void merger.merge(id).then((outcome) => send({ type: 'pendingAskMerge', id, ...outcome }));
+      break;
+    }
+
     case 'markYourTurnsDone': {
       if (Array.isArray(msg.ids)) {
         ctx.runtime?.pendingAsks?.markTurnsDone(

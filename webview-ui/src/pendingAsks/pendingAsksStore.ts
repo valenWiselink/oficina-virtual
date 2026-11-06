@@ -41,3 +41,45 @@ export function closePendingAsk(id: string): void {
 export function reopenPendingAsk(id: string): void {
   transport.send({ type: 'reopenPendingAsk', id });
 }
+
+/** «Sigue pendiente»: it only looked done. */
+export function keepPendingAsk(id: string): void {
+  transport.send({ type: 'keepPendingAsk', id });
+}
+
+/** «Más tarde»: out of «Ahora» for `minutes`. */
+export function snoozePendingAsk(id: string, minutes: number): void {
+  transport.send({ type: 'snoozePendingAsk', id, minutes });
+}
+
+/** How a «Mergear» goes: under way, or what gh said. */
+export type MergeState = { busy: true } | { busy: false; ok: boolean; message: string };
+
+let merges: ReadonlyMap<string, MergeState> = new Map();
+const mergeListeners = new Set<() => void>();
+
+function setMerge(id: string, state: MergeState): void {
+  merges = new Map(merges).set(id, state);
+  for (const l of mergeListeners) l();
+}
+
+transport.onMessage((msg) => {
+  const m = msg as unknown as Record<string, unknown>;
+  if (m.type !== 'pendingAskMerge' || typeof m.id !== 'string') return;
+  setMerge(m.id, { busy: false, ok: m.ok === true, message: String(m.message ?? '') });
+});
+
+/** Valentín's click: the office runs `gh pr merge` on the ask's PR. */
+export function mergePendingAsk(id: string): void {
+  setMerge(id, { busy: true });
+  transport.send({ type: 'mergePendingAsk', id });
+}
+
+function subscribeMerges(listener: () => void): () => void {
+  mergeListeners.add(listener);
+  return () => mergeListeners.delete(listener);
+}
+
+export function useMergeState(id: string): MergeState | undefined {
+  return useSyncExternalStore(subscribeMerges, () => merges.get(id));
+}

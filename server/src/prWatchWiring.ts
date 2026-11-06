@@ -19,6 +19,8 @@ export function watchAgentPrs(
     /** The office terminal of an agent, to tell it its PR got merged. */
     terminalOf?: (id: number) => { write(data: string): void } | undefined;
     run?: GhRunner;
+    /** More PRs to watch: those your open Pendientes name. */
+    more?: () => Iterable<string>;
   } = {},
 ): PrWatch {
   const terminalOf = opts.terminalOf ?? (() => undefined);
@@ -27,6 +29,7 @@ export function watchAgentPrs(
     collect: () => [
       ...[...store.values()].flatMap((a) => (a.yourTurn?.prUrl ? [a.yourTurn.prUrl] : [])),
       ...dayLog.prUrls(),
+      ...(opts.more?.() ?? []),
     ],
     onStatus: (status, previous) => {
       const settled = settleMergedAsks(store.entries(), status, previous === 'open', {

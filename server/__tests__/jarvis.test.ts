@@ -230,6 +230,50 @@ describe('JarvisTools', () => {
       expect(answer).toContain('cerrar_pendiente');
     });
 
+    it('pendientes says which ones the office noted and which look done', () => {
+      const { asks, t } = wired();
+      asks.add({ from: 'Jarvis', text: '¿Ya puedo habilitar el navegador?', question: true });
+      asks.add({ from: 'Coral', text: 'mergear #12', seemsDone: 'Se mergeó el PR #12' });
+      const said = t.pendientes();
+      expect(said).toContain('una pregunta tuya sin «Te toca:» que anotó la oficina');
+      expect(said).toContain('parece resuelto: Se mergeó el PR #12; comprobalo y cerralo');
+    });
+
+    it('dejar_pendiente keeps its times and reasons; a wrong time leaves nothing', () => {
+      const { asks, t } = wired();
+      expect(t.dejarPendiente('pasar el pase', undefined, { noAntesDe: '25:00' })).toContain(
+        'HH:MM',
+      );
+      expect(asks.open()).toEqual([]);
+      t.dejarPendiente(
+        'mergear el PR 348 a main',
+        'gh pr merge 348 --repo Wiselink/properties --merge',
+        {
+          noAntesDe: '23:00',
+          porQue: 'el pase de seguridad',
+          siNo: 'queda abierto el hueco del 403',
+        },
+      );
+      const [entry] = asks.message().open;
+      expect(new Date(entry.notBefore ?? 0).getHours()).toBe(23);
+      expect(entry).toMatchObject({
+        why: 'el pase de seguridad',
+        ifNot: 'queda abierto el hueco del 403',
+        mergeUrl: 'https://github.com/Wiselink/properties/pull/348',
+      });
+    });
+
+    it('dejar_pendiente points at a question the office already noted', () => {
+      const { asks, t } = wired();
+      asks.add({ from: 'Jarvis', text: '¿Ya puedo habilitar el navegador?', question: true });
+      const answer = t.dejarPendiente('avisarme cuando pueda habilitar el navegador');
+      expect(answer).toContain('Pendientes como p2');
+      expect(answer).toContain('p1 («¿Ya puedo habilitar el navegador?»)');
+      expect(t.dejarPendiente('otra cosa')).toContain('p1');
+      asks.closeById('p1', 'Lo cerró Jarvis');
+      expect(t.dejarPendiente('una tercera')).not.toContain('ya le había anotado');
+    });
+
     it('says nothing of what Valentín had marked done', () => {
       const { asks, t } = wired();
       asks.markTurnsDone(['t1']);

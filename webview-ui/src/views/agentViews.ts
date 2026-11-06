@@ -125,6 +125,9 @@ export interface AgentView {
   /** When its session last wrote anything (server clock) — how long it has
    *  really been still. */
   lastRecordAt?: number;
+  /** Since when the office finds it no longer needed: finished, delivered,
+   *  nothing left for you, quiet a while («para cerrar»). */
+  closeSuggestedAt?: number;
   /** Kind of repository it works in (backend, webapp, flutter, otros). */
   area?: string;
   /** The pull request a "te toca" points at. */
@@ -472,6 +475,7 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
         lastReplyHead: identity?.lastReplyHead,
         saysAloud: identity?.saysAloud,
         lastRecordAt: identity?.lastRecordAt,
+        closeSuggestedAt: kind === 'done' ? identity?.closeSuggestedAt : undefined,
         area: identity?.area,
         waitingSince:
           permission?.createdAt ??

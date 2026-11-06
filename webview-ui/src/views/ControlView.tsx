@@ -1,13 +1,18 @@
+import { useState } from 'react';
+
 import { useDayTint } from '../effects/dayTint.js';
 import { JarvisChat } from '../jarvis/JarvisChat.js';
 import { useJarvisChatState } from '../jarvis/jarvisChatState.js';
 import { MeetingsPanel } from '../meetings/MeetingsPanel.js';
 import { useUpcomingMeetings } from '../meetings/meetingsStore.js';
-import { PendingAsksPanel } from '../pendingAsks/PendingAsksPanel.js';
+import { DayStrip } from '../now/DayStrip.js';
+import { NowPanel } from '../now/NowPanel.js';
+import { useNowQueue } from '../now/useNowQueue.js';
 import { ApproveButtons } from '../permissions/ApproveButtons.js';
+import { useWritableAgents } from '../terminal/agentInput.js';
 import { type AgentView, KIND_COLOR } from './agentViews.js';
 import type { BoardActions } from './BoardCard.js';
-import { callsForYou, controlOrder, stripTitle } from './controlRules.js';
+import { callsForYou, controlOrder, stripTitle, toClose } from './controlRules.js';
 import { permissionSummary } from './permissionSummary.js';
 
 /** The agenda: the meetings list, or why there is none. */
@@ -61,30 +66,53 @@ function JarvisColumn({
 function AgentChip({ view, actions }: { view: AgentView; actions: BoardActions }) {
   const ask = permissionSummary(view);
   const urgent = callsForYou(view);
+  const spare = toClose(view);
+  const status = spare ? 'Para cerrar' : view.statusText;
   return (
     <li
       className={`min-w-0 flex flex-col gap-4 rounded-lg border px-8 py-5 ${
-        urgent ? 'border-status-permission bg-status-permission-bg' : 'border-border bg-bg-thumb'
+        urgent
+          ? 'border-status-permission bg-status-permission-bg'
+          : spare
+            ? 'border-dashed border-border bg-transparent opacity-80'
+            : 'border-border bg-bg-thumb'
       } ${ask ? 'max-w-[360px]' : 'max-w-[240px]'}`}
     >
-      <button
-        type="button"
-        onClick={() => actions.onSelect(view.id)}
-        title={`${view.name}: ${view.statusText}`}
-        className="min-w-0 flex items-center gap-6 border-0 bg-transparent p-0 cursor-pointer text-left"
-      >
-        <span
-          className="w-7 h-7 rounded-full shrink-0"
-          style={{ background: KIND_COLOR[view.kind] }}
-          aria-hidden="true"
-        />
-        <span className="text-xs font-semibold text-text truncate">{view.name}</span>
-        <span
-          className={`text-2xs truncate ${urgent ? 'text-status-permission-text' : 'text-text-muted'}`}
+      <span className="min-w-0 flex items-center gap-6">
+        <button
+          type="button"
+          onClick={() => actions.onSelect(view.id)}
+          title={
+            spare
+              ? `${view.name}: terminó, entregó y está quieto sin nada pendiente para vos. Jarvis ya sabe que puede cerrarlo.`
+              : `${view.name}: ${view.statusText}`
+          }
+          className="min-w-0 flex items-center gap-6 border-0 bg-transparent p-0 cursor-pointer text-left"
         >
-          {view.statusText}
-        </span>
-      </button>
+          <span
+            className="w-7 h-7 rounded-full shrink-0"
+            style={{ background: KIND_COLOR[view.kind] }}
+            aria-hidden="true"
+          />
+          <span className="text-xs font-semibold text-text truncate">{view.name}</span>
+          <span
+            className={`text-2xs truncate ${urgent ? 'text-status-permission-text' : 'text-text-muted'}`}
+          >
+            {status}
+          </span>
+        </button>
+        {spare && actions.onClose && (
+          <button
+            type="button"
+            onClick={() => actions.onClose?.(view.id)}
+            title={`Cerrar a ${view.name} (su conversación queda guardada)`}
+            aria-label={`Cerrar a ${view.name}`}
+            className="shrink-0 border-0 bg-transparent p-0 text-xs leading-none text-text-muted hover:text-text cursor-pointer"
+          >
+            ×
+          </button>
+        )}
+      </span>
       {ask && view.permission && actions.onAllow && actions.onDeny && (
         <>
           <span className="text-2xs text-text line-clamp-2" title={ask.detail ?? ask.title}>
@@ -125,25 +153,38 @@ export function ControlView({
 }) {
   const tint = useDayTint();
   const ordered = controlOrder(views);
+  const model = useNowQueue(views, jarvis?.id);
+  const writable = useWritableAgents();
+  // «Escribirle a Jarvis…» on a card opens its box, like the visor's «Contestar».
+  const [writeSignal, setWriteSignal] = useState(0);
+  const jarvisLink = jarvis
+    ? {
+        id: jarvis.id,
+        writable: writable.has(jarvis.id),
+        onWrite: () => setWriteSignal((n) => n + 1),
+      }
+    : undefined;
   return (
     <div
       // pt-52: the tabs and the next meeting; pb-80: the toolbar.
       className="absolute inset-0 flex flex-col gap-12 p-14 pt-52 pb-80 transition-colors duration-1000"
       style={{ background: `var(${tint})` }}
     >
-      <div className="flex-1 min-h-0 grid gap-12 grid-cols-2 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] @min-[1000px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] @min-[1000px]:grid-rows-1">
-        <div className="min-h-0 flex col-start-1 row-start-1">
-          <PendingAsksPanel />
+      <DayStrip items={model.strip} now={model.now} />
+      {/* Ahora | Jarvis; a wide office fits the agenda of the coming days between them. */}
+      <div className="flex-1 min-h-0 grid gap-12 grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] @min-[1500px]:grid-cols-[minmax(0,1.35fr)_minmax(0,0.8fr)_minmax(0,1fr)]">
+        <div className="min-h-0 flex">
+          <NowPanel model={model} jarvis={jarvisLink} />
         </div>
-        <div className="min-h-0 flex col-start-1 row-start-2 @min-[1000px]:col-start-2 @min-[1000px]:row-start-1">
+        <div className="min-h-0 hidden @min-[1500px]:flex">
           <Agenda />
         </div>
-        <div className="min-h-0 flex col-start-2 row-start-1 row-span-2 @min-[1000px]:col-start-3 @min-[1000px]:row-span-1">
+        <div className="min-h-0 flex">
           <JarvisColumn
             jarvis={jarvis}
             actions={actions}
             onSummon={onSummonJarvis}
-            focusSignal={jarvisFocus}
+            focusSignal={jarvisFocus + writeSignal}
           />
         </div>
       </div>

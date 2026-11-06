@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { describe, it } from 'vitest';
 
-import { askWhen, readPendingAsksMessage } from '../src/pendingAsks/pendingAsksView.ts';
+import { askWhen, readPendingAsksMessage, splitOpen } from '../src/pendingAsks/pendingAsksView.ts';
 
 const NOW = new Date(2026, 10, 5, 14, 0).getTime();
 const MIN = 60_000;
@@ -30,5 +30,22 @@ describe('message', () => {
     assert.equal(readPendingAsksMessage({ type: 'pendingAsks', open: [] }), null);
     const msg = { type: 'pendingAsks', open: [], closed: [] };
     assert.deepEqual(readPendingAsksMessage(msg), msg);
+  });
+});
+
+describe('what only looks done', () => {
+  it('is kept apart, and out of the count', () => {
+    const { waiting, seemsDone } = splitOpen([
+      { id: 'p1', text: 'mergear #12', seemsDone: 'Se mergeó el PR #12' },
+      { id: 'p2', text: 'agregar el registro en Namecheap' },
+    ]);
+    assert.deepEqual(
+      waiting.map((a) => a.id),
+      ['p2'],
+    );
+    assert.deepEqual(
+      seemsDone.map((a) => a.id),
+      ['p1'],
+    );
   });
 });
