@@ -22,6 +22,7 @@ import type { AgentStateStore } from '../agentStateStore.js';
 import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
 import type { PendingAsks } from '../pendingAsks/pendingAsks.js';
 import type { PendingAsksWatch } from '../pendingAsks/pendingAsksWatch.js';
+import type { AskResolutions } from '../pendingAsks/resolutions.js';
 import type { PendingPermission, PermissionBroker } from '../permissionBroker.js';
 import { sendToTerminal } from '../terminal/handOff.js';
 import type { AgentState } from '../types.js';
@@ -73,6 +74,8 @@ export interface ToolDeps {
   pendingAsksWatch?: () => PendingAsksWatch | undefined;
   /** The meetings ahead (calendar), for «después de la demo». */
   meetings?: () => readonly Meeting[];
+  /** Asks settled from one sentence of his, shown with «Deshacer» (Jarvis only). */
+  askResolutions?: () => AskResolutions | undefined;
 }
 
 const HEAD_CHARS = 160;

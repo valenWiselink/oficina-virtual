@@ -22,6 +22,7 @@ import { collectDirectorySuggestions } from '../directorySuggestions.js';
 import { hostDirectory } from '../hostDirectory.js';
 import { type NewAsk } from '../pendingAsks/pendingAsks.js';
 import { knownPrLinks } from '../pendingAsks/pendingAsksWatch.js';
+import type { Proposed } from '../pendingAsks/resolutions.js';
 import type { PendingPermission } from '../permissionBroker.js';
 import { claudeProvider } from '../providers/index.js';
 import { closeOfficeAgent } from '../terminal/closeAgent.js';
@@ -230,6 +231,24 @@ export class JarvisTools extends SupervisorTools {
       times.due !== undefined ? `Vence ${whenText(times.due, now)}.` : undefined,
     ].filter(Boolean);
     return parts.length ? ` ${parts.join(' ')}` : '';
+  }
+
+  /**
+   * Several asks settled from one sentence of Valentín's: the office shows
+   * how each was taken, with «Deshacer», and applies it in a few seconds.
+   */
+  resolverPendientes(items: readonly Proposed[]): string {
+    const resolutions = this.deps.askResolutions?.();
+    if (!resolutions) return 'Esta oficina no resuelve pendientes desde acá: usá cerrar_pendiente.';
+    if (items.length === 0) return 'No me pasaste ninguno.';
+    const { taken, refused } = resolutions.propose(items);
+    const parts = [
+      taken.length
+        ? `Le muestro cómo lo tomé, con «Deshacer»; se aplica en unos segundos si no lo deshace: ${taken.join('; ')}. Un merge lo hace él manteniendo apretado el botón.`
+        : undefined,
+      refused.length ? `No tomé: ${refused.join('; ')}.` : undefined,
+    ].filter(Boolean);
+    return parts.join(' ');
   }
 
   cerrarPendiente(id: string, motivo?: string): string {
@@ -587,6 +606,36 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
           reemplaza,
         }),
       ),
+  );
+  server.registerTool(
+    'resolver_pendientes',
+    {
+      description:
+        'Cuando Valentín contesta varios pendientes en una sola frase (por ejemplo, hablando: «mergealo y lo de las páginas públicas, sí; lo de AgroActiva pasalo a mañana»), pasá cómo tomaste cada uno. La oficina se lo muestra con «Deshacer» y lo aplica en unos segundos si no lo deshace. Un merge nunca se hace por voz: queda con un botón que él mantiene apretado. Si no estás seguro de qué pendiente es, preguntale en vez de adivinar.',
+      inputSchema: {
+        resoluciones: z
+          .array(
+            z.object({
+              id: z.string().describe('El pendiente (p12)'),
+              como: z
+                .enum(['respuesta', 'hecho', 'posponer', 'mergear'])
+                .describe(
+                  'respuesta: contestó (Sí, No, una opción); hecho: dijo que ya lo hizo; posponer: para otro momento; mergear: pidió mergear su PR',
+                ),
+              respuesta: z
+                .string()
+                .optional()
+                .describe('Con como respuesta: lo que contestó («Sí»)'),
+              cuando: z
+                .string()
+                .optional()
+                .describe('Con como posponer: «mañana», «el lunes», «después de: Demo AgroActiva»'),
+            }),
+          )
+          .describe('Cómo tomaste cada pendiente de lo que dijo'),
+      },
+    },
+    ({ resoluciones }) => text(tools.resolverPendientes(resoluciones)),
   );
   server.registerTool(
     'cerrar_pendiente',

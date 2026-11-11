@@ -27,6 +27,8 @@ import { ComingColumn } from './ComingColumn.js';
 import { DecisionHand } from './DecisionHand.js';
 import { MeetingBanner } from './MeetingBanner.js';
 import { MomentBar } from './MomentBar.js';
+import { useAskResolutions } from './resolutionsStore.js';
+import { ResolutionsTray } from './ResolutionsTray.js';
 import { NeedsYouStrip, TeamColumn } from './TeamColumn.js';
 
 function readStoredChoice(): MomentChoice | undefined {
@@ -106,7 +108,11 @@ function Conversation({
       }
     : undefined;
   const { queue, now, meetings } = model;
-  const waiting = [...(queue.first ? [queue.first] : []), ...queue.next];
+  // An ask Jarvis already took from what you said waits in «Lo tomé así», not as a card.
+  const resolving = new Set(useAskResolutions().map((r) => r.id));
+  const waiting = [...(queue.first ? [queue.first] : []), ...queue.next].filter(
+    (r) => !resolving.has(r.ask.id),
+  );
   const meeting = moment === 'reunion' ? meetingNow(meetings, now) : undefined;
   const urgent = meeting ? waiting.filter((r) => urgentInMeeting(r, meeting)) : waiting;
   const hand = moment === 'decidir' || moment === 'reunion';
@@ -125,9 +131,10 @@ function Conversation({
         permissionsOnly
         shapeText={meeting ? (text) => meetingNote(meeting, text) : undefined}
         aboveBox={
-          hand ? (
-            <DecisionHand waiting={urgent} now={now} meetings={meetings} jarvis={link} />
-          ) : undefined
+          <>
+            <ResolutionsTray />
+            {hand && <DecisionHand waiting={urgent} now={now} meetings={meetings} jarvis={link} />}
+          </>
         }
       />
     </section>

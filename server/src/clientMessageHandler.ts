@@ -346,6 +346,12 @@ export function handleClientMessage(
       break;
     }
 
+    case 'undoAskResolution': {
+      // «Deshacer» on how Jarvis took one of his answers: it is not applied.
+      ctx.runtime?.askResolutions?.undo(String(msg.key));
+      break;
+    }
+
     case 'mergePendingAsk': {
       // Valentín's own click: gh merges the ask's PR; the answer goes to this page.
       const merger = ctx.runtime?.askMerger;
@@ -1030,6 +1036,8 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
     ctx.runtime?.pendingAsksWatch?.sync();
     send({ ...pendingAsks.message() });
   }
+  const resolutions = ctx.runtime?.askResolutions;
+  if (ctx.privileged && resolutions) send({ ...resolutions.message() });
   // For the first-run welcome: can an agent start here at all? And is the
   // "Te toca" rule already in the global CLAUDE.md (welcome and Ajustes)?
   if (ctx.privileged) {

@@ -321,7 +321,12 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   (`asistenteRules.ts`: meeting > 19:00 > something waiting > nothing;
   writing in Jarvis's box folds into «Escribir» except in a meeting); one
   picked by hand holds until that situation changes (`oficina.momento`,
-  `{moment, base}`), and «Automático» gives it back. Jarvis's own «Te toca:»
+  `{moment, base}`), and «Automático» gives it back. Several asks answered in
+  one sentence: Jarvis calls `resolver_pendientes`; `server/src/pendingAsks/
+resolutions.ts` shows them as «Lo tomé así» (`askResolutions`, privileged)
+  with «Deshacer» (`undoAskResolution`) and applies them after `UNDO_MS`; a
+  merge is never applied by voice, only by `HoldButton` (held 1.2 s), which
+  runs the usual `mergePendingAsk`. Jarvis's own «Te toca:»
   is a card there, so its strip above the box shows only permissions. The
   toolbar's «Pendientes» count takes you here.
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.
