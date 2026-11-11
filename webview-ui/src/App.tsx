@@ -36,7 +36,6 @@ import { useTerminalDrawer } from './hooks/useTerminalDrawer.js';
 import { markYourTurnDone } from './identity/yourTurnStore.js';
 import { JarvisBubble } from './jarvis/JarvisBubble.js';
 import { askedPermission, findJarvis, jarvisHome, withoutJarvis } from './jarvis/jarvisRules.js';
-import { JarvisVisor } from './jarvis/JarvisVisor.js';
 import { useTalkShortcut } from './jarvis/talk.js';
 import { useJarvisSpeech } from './jarvis/useJarvisSpeech.js';
 import { useLaunchDialog } from './launch/LaunchDialog.js';
@@ -48,7 +47,6 @@ import { useMobileShell } from './mobile/useMobileShell.js';
 import { playCheerSound, useAgentsInView } from './notificationSound.js';
 import { OfficeState } from './office/engine/officeState.js';
 import { useOnboarding } from './onboarding/useOnboarding.js';
-import { PendingAsksPanel } from './pendingAsks/PendingAsksPanel.js';
 import { usePendingAsks } from './pendingAsks/pendingAsksStore.js';
 import { agentLabel } from './permissions/agentLabel.js';
 import { PermissionCards } from './permissions/PermissionCards.js';
@@ -153,7 +151,6 @@ function App() {
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
   const [launchSignal, setLaunchSignal] = useState(0);
   // The visor's «Contestar» focuses what you write to Jarvis in its bar.
-  const [jarvisFocus, setJarvisFocus] = useState(0);
   useCommandPaletteShortcut(() => setIsPaletteOpen(true));
   const openHistory = (tab: HistoryTab) => {
     setHistoryTab(tab);
@@ -459,13 +456,16 @@ function App() {
   // Jarvis floats in the office's bottom-right corner (asked 2026-10-28: the
   // band across the foot took room from the office); its chat opens above it.
   // Control keeps its chat fixed in a column of its own: no bubble there.
+  // What Jarvis asks you about another agent's permission: above its box, or
+  // beside its bubble — never a visor over the middle (2026-11-11).
+  const jarvisAsked = askedPermission(jarvis, agentViews);
   const jarvisBubble =
     !isDebugMode && shownView !== 'control' && (terminalAvailable || jarvis) ? (
       <JarvisBubble
         jarvis={jarvis}
         actions={agentActions}
         onSummon={summonJarvis}
-        focusSignal={jarvisFocus}
+        asked={jarvisAsked}
       />
     ) : null;
 
@@ -482,9 +482,6 @@ function App() {
       />
     ) : leftPanel === 'artifacts' ? (
       <ArtifactsPanel onClose={closeSidePanel} />
-    ) : leftPanel === 'pendientes' && shownView !== 'control' ? (
-      // Control already shows them, large.
-      <PendingAsksPanel onClose={closeSidePanel} />
     ) : null;
 
   // The office region is shared by both shells: desktop mounts it as the
@@ -521,7 +518,7 @@ function App() {
                   actions={agentActions}
                   jarvis={jarvis}
                   onSummonJarvis={summonJarvis}
-                  jarvisFocus={jarvisFocus}
+                  asked={jarvisAsked}
                 />
               ) : (
                 <GraphView views={workspaces.shown} actions={agentActions} under={stripOver} />
@@ -596,8 +593,9 @@ function App() {
             onToggleHistory={() => toggleLeftPanel('historial')}
             isArtifactsOpen={leftPanel === 'artifacts'}
             onToggleArtifacts={() => toggleLeftPanel('artifacts')}
-            isPendingAsksOpen={leftPanel === 'pendientes'}
-            onTogglePendingAsks={() => toggleLeftPanel('pendientes')}
+            // Pendientes live in Control's «Ahora»: the button takes you there.
+            isPendingAsksOpen={shownView === 'control'}
+            onTogglePendingAsks={() => setView('control')}
             launchSignal={launchSignal}
             directories={directories}
             onAddDirectory={directoryEditor.add}
@@ -605,15 +603,6 @@ function App() {
             terminalAvailable={terminalAvailable}
             terminalUnavailableReason={terminalUnavailableReason}
             onLaunch={requestLaunch}
-          />
-        )}
-        {/* Jarvis's visor dims the whole office, the column included. */}
-        {!isDebugMode && (
-          <JarvisVisor
-            jarvis={jarvis}
-            asked={askedPermission(jarvis, agentViews)}
-            actions={agentActions}
-            onAnswer={() => setJarvisFocus((n) => n + 1)}
           />
         )}
       </div>

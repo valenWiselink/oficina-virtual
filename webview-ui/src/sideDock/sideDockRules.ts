@@ -1,14 +1,14 @@
 /**
  * The column at the office's left edge (pure rules, tested). What stays open
- * there — Pendientes, Historial or Artifacts, and the list of meetings —
+ * there — Historial or Artifacts, and the list of meetings —
  * takes room from the board instead of lying over it (asked 2026-11-06: a
  * panel you keep open must not cover the board or the tabs).
  */
 
 /** The panels that share the column's main spot: one at a time. */
-export type SidePanel = 'historial' | 'artifacts' | 'pendientes';
+export type SidePanel = 'historial' | 'artifacts';
 
-const SIDE_PANELS: readonly SidePanel[] = ['historial', 'artifacts', 'pendientes'];
+const SIDE_PANELS: readonly SidePanel[] = ['historial', 'artifacts'];
 
 /** A remembered panel, or null for anything else (nothing, or junk). */
 export function readSidePanel(raw: string | null): SidePanel | null {

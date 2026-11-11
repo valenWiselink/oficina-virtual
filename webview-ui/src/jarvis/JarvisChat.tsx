@@ -7,12 +7,14 @@ import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
 import { clock } from './dictation.js';
 import type { useFleetingNote } from './heardNote.js';
+import { JarvisAsk } from './JarvisAsk.js';
 import type { JarvisChatState } from './jarvisChatState.js';
 import type { EarsState } from './jarvisEars.js';
 import { dismissJarvisNotice } from './jarvisNotice.js';
 import { JarvisRing } from './JarvisRing.js';
-import { jarvisLine } from './jarvisRules.js';
+import { type AskedPermission, jarvisLine } from './jarvisRules.js';
 import { setJarvisMuted } from './jarvisVoice.js';
+import { clearReply, type ReplyTarget, replyText, useReplyTarget } from './replyTo.js';
 import { talkToJarvis } from './talk.js';
 
 /** How long it has been listening, «0:42». */
@@ -121,6 +123,28 @@ function MicButton({ jarvisId, ears }: { jarvisId: number; ears: EarsState }) {
  * to write or talk. With no Jarvis it offers to call one. The bubble floats it
  * over the office; the Control view keeps it fixed in its own column.
  */
+/** The ask you are answering, quoted above the box; ✕ drops it. */
+function ReplyQuote({ reply }: { reply: ReplyTarget }) {
+  return (
+    <div className="mx-10 mb-6 flex items-start gap-8 border-l-2 border-accent pl-8 pr-2 py-2">
+      <span className="flex-1 min-w-0 text-2xs text-text-2">
+        <span className="font-mono text-accent">{reply.id}</span> Respondés a{' '}
+        {reply.from === 'Jarvis' ? 'Jarvis' : `«${reply.from}»`}:{' '}
+        <span className="text-text line-clamp-2">{reply.text}</span>
+      </span>
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label="No responder a ese pendiente"
+        title="Escribir sin citarlo"
+        onClick={clearReply}
+      >
+        ✕
+      </Button>
+    </div>
+  );
+}
+
 export function JarvisChat({
   jarvis,
   actions,
@@ -128,6 +152,7 @@ export function JarvisChat({
   onSummon,
   composerFocus,
   headerButtons,
+  asked,
 }: {
   jarvis: AgentView | undefined;
   actions: BoardActions;
@@ -138,8 +163,17 @@ export function JarvisChat({
   composerFocus: number;
   /** The host's own buttons in the header (the bubble's grow and minimize). */
   headerButtons?: ReactNode;
+  /** Another agent's permission Jarvis asks you about. */
+  asked?: AskedPermission;
 }) {
-  const { voice, notice, earsLine, noteText, note, mood, speaks, turnId, ears } = state;
+  const { voice, notice, earsLine, noteText, note, mood, speaks, ears } = state;
+  const reply = useReplyTarget();
+  // Answering an ask: its id, who asked and what, go with your words.
+  const send = (id: number, text: string, images?: readonly string[]) =>
+    sendToAgent(id, reply ? replyText(reply, text) : text, images).then((sent) => {
+      if (sent && reply) clearReply();
+      return sent;
+    });
   return (
     <>
       <header className="shrink-0 flex items-start gap-10 px-14 py-10 border-b border-border bg-bg-dark">
@@ -175,12 +209,8 @@ export function JarvisChat({
       {jarvis && (
         // It has no card: what a card offers (terminal, Editar, ✕) lives here.
         // Editar relaunches it with its current role.
+        // «Hecho» for what it asks lives above the box (JarvisAsk), once.
         <div className="shrink-0 flex flex-wrap items-center gap-4 px-10 py-4 border-b border-border">
-          {turnId && actions.onYourTurnDone && (
-            <Button size="sm" onClick={() => actions.onYourTurnDone?.(turnId)}>
-              Hecho
-            </Button>
-          )}
           <span className="flex-1" />
           {actions.onOpenTerminal && (
             <Button size="sm" variant="ghost" onClick={() => actions.onOpenTerminal?.(jarvis.id)}>
@@ -210,9 +240,15 @@ export function JarvisChat({
           <ChatPane
             view={jarvis}
             actions={actions}
-            onSend={(text, images) => sendToAgent(jarvis.id, text, images)}
+            onSend={(text, images) => send(jarvis.id, text, images)}
             onShowTerminal={() => actions.onOpenTerminal?.(jarvis.id)}
             composerLeading={<MicButton jarvisId={jarvis.id} ears={ears} />}
+            composerTop={
+              <>
+                <JarvisAsk jarvis={jarvis} asked={asked} actions={actions} variant="docked" />
+                {reply && <ReplyQuote reply={reply} />}
+              </>
+            }
             focusSignal={composerFocus}
           />
         </div>

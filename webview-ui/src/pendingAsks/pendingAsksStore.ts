@@ -47,11 +47,6 @@ export function keepPendingAsk(id: string): void {
   transport.send({ type: 'keepPendingAsk', id });
 }
 
-/** «Más tarde»: out of «Ahora» for `minutes`. */
-export function snoozePendingAsk(id: string, minutes: number): void {
-  transport.send({ type: 'snoozePendingAsk', id, minutes });
-}
-
 /** «Posponer» until a moment (ms): «mañana a la mañana», after a meeting. */
 export function snoozePendingAskUntil(id: string, until: number): void {
   transport.send({ type: 'snoozePendingAsk', id, until });

@@ -67,6 +67,7 @@ export function ChatPane({
   onSend,
   onShowTerminal,
   composerLeading,
+  composerTop,
   focusSignal,
 }: {
   view: AgentView;
@@ -77,6 +78,8 @@ export function ChatPane({
   onShowTerminal: () => void;
   /** Before the box where you write (Jarvis's microphone). */
   composerLeading?: ReactNode;
+  /** Right above the box, never over it (what Jarvis asks, the ask you answer). */
+  composerTop?: ReactNode;
   /** Changes when something wants the box focused. */
   focusSignal?: number;
 }) {
@@ -258,6 +261,7 @@ export function ChatPane({
           return (sent) => (sent ? settleDelivery(view.id, key, true) : dropPending(view.id, key));
         }}
       />
+      {composerTop}
       <Composer
         view={view}
         onSend={send}

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useDayTint } from '../effects/dayTint.js';
 import { JarvisChat } from '../jarvis/JarvisChat.js';
 import { useJarvisChatState } from '../jarvis/jarvisChatState.js';
+import type { AskedPermission } from '../jarvis/jarvisRules.js';
 import { MeetingsPanel } from '../meetings/MeetingsPanel.js';
 import { useUpcomingMeetings } from '../meetings/meetingsStore.js';
 import { DayStrip } from '../now/DayStrip.js';
@@ -41,11 +42,13 @@ function JarvisColumn({
   actions,
   onSummon,
   focusSignal,
+  asked,
 }: {
   jarvis: AgentView | undefined;
   actions: BoardActions;
   onSummon?: () => void;
   focusSignal: number;
+  asked?: AskedPermission;
 }) {
   const state = useJarvisChatState(jarvis, true);
   return (
@@ -56,6 +59,7 @@ function JarvisColumn({
         state={state}
         onSummon={onSummon}
         composerFocus={focusSignal}
+        asked={asked}
       />
     </section>
   );
@@ -142,20 +146,20 @@ export function ControlView({
   actions,
   jarvis,
   onSummonJarvis,
-  jarvisFocus,
+  asked,
 }: {
   views: AgentView[];
   actions: BoardActions;
   jarvis: AgentView | undefined;
   onSummonJarvis?: () => void;
-  /** Changes when something (the visor's «Contestar») wants to write to Jarvis. */
-  jarvisFocus: number;
+  /** Another agent's permission Jarvis asks you about. */
+  asked?: AskedPermission;
 }) {
   const tint = useDayTint();
   const ordered = controlOrder(views);
   const model = useNowQueue(views, jarvis?.id);
   const writable = useWritableAgents();
-  // «Escribirle a Jarvis…» on a card opens its box, like the visor's «Contestar».
+  // «Responder» on a card opens Jarvis's box with that ask quoted (replyTo).
   const [writeSignal, setWriteSignal] = useState(0);
   const jarvisLink = jarvis
     ? {
@@ -184,7 +188,8 @@ export function ControlView({
             jarvis={jarvis}
             actions={actions}
             onSummon={onSummonJarvis}
-            focusSignal={jarvisFocus + writeSignal}
+            focusSignal={writeSignal}
+            asked={asked}
           />
         </div>
       </div>

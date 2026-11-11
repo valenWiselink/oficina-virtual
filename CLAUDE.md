@@ -110,8 +110,8 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   `POST /mcp`, one token each), `supervisorGuard.ts` (what they may approve;
   an `askable` refusal — external tool not on production nor deleting, a
   write outside the folder, an unknown tool — Jarvis may approve on Valentín's
-  word: `valentinConsent.ts`. The office shows him that permission in the
-  visor first, then only his latest line in Jarvis's chat after it counts, if
+  word: `valentinConsent.ts`. The office shows him that permission above
+  Jarvis's box (`JarvisAsk`) first, then only his latest line in Jarvis's chat after it counts, if
   it is a plain yes and an Enter from the office window vouches for it
   (`terminal/windowInput.ts`); risky ones stay his, with the button).
   The supervisor of everyone is Jarvis (`jarvis.ts`: role + notebook in
@@ -122,8 +122,13 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   In the webview it has no avatar (`webview-ui/src/jarvis/`): App takes it out
   of every view (`withoutJarvis`) and of the terminal tabs (`isHidden` in
   useTerminalDrawer), and shows it as `JarvisBubble` (a round button in the
-  office's bottom-right corner that opens its chat in a floating panel) and
-  `JarvisVisor` (middle of the screen, when it needs you or speaks). In a
+  office's bottom-right corner that opens its chat in a floating panel). What
+  it asks of you (its «Te toca:», another agent's permission) is `JarvisAsk`:
+  a strip above its box in the chat, or a small card beside the bubble while
+  the chat is closed — never over the middle (the visor that did was removed
+  2026-11-11: it covered what he was writing). «Responder» on a pending ask
+  quotes it above Jarvis's box (`replyTo.ts`); the message goes with
+  «[p12] …» so the office marks it answered. In a
   chat, `[Oficina] …` and `[Supervisor «X»] …` lines are notes, not yours
   (`agentChat.userItem`), and `[Voz] …` is yours, said aloud.
   Images in any chat (pasted, dropped or chosen) are saved by the server as

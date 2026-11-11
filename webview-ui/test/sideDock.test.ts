@@ -10,8 +10,8 @@ import {
 } from '../src/sideDock/sideDockRules.ts';
 
 describe('the side panel remembered', () => {
-  it('comes back as one of the three panels', () => {
-    assert.equal(readSidePanel('pendientes'), 'pendientes');
+  it('comes back as one of the two panels; Pendientes is gone (it lives in «Ahora»)', () => {
+    assert.equal(readSidePanel('pendientes'), null);
     assert.equal(readSidePanel('historial'), 'historial');
     assert.equal(readSidePanel('artifacts'), 'artifacts');
   });
@@ -23,8 +23,8 @@ describe('the side panel remembered', () => {
   });
 
   it('closes on its own button and switches on another', () => {
-    assert.equal(toggledPanel('pendientes', 'pendientes'), null);
-    assert.equal(toggledPanel('pendientes', 'historial'), 'historial');
+    assert.equal(toggledPanel('artifacts', 'artifacts'), null);
+    assert.equal(toggledPanel('artifacts', 'historial'), 'historial');
     assert.equal(toggledPanel(null, 'artifacts'), 'artifacts');
   });
 });
