@@ -8,9 +8,9 @@ import {
   jarvisMood,
   visorContext,
   visorKey,
-  visorMode,
   withoutJarvis,
 } from '../src/jarvis/jarvisRules.js';
+import { replyText } from '../src/jarvis/replyTo.js';
 import type { AgentView } from '../src/views/agentViews.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView =>
@@ -103,12 +103,13 @@ describe('its bar and its visor', () => {
     ).toBe('permiso:p9');
   });
 
-  it('muted, never comes up for what it says, still for what it needs', () => {
-    expect(visorMode(false, true, false)).toBe('speaking');
-    expect(visorMode(false, true, true)).toBeUndefined();
-    expect(visorMode(true, false, true)).toBe('needs');
-    expect(visorMode(true, true, true)).toBe('needs');
-    expect(visorMode(false, false, false)).toBeUndefined();
+  it('«Responder» sends the ask’s id first, then the words, then what it was about', () => {
+    expect(
+      replyText({ id: 'p12', from: 'Jarvis', text: 'correr la M2' }, ' listo, ya la corrí '),
+    ).toBe('[p12] listo, ya la corrí\n(Sobre tu pedido «correr la M2»)');
+    expect(replyText({ id: 'p13', from: 'reglas', text: 'borrar las copias' }, 'sí')).toBe(
+      '[p13] sí\n(Sobre lo que pidió «reglas»: «borrar las copias»)',
+    );
   });
 
   it('muted, its round button does not float what it said, only what it needs', () => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import type { PendingAskEntry } from '../../../core/src/messages.js';
 import { Button } from '../components/ui/Button.js';
+import { replyTo } from '../jarvis/replyTo.js';
 import { ClosedAsk, CopyCommand, SeemsDoneAsk } from '../pendingAsks/PendingAsksPanel.js';
 import {
   closePendingAsk,
@@ -240,9 +241,18 @@ function NowCard({
           </Button>
         )}
         <SnoozeMenu ask={ask} now={now} meetings={meetings} />
-        {ask.from === 'Jarvis' && jarvis?.onWrite && (
-          <Button size="sm" variant="ghost" onClick={jarvis.onWrite}>
-            Escribirle a Jarvis…
+        {jarvis?.onWrite && (
+          // Jarvis's box opens with this ask quoted: your words go with its id.
+          <Button
+            size="sm"
+            variant="ghost"
+            title="Escribirle a Jarvis sobre este pendiente"
+            onClick={() => {
+              replyTo(ask);
+              jarvis.onWrite?.();
+            }}
+          >
+            Responder…
           </Button>
         )}
       </div>

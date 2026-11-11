@@ -3,6 +3,7 @@ import { type RefObject, useEffect, useRef, useState } from 'react';
 import { Button } from '../components/ui/Button.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
+import { JarvisAsk } from './JarvisAsk.js';
 import { HeardNote, JarvisChat, JarvisStatusLines } from './JarvisChat.js';
 import { useJarvisChatState } from './jarvisChatState.js';
 import {
@@ -16,7 +17,7 @@ import {
   useJarvisPanelSize,
 } from './jarvisPanelSize.js';
 import { JarvisRing } from './JarvisRing.js';
-import { bubbleTitle } from './jarvisRules.js';
+import { type AskedPermission, bubbleTitle } from './jarvisRules.js';
 /** Whether its panel was open, for this tab (a reload keeps it). */
 const OPEN_KEY = 'jarvis:abierto';
 
@@ -102,21 +103,25 @@ function PanelEdge({
  * chat in a panel above it and closes it again, so it never covers the
  * office. The button shows how it is (working, needs you, listening); what
  * its ears or its voice have to say shows beside it while the panel is
- * closed. When it needs you it still comes to the middle of the screen
- * (JarvisVisor). With no Jarvis in the office the panel offers to call one.
+ * closed. What it asks of you shows there too, as a small card (JarvisAsk),
+ * never over the middle of the screen (the visor did, until 2026-11-11). With
+ * no Jarvis in the office the panel offers to call one.
  */
 export function JarvisBubble({
   jarvis,
   actions,
   onSummon,
-  focusSignal,
+  focusSignal = 0,
+  asked,
 }: {
   jarvis: AgentView | undefined;
   actions: BoardActions;
   /** Opens the launch dialog for a Jarvis (absent: this office cannot launch). */
   onSummon?: () => void;
-  /** Changes when something (the visor's «Escribirle») wants to write to it. */
-  focusSignal: number;
+  /** Changes when something («Responder» on a pending ask) wants to write to it. */
+  focusSignal?: number;
+  /** Another agent's permission Jarvis asks you about. */
+  asked?: AskedPermission;
 }) {
   const [open, setOpenState] = useState(readOpen);
   const setOpen = (next: boolean) => {
@@ -174,6 +179,7 @@ export function JarvisBubble({
             state={state}
             onSummon={onSummon}
             composerFocus={composerFocus}
+            asked={asked}
             headerButtons={
               <>
                 <Button
@@ -209,9 +215,20 @@ export function JarvisBubble({
         </aside>
       )}
 
-      {/* Closed: what its ears or its voice have to say, beside the bubble. */}
-      {!open && (notice || earsLine || noteText) && (
-        <div className="absolute right-84 bottom-16 z-30 w-[min(340px,calc(100%-100px))] flex flex-col gap-8">
+      {/* Closed: what it asks of you, and what its ears or its voice have to
+          say, beside the bubble — small, never over the middle. */}
+      {!open && (
+        <div className="absolute right-84 bottom-16 z-30 w-[min(360px,calc(100%-100px))] flex flex-col gap-8 pointer-events-none [&>*]:pointer-events-auto">
+          <JarvisAsk
+            jarvis={jarvis}
+            asked={asked}
+            actions={actions}
+            variant="corner"
+            onWrite={() => {
+              setOpen(true);
+              requestAnimationFrame(() => setComposerFocus((n) => n + 1));
+            }}
+          />
           {(notice || earsLine) && (
             <div className="soft-panel px-12 py-8 flex flex-col gap-4">
               <JarvisStatusLines state={state} />
