@@ -31,6 +31,7 @@ export function JarvisAsk({
   actions,
   variant,
   onWrite,
+  permissionsOnly = false,
 }: {
   jarvis: AgentView | undefined;
   asked?: AskedPermission;
@@ -38,6 +39,8 @@ export function JarvisAsk({
   variant: 'docked' | 'corner';
   /** «Escribirle»: open its chat to write (corner only). */
   onWrite?: () => void;
+  /** Its «Te toca:» shows elsewhere (a card): only permissions here. */
+  permissionsOnly?: boolean;
 }) {
   const key = visorKey(jarvis, asked);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
@@ -45,6 +48,7 @@ export function JarvisAsk({
   const dismiss = () => setDismissed((d) => new Set(d).add(key));
   const ask = asked && key === `pide:${asked.permission.requestId}` ? asked : undefined;
   const permission = ask?.permission ?? jarvis.permission;
+  if (permissionsOnly && !permission) return null;
   const command = permission
     ? describeToolInput(permission.toolName, permission.toolInput).sections[0]
     : undefined;

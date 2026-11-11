@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { useEditAgent } from './agents/useEditAgent.js';
 import { useSupervisionSync } from './agents/useSupervisionSync.js';
 import { ArtifactsPanel } from './artifacts/ArtifactsPanel.js';
+import { AsistenteView } from './asistente/AsistenteView.js';
 import { showTerminalOf } from './chat/chatMode.js';
 import { BroadcastDialog } from './command/BroadcastDialog.js';
 import { CommandPalette } from './command/CommandPalette.js';
@@ -61,7 +62,6 @@ import type { AgentKind } from './views/agentViews.js';
 import type { BoardActions } from './views/BoardCard.js';
 import { BoardView } from './views/BoardView.js';
 import { requestCelebration } from './views/celebrate.js';
-import { ControlView } from './views/ControlView.js';
 import { DayKeeper } from './views/DayKeeper.js';
 import { revealOnGraph } from './views/graphReveal.js';
 import { GraphView } from './views/GraphView.js';
@@ -513,7 +513,7 @@ function App() {
                   space={workspaces.space}
                 />
               ) : shownView === 'control' ? (
-                <ControlView
+                <AsistenteView
                   views={workspaces.shown}
                   actions={agentActions}
                   jarvis={jarvis}

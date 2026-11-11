@@ -153,6 +153,8 @@ export function JarvisChat({
   composerFocus,
   headerButtons,
   asked,
+  aboveBox,
+  permissionsOnly = false,
 }: {
   jarvis: AgentView | undefined;
   actions: BoardActions;
@@ -165,6 +167,10 @@ export function JarvisChat({
   headerButtons?: ReactNode;
   /** Another agent's permission Jarvis asks you about. */
   asked?: AskedPermission;
+  /** The host's own strip right above the box (the Asistente's decision cards). */
+  aboveBox?: ReactNode;
+  /** Its «Te toca:» is already a card elsewhere: above the box, only permissions. */
+  permissionsOnly?: boolean;
 }) {
   const { voice, notice, earsLine, noteText, note, mood, speaks, ears } = state;
   const reply = useReplyTarget();
@@ -245,7 +251,14 @@ export function JarvisChat({
             composerLeading={<MicButton jarvisId={jarvis.id} ears={ears} />}
             composerTop={
               <>
-                <JarvisAsk jarvis={jarvis} asked={asked} actions={actions} variant="docked" />
+                {aboveBox}
+                <JarvisAsk
+                  jarvis={jarvis}
+                  asked={asked}
+                  actions={actions}
+                  variant="docked"
+                  permissionsOnly={permissionsOnly}
+                />
                 {reply && <ReplyQuote reply={reply} />}
               </>
             }
