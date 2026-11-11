@@ -196,12 +196,13 @@ describe('when a new ask takes the place of an old one', () => {
     expect(openTexts(asks)).toEqual([]);
   });
 
-  it('a newer one about the same PR replaces it, and says so', () => {
+  it('a newer one about the same PR joins it: one row in the newer words, the older kept', () => {
     const asks = list();
     add(asks, 'probar el PR #99 en un iPhone');
-    add(asks, 'decidir si el PR #99 va después del #98');
+    const joined = add(asks, 'decidir si el PR #99 va después del #98');
+    expect(joined?.id).toBe('p1');
     expect(openTexts(asks)).toEqual(['decidir si el PR #99 va después del #98']);
-    expect(asks.find('p1')?.closedHow).toBe('Lo reemplazó p2');
+    expect(asks.find('p1')?.history?.map((h) => h.text)).toEqual(['probar el PR #99 en un iPhone']);
   });
 
   it('whoever asks it: an agent and Jarvis talking of one PR are one thing to do', () => {
@@ -227,12 +228,13 @@ describe('when a new ask takes the place of an old one', () => {
     expect(openTexts(asks)).toHaveLength(2);
   });
 
-  it('a replaced one can come back if the guess was wrong', () => {
+  it('a closed one is not joined: asking it again opens a new one', () => {
     const asks = list();
     add(asks, 'cerrar #5');
+    asks.closeById('p1', 'Lo marcaste hecho');
     add(asks, 'mergear #5');
-    asks.reopen('p1');
-    expect(openTexts(asks)).toEqual(['cerrar #5', 'mergear #5']);
+    expect(openTexts(asks)).toEqual(['mergear #5']);
+    expect(asks.find('p2')).toBeDefined();
   });
 });
 

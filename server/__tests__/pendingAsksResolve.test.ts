@@ -230,7 +230,9 @@ describe('what looks done', () => {
     expect(asks.open()[0].seemsDone).toBeUndefined();
     prStates.set(PR(2), 'merged');
     asks.settlePrs((u) => prStates.get(u));
-    expect(asks.open()[0].seemsDone).toBe('Se mergearon los PRs #1, #2');
+    // Merging both was all it asked: done, not just looking done.
+    expect(asks.open()).toEqual([]);
+    expect(asks.find('p1')?.closedHow).toBe('Se mergearon los PRs #1, #2');
   });
 
   it('closed without merging is not done', () => {

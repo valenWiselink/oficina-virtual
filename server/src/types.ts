@@ -135,6 +135,8 @@ export interface AgentState {
   lastReplyAt?: number;
   /** When Valentín last wrote or spoke to it (ms, from the record). */
   valentinPromptAt?: number;
+  /** What he wrote or said then (clipped): «[p12] listo» answers a pending ask. */
+  valentinPromptText?: string;
   /** Since when it looks finished and no longer needed (closeWatch.ts). */
   closeSuggestedAt?: number;
   /** The current (or last) turn answers Valentín: he started it or wrote in

@@ -53,23 +53,38 @@ export function observeTurnAuthor(agent: AgentState, record: Record<string, unkn
   const before = agent.turnByValentin === true;
   const promptBefore = agent.valentinPromptAt;
   if (record.type === 'user') {
-    const who = authorOf(promptTexts(record));
+    const texts = promptTexts(record);
+    const who = authorOf(texts);
     if (who) agent.turnByValentin = who === 'valentin';
-    if (who === 'valentin') noteValentin(agent, record);
+    if (who === 'valentin') noteValentin(agent, record, texts);
   } else if (record.type === 'attachment') {
     const queued = record.attachment as Record<string, unknown> | undefined;
     if (queued?.type === 'queued_command' && typeof queued.prompt === 'string') {
       if (promptAuthor(queued.prompt) === 'valentin') {
         agent.turnByValentin = true;
-        noteValentin(agent, record);
+        noteValentin(agent, record, [queued.prompt]);
       }
     }
   }
   return before !== (agent.turnByValentin === true) || promptBefore !== agent.valentinPromptAt;
 }
 
-/** When he wrote (the record's time): what Jarvis asked before is answered. */
-function noteValentin(agent: AgentState, record: Record<string, unknown>): void {
+/** What he wrote, at most this long: enough for «[p12] listo» or «sí a todo». */
+const PROMPT_TEXT_MAX = 400;
+
+/** When he wrote (the record's time) and what: what Jarvis asked before is answered. */
+function noteValentin(
+  agent: AgentState,
+  record: Record<string, unknown>,
+  texts: readonly string[],
+): void {
   const at = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : NaN;
-  if (!Number.isNaN(at)) agent.valentinPromptAt = Math.max(agent.valentinPromptAt ?? 0, at);
+  if (Number.isNaN(at) || at < (agent.valentinPromptAt ?? 0)) return;
+  agent.valentinPromptAt = at;
+  const said = texts
+    .filter((t) => promptAuthor(t) === 'valentin')
+    .map((t) => userText(t) ?? '')
+    .join('\n')
+    .trim();
+  agent.valentinPromptText = said.slice(0, PROMPT_TEXT_MAX) || undefined;
 }

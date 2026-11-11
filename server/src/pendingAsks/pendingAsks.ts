@@ -6,6 +6,7 @@ import type { PendingAskEntry, PendingAsksList } from '../../../core/src/message
 import { SERVER_JSON_DIR } from '../constants.js';
 import { prStateOf } from '../mergedAsk.js';
 import { type MergeTarget, mergeTargetOf } from './mergeTarget.js';
+import { askRefs, commandPrUrl, numbersToDigits, onlyMerge, prNumbers, shareRef } from './refs.js';
 
 export const PENDING_ASKS_FILE = 'pendientes.json';
 const TEXT_MAX = 240;
@@ -14,8 +15,25 @@ const CLOSED_KEPT = 100;
 const CLOSED_SHOWN = 30;
 /** Turns remembered so an old answer never comes back as a new ask. */
 const SEEN_KEPT = 1000;
+/** Earlier wordings kept on an ask that was asked again. */
+const HISTORY_KEPT = 8;
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+/** What a closing agent left waits this long for Jarvis to take it. */
+export const HOLD_MS = 5 * MINUTE;
+/** Answered and nobody reopened it: done. */
+export const ANSWER_SETTLE_MS = 2 * HOUR;
+/** Nobody touched it in this long: «¿Sigue?». */
+export const STALE_MS = 24 * HOUR;
 
-export const REPLACED_BY = 'Lo reemplazó';
+export const JARVIS = 'Jarvis';
+export const ANSWERED_HOW = 'Le contestaste a Jarvis';
+
+export interface AskVersion {
+  at: number;
+  from: string;
+  text: string;
+}
 
 export interface StoredAsk {
   id: string;
@@ -47,6 +65,23 @@ export interface StoredAsk {
   /** Why now, and what happens if not (Jarvis, dejar_pendiente). */
   why?: string;
   ifNot?: string;
+  /** Jarvis's own name for it: asked again under it, it is the same ask. */
+  key?: string;
+  /** What it is about (refs.ts): another ask about the same thing joins it. */
+  refs?: string[];
+  /** The answers it waits for («Sí», «No», «La A»): one tap each. */
+  options?: string[];
+  /** How it was worded before it was asked again. */
+  history?: AskVersion[];
+  /** He answered it; it waits for Jarvis to check, or closes by itself. */
+  answeredAt?: number;
+  answeredHow?: string;
+  /** A closing agent left it: out of sight until Jarvis had time to take it. */
+  heldUntil?: number;
+  /** Last time anyone asked, answered or kept it. */
+  touchedAt?: number;
+  /** Nobody touched it in a day: «¿Sigue?». */
+  staleSince?: number;
 }
 
 /** What Jarvis can say about an ask beyond its text (dejar_pendiente). */
@@ -74,10 +109,20 @@ export interface NewAsk {
   notBefore?: number;
   why?: string;
   ifNot?: string;
+  key?: string;
+  options?: string[];
+  /** Ids it takes the place of: they join it instead of staying apart. */
+  replaces?: string[];
+  /** Keep it out of sight this long (a closing agent's ask). */
+  holdMs?: number;
+  /** PR numbers the office knows the URL of (agents' links). */
+  knownPrs?: ReadonlyMap<number, string>;
 }
 
 interface PendingAsksDeps {
   broadcast: (message: PendingAsksList) => void;
+  /** Tell Jarvis, in its terminal, what Valentín settled by hand. */
+  tellJarvis?: (text: string) => void;
   file?: string;
   now?: () => number;
 }
@@ -93,32 +138,7 @@ export function commandOf(rawLine: string | undefined): string | undefined {
   return undefined;
 }
 
-interface PrRef {
-  repo?: string;
-  number: number;
-}
-
-const PR_URL = /https:\/\/github\.com\/[^/\s)]+\/([^/\s)]+)\/pull\/(\d+)/g;
-const PR_NUMBER = /#(\d{1,7})\b/g;
-
-function prRefs(text: string): PrRef[] {
-  const refs: PrRef[] = [...text.matchAll(PR_URL)].map((m) => ({
-    repo: m[1],
-    number: Number(m[2]),
-  }));
-  for (const m of text.replace(PR_URL, ' ').matchAll(PR_NUMBER)) {
-    refs.push({ number: Number(m[1]) });
-  }
-  return refs;
-}
-
-/** Two asks about the same PR: a bare «#23» matches any repo, two URLs must agree. */
-function sharePr(a: string, b: string): boolean {
-  const theirs = prRefs(b);
-  return prRefs(a).some((x) =>
-    theirs.some((y) => x.number === y.number && (!x.repo || !y.repo || x.repo === y.repo)),
-  );
-}
+const PR_URL = /https:\/\/github\.com\/[^/\s)]+\/[^/\s)]+\/pull\/\d+/g;
 
 /**
  * «23:00» as a moment: today at that time on this machine's clock, or
@@ -140,26 +160,40 @@ export function clockAt(hhmm: string, now: number): number | null {
 /** «#12» for a PR URL. */
 const prLabel = (url: string): string => `#${url.split('/').pop() ?? ''}`;
 
-/** The PR URLs an ask names: its own links, and «#12» when the agent's
- *  answers linked that number before (`known`, mergedAsk.ts). */
+/** The PR URLs an ask names: its own links, and «#12» or «PR 12» when an
+ *  agent's answers linked that number before (`known`, mergedAsk.ts). */
 export function prUrlsOf(text: string, known?: ReadonlyMap<number, string>): string[] {
-  const urls = [...text.matchAll(PR_URL)].map((m) => m[0]);
-  for (const m of text.replace(PR_URL, ' ').matchAll(PR_NUMBER)) {
-    const url = known?.get(Number(m[1]));
+  const plain = numbersToDigits(text);
+  const urls = [...plain.matchAll(PR_URL)].map((m) => m[0]);
+  for (const n of prNumbers(plain.replace(PR_URL, ' '))) {
+    const url = known?.get(n);
     if (url) urls.push(url);
   }
   return [...new Set(urls)];
 }
 
 const folded = (text: string): string => text.trim().toLowerCase().replace(/\s+/g, ' ');
+const clip = (text: string, max: number): string =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
+const hourOf = (ms: number): string =>
+  new Date(ms).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+/** «listo», «ya lo hice», «sí», «no», «dale»: a short answer to what was just asked. */
+const SHORT_ANSWER =
+  /^\s*(?:listo|lista|hecho|hecha|ya|dale|s[ií]|no|ok|okey|de una|perfecto|joya|confirmo|confirmado|aprobado|corrid[oa]|mergead[oa])(?!\p{L})/iu;
+const ALL_OF_THEM = /\b(?:todo|todos|todas|ambos|ambas|los dos|las dos|los tres|las tres)\b/i;
+const ID_IN_TEXT = /\[?\b(p\d{1,5})\b\]?/gi;
 
 /**
  * What Valentín has pending, whoever asked it, kept in
  * ~/.pixel-agents/pendientes.json: it outlives the agent that asked, Claude Code
- * cleaning its transcripts and any restart. An ask leaves the list by hand, by
- * Jarvis once it checked it was done, or when its PR merges, its permission is
- * decided or a newer ask about the same PR takes its place. Closed ones stay
- * for a while: a wrong replacement can be reopened, so nothing is lost silently.
+ * cleaning its transcripts and any restart. Asked again (same key, same text or
+ * the same PR, migration, ticket or artifact) it is the same ask, worded anew.
+ * It leaves the list by hand («Hecho» tells Jarvis), by Jarvis, when he answers
+ * it (then it waits for Jarvis or closes by itself in two hours), when its PRs
+ * merge, or when its permission is decided. Closed ones stay for a while: one
+ * can be reopened, so nothing is lost silently. The file stays version 1: new
+ * fields are optional, so an older office still reads it.
  */
 export class PendingAsks {
   private readonly file: string;
@@ -182,52 +216,153 @@ export class PendingAsks {
     return { type: 'pendingAsks', open: this.open().map(toEntry), closed: closed.map(toEntry) };
   }
 
-  /** Still pending, oldest first: what has waited longest stays on top —
-   *  below it what only looks done, waiting for a last look. */
+  /** Still pending and in sight, oldest first: what has waited longest stays
+   *  on top — below it what only looks done, waiting for a last look. */
   open(): StoredAsk[] {
-    return this.asks
-      .filter((a) => a.closedAt === undefined)
-      .sort((a, b) => Number(!!a.seemsDone) - Number(!!b.seemsDone) || a.at - b.at);
+    const now = this.now();
+    return this.pending()
+      .filter((a) => a.heldUntil === undefined || a.heldUntil <= now)
+      .sort((a, b) => Number(lookDone(a)) - Number(lookDone(b)) || a.at - b.at);
+  }
+
+  /** Not closed, held ones too (a closing agent's ask Jarvis may still take). */
+  pending(): StoredAsk[] {
+    return this.asks.filter((a) => a.closedAt === undefined);
   }
 
   hasSeen(turnId: string): boolean {
     return this.seen.has(turnId);
   }
 
-  /** Adds an ask; the one already there if it repeats. A newer one about the same PR replaces. */
+  /**
+   * Adds an ask, or joins the one already about the same thing: the one it
+   * replaces, the same key, the same words, or the same PR, migration,
+   * ticket or artifact. Joined, the newer wording wins (Jarvis's over an
+   * agent's) and the older one is kept in its history.
+   */
   add(ask: NewAsk): StoredAsk | undefined {
-    const text = ask.text.trim().slice(0, TEXT_MAX);
+    const text = numbersToDigits(ask.text.trim()).slice(0, TEXT_MAX);
     if (!text) return undefined;
     if (ask.turnId) this.remember(ask.turnId);
-    const repeated = this.open().find((a) => folded(a.text) === folded(text));
-    if (repeated) {
-      if (ask.turnId) repeated.turnIds.push(ask.turnId);
+    const at = ask.at ?? this.now();
+    const prUrls = this.prUrlsFor(ask, text);
+    const refs = [
+      ...new Set([...askRefs(text, ask.command), ...prUrls.flatMap((u) => askRefs(u))]),
+    ];
+    const incoming = { ...ask, text, at, prUrls, refs };
+    const target = this.sameThing(incoming);
+    if (target) {
+      this.join(target, incoming);
       this.changed();
-      return repeated;
+      return target;
     }
-    const stored: StoredAsk = {
+    const stored = this.create(incoming);
+    this.asks.push(stored);
+    this.changed();
+    return stored;
+  }
+
+  private prUrlsFor(ask: NewAsk, text: string): string[] {
+    const fromCommand = commandPrUrl(ask.command);
+    return [
+      ...new Set([
+        ...(ask.prUrls ?? []),
+        ...prUrlsOf(text, ask.knownPrs),
+        ...(fromCommand ? [fromCommand] : []),
+      ]),
+    ];
+  }
+
+  /** The pending ask this one is about too, if any; the others it replaces close. */
+  private sameThing(incoming: NewAsk & { text: string; refs: string[] }): StoredAsk | undefined {
+    const pending = this.pending();
+    const replaced = (incoming.replaces ?? [])
+      .map((id) => this.find(id))
+      .filter((a): a is StoredAsk => !!a && a.closedAt === undefined);
+    const [first, ...others] = replaced;
+    if (first) {
+      for (const other of others) this.close(other, `Se juntó con ${first.id}`);
+      return first;
+    }
+    return (
+      (incoming.key ? pending.find((a) => a.key === incoming.key) : undefined) ??
+      pending.find((a) => folded(a.text) === folded(incoming.text)) ??
+      (incoming.refs.length > 0
+        ? pending.find((a) => shareRef(a.refs ?? askRefs(a.text, a.command), incoming.refs))
+        : undefined)
+    );
+  }
+
+  private create(
+    ask: NewAsk & { text: string; at: number; prUrls: string[]; refs: string[] },
+  ): StoredAsk {
+    return {
       id: `p${this.nextId++}`,
       from: ask.from,
-      text,
-      at: ask.at ?? this.now(),
+      text: ask.text,
+      at: ask.at,
       turnIds: ask.turnId ? [ask.turnId] : [],
       ...(ask.command ? { command: ask.command } : {}),
       ...(ask.prUrl ? { prUrl: ask.prUrl } : {}),
       ...(ask.permission ? { permission: ask.permission } : {}),
       ...(ask.question ? { question: true } : {}),
-      ...(ask.prUrls?.length ? { prUrls: [...new Set(ask.prUrls)] } : {}),
+      ...(ask.prUrls.length ? { prUrls: ask.prUrls } : {}),
+      ...(ask.refs.length ? { refs: ask.refs } : {}),
       ...(ask.seemsDone ? { seemsDone: ask.seemsDone } : {}),
       ...(ask.due !== undefined ? { due: ask.due } : {}),
       ...(ask.notBefore !== undefined ? { notBefore: ask.notBefore } : {}),
-      ...(ask.why?.trim() ? { why: ask.why.trim().slice(0, TEXT_MAX) } : {}),
-      ...(ask.ifNot?.trim() ? { ifNot: ask.ifNot.trim().slice(0, TEXT_MAX) } : {}),
+      ...(ask.why?.trim() ? { why: clip(ask.why.trim(), TEXT_MAX) } : {}),
+      ...(ask.ifNot?.trim() ? { ifNot: clip(ask.ifNot.trim(), TEXT_MAX) } : {}),
+      ...(ask.key?.trim() ? { key: ask.key.trim() } : {}),
+      ...(ask.options?.length
+        ? { options: ask.options.map((o) => clip(o.trim(), 60)).filter(Boolean) }
+        : {}),
+      ...(ask.holdMs ? { heldUntil: this.now() + ask.holdMs } : {}),
     };
-    for (const older of this.open()) {
-      if (sharePr(older.text, text)) this.close(older, `${REPLACED_BY} ${stored.id}`);
+  }
+
+  /** The same thing asked again: one ask, worded anew, with what it had. */
+  private join(
+    target: StoredAsk,
+    incoming: NewAsk & { text: string; at: number; prUrls: string[]; refs: string[] },
+  ): void {
+    this.reword(target, incoming);
+    if (incoming.turnId && !target.turnIds.includes(incoming.turnId))
+      target.turnIds.push(incoming.turnId);
+    if (incoming.command) target.command = incoming.command;
+    target.prUrl ??= incoming.prUrl;
+    target.permission ??= incoming.permission;
+    target.key ??= incoming.key?.trim() || undefined;
+    if (incoming.options?.length) target.options = incoming.options;
+    for (const field of ['due', 'notBefore', 'why', 'ifNot'] as const) {
+      if (incoming[field] !== undefined)
+        (target as unknown as Record<string, unknown>)[field] = incoming[field];
     }
-    this.asks.push(stored);
-    this.changed();
-    return stored;
+    const prUrls = [...new Set([...(target.prUrls ?? []), ...incoming.prUrls])];
+    if (prUrls.length) target.prUrls = prUrls;
+    target.refs = [...new Set([...(target.refs ?? []), ...incoming.refs])];
+    // Jarvis took what a closing agent left: it is his now, and in sight.
+    if (target.heldUntil !== undefined && !incoming.holdMs) delete target.heldUntil;
+    target.touchedAt = this.now();
+    delete target.staleSince;
+  }
+
+  /** The newer wording wins, unless an agent repeats what Jarvis already said. */
+  private reword(target: StoredAsk, incoming: { from: string; text: string; at: number }): void {
+    if (folded(target.text) === folded(incoming.text)) return;
+    const keepJarvis = target.from === JARVIS && incoming.from !== JARVIS;
+    const older: AskVersion = keepJarvis
+      ? { at: incoming.at, from: incoming.from, text: incoming.text }
+      : { at: target.at, from: target.from, text: target.text };
+    target.history = [...(target.history ?? []), older].slice(-HISTORY_KEPT);
+    if (keepJarvis) return;
+    target.text = incoming.text;
+    target.from = incoming.from;
+    // Asked again in new words after he answered: it is pending again.
+    if (target.answeredAt !== undefined && incoming.at > target.answeredAt) {
+      delete target.answeredAt;
+      delete target.answeredHow;
+    }
   }
 
   /** By its id («p3», «P3» or «3»); what it found, even if it was closed already. */
@@ -250,32 +385,98 @@ export class PendingAsks {
     return ask;
   }
 
+  /** «Hecho» on a card: closed, and Jarvis hears it (whoever waited on it can go on). */
+  closeByHand(id: string): StoredAsk | undefined {
+    const ask = this.closeById(id, 'Lo marcaste hecho');
+    if (ask) this.tellDone([ask]);
+    return ask;
+  }
+
   reopen(id: string): void {
     const ask = this.find(id);
     if (!ask || ask.closedAt === undefined) return;
     delete ask.closedAt;
     delete ask.closedHow;
+    delete ask.answeredAt;
+    delete ask.answeredHow;
+    delete ask.staleSince;
+    delete ask.heldUntil;
     ask.reopened = true;
+    ask.touchedAt = this.now();
     this.changed();
   }
 
   /**
    * «Hecho» on a card or the visor; `sync`: a page reminding the office of what
-   * its browser marked before, which never undoes a later «Reabrir».
+   * its browser marked before, which never undoes a later «Reabrir» and tells
+   * Jarvis nothing (he heard it then).
    */
   markTurnsDone(turnIds: readonly string[], sync = false): void {
-    let changed = false;
+    const closed: StoredAsk[] = [];
     for (const turnId of turnIds) {
       this.remember(turnId);
-      for (const ask of this.open()) {
+      for (const ask of this.pending()) {
         if (!ask.turnIds.includes(turnId) || (sync && ask.reopened)) continue;
         this.close(ask, 'Lo marcaste hecho');
-        changed = true;
+        closed.push(ask);
       }
     }
     // Remembering a turn shows nothing: only a closed ask needs the page to hear.
-    if (changed) this.changed();
-    else this.save();
+    if (closed.length === 0) {
+      this.save();
+      return;
+    }
+    this.changed();
+    if (!sync) this.tellDone(closed);
+  }
+
+  private tellDone(asks: readonly StoredAsk[]): void {
+    if (!this.deps.tellJarvis || asks.length === 0) return;
+    const list = asks.map((a) => `${a.id} («${clip(a.text, 120)}»)`).join(', ');
+    this.deps.tellJarvis(
+      `[Oficina] Valentín marcó hecho ${list}. Si alguien esperaba eso, avisale; no hace falta que se lo confirmes a él.`,
+    );
+  }
+
+  /**
+   * He wrote to Jarvis (`text`, at `at`; his previous message was at `since`):
+   * the asks it names by id are answered, and a short «listo», «sí», «ya lo
+   * hice» answers what Jarvis asked since his previous message — the one, or
+   * all of them with «todo», «los dos». Answered, an ask leaves «Ahora» and
+   * waits for Jarvis to check (or closes by itself in two hours).
+   */
+  answeredBy(text: string, at: number, since = 0): StoredAsk[] {
+    const said = text.trim();
+    if (!said) return [];
+    const named = [...said.matchAll(ID_IN_TEXT)]
+      .map((m) => this.find(m[1]))
+      .filter((a): a is StoredAsk => !!a && a.closedAt === undefined);
+    const answered =
+      named.length > 0 ? [...new Set(named)] : this.shortAnswerTargets(said, at, since);
+    const how = `${ANSWERED_HOW}: «${clip(said.replace(ID_IN_TEXT, '').trim() || said, 80)}»`;
+    for (const ask of answered) {
+      if (ask.answeredAt !== undefined) continue;
+      ask.answeredAt = at;
+      ask.answeredHow = how;
+      ask.touchedAt = at;
+      delete ask.staleSince;
+    }
+    if (answered.length > 0) this.changed();
+    return answered;
+  }
+
+  private shortAnswerTargets(said: string, at: number, since: number): StoredAsk[] {
+    if (said.length > 120 || !SHORT_ANSWER.test(said)) return [];
+    const recent = this.open().filter(
+      (a) =>
+        a.from === JARVIS &&
+        a.answeredAt === undefined &&
+        !a.question &&
+        (a.touchedAt ?? a.at) > since &&
+        (a.touchedAt ?? a.at) <= at,
+    );
+    if (recent.length === 1) return recent;
+    return recent.length > 1 && ALL_OF_THEM.test(said) ? recent : [];
   }
 
   closeByPr(url: string, how: string): void {
@@ -288,7 +489,7 @@ export class PendingAsks {
 
   /** He wrote to Jarvis at `at`: the questions it left before that are answered. */
   closeAnswered(at: number): void {
-    this.closeWhere((a) => !!a.question && a.at < at, 'Le contestaste a Jarvis');
+    this.closeWhere((a) => !!a.question && a.at < at, ANSWERED_HOW);
   }
 
   /** Whether `from` left one at or after `since` (open or not). */
@@ -298,14 +499,14 @@ export class PendingAsks {
 
   /** The PRs the open ones name, for the office to watch. */
   prUrls(): string[] {
-    const urls = this.open().flatMap((a) => {
+    const urls = this.pending().flatMap((a) => {
       const merge = mergeTargetOf(a)?.url;
       return [...(a.prUrls ?? []), ...(a.prUrl ? [a.prUrl] : []), ...(merge ? [merge] : [])];
     });
     return [...new Set(urls)];
   }
 
-  /** A PR changed state: what looks done, and which «Mergear» buttons still make sense. */
+  /** A PR changed state: what is done or looks done, and which «Mergear» buttons still make sense. */
   prChanged(url: string, stateOf: (url: string) => string | undefined): void {
     this.settlePrs(stateOf);
     if (this.open().some((a) => mergeTargetOf(a)?.url === url)) this.changed();
@@ -318,23 +519,50 @@ export class PendingAsks {
 
   /**
    * A PR settled: an open ask whose PRs are now all settled, one of them
-   * merged, looks done. Only looks: «mergear #12 y publicar» has a second
-   * half, so it waits for «Hecho» (or Jarvis) instead of closing by itself.
+   * merged, is done when merging was all it asked («mergear #2954 y
+   * avisarme»), and only looks done when there is more («mergear #12 y
+   * publicar»): that waits for «Hecho» or Jarvis.
    */
   settlePrs(stateOf: (url: string) => string | undefined): void {
     let changed = false;
-    for (const ask of this.open()) {
-      const urls = ask.prUrls ?? [];
+    for (const ask of this.pending()) {
+      const urls = [...new Set([...(ask.prUrls ?? []), ...(ask.prUrl ? [ask.prUrl] : [])])];
       if (ask.seemsDone || urls.length === 0) continue;
       const states = urls.map(stateOf);
       if (!states.every((s) => s === 'merged' || s === 'closed')) continue;
       const merged = urls.filter((_, i) => states[i] === 'merged').map(prLabel);
       if (merged.length === 0) continue;
-      ask.seemsDone =
+      const how =
         merged.length === 1
           ? `Se mergeó el PR ${merged[0]}`
           : `Se mergearon los PRs ${merged.join(', ')}`;
+      if (onlyMerge(ask.text)) this.close(ask, how);
+      else ask.seemsDone = how;
       changed = true;
+    }
+    if (changed) this.changed();
+  }
+
+  /**
+   * The clock moved: what a closing agent left comes into sight once Jarvis
+   * had his time, what he answered two hours ago closes, and what nobody
+   * touched in a day asks «¿Sigue?».
+   */
+  tick(): void {
+    const now = this.now();
+    let changed = false;
+    for (const ask of this.pending()) {
+      if (ask.heldUntil !== undefined && ask.heldUntil <= now) {
+        delete ask.heldUntil;
+        changed = true;
+      }
+      if (ask.answeredAt !== undefined && now - ask.answeredAt >= ANSWER_SETTLE_MS) {
+        this.close(ask, ask.answeredHow ?? ANSWERED_HOW);
+        changed = true;
+      } else if (isStale(ask, now)) {
+        ask.staleSince = now;
+        changed = true;
+      }
     }
     if (changed) this.changed();
   }
@@ -344,19 +572,25 @@ export class PendingAsks {
     const ask = this.find(id);
     if (!ask || ask.closedAt !== undefined) return;
     ask.notBefore = until;
+    ask.touchedAt = this.now();
+    delete ask.staleSince;
     this.changed();
   }
 
   /** «Sigue pendiente»: it did not look done to him after all. */
   keep(id: string): void {
     const ask = this.find(id);
-    if (!ask || ask.closedAt !== undefined || !ask.seemsDone) return;
+    if (!ask || ask.closedAt !== undefined || !lookDone(ask)) return;
     delete ask.seemsDone;
+    delete ask.answeredAt;
+    delete ask.answeredHow;
+    delete ask.staleSince;
+    ask.touchedAt = this.now();
     this.changed();
   }
 
   private closeWhere(matches: (ask: StoredAsk) => boolean, how: string): void {
-    const found = this.open().filter(matches);
+    const found = this.pending().filter(matches);
     if (found.length === 0) return;
     for (const ask of found) this.close(ask, how);
     this.changed();
@@ -365,6 +599,7 @@ export class PendingAsks {
   private close(ask: StoredAsk, how: string): void {
     ask.closedAt = this.now();
     ask.closedHow = how;
+    delete ask.heldUntil;
   }
 
   private remember(turnId: string): void {
@@ -415,6 +650,30 @@ export class PendingAsks {
   }
 }
 
+/** Shown apart from what waits: looks done, he answered it, or «¿Sigue?». */
+function lookDone(ask: StoredAsk): boolean {
+  return !!ask.seemsDone || ask.answeredAt !== undefined || ask.staleSince !== undefined;
+}
+
+function isStale(ask: StoredAsk, now: number): boolean {
+  if (lookDone(ask) || ask.heldUntil !== undefined) return false;
+  if (ask.notBefore !== undefined && ask.notBefore > now) return false;
+  return now - (ask.touchedAt ?? ask.at) >= STALE_MS;
+}
+
+/** Why it is shown apart, in words for its card. */
+function apartReason(ask: StoredAsk): string | undefined {
+  if (ask.seemsDone) return ask.seemsDone;
+  if (ask.answeredAt !== undefined) {
+    return `Le contestaste a Jarvis a las ${hourOf(ask.answeredAt)}: se cierra solo en 2 h si nadie lo reabre`;
+  }
+  if (ask.staleSince !== undefined) {
+    const hours = Math.round((ask.staleSince - (ask.touchedAt ?? ask.at)) / HOUR);
+    return `¿Sigue? Nadie lo movió en ${hours} h`;
+  }
+  return undefined;
+}
+
 /** The PR its «Mergear» button merges: only while it is not merged or closed. */
 export function openMergeTarget(ask: StoredAsk): MergeTarget | undefined {
   if (ask.closedAt !== undefined) return undefined;
@@ -426,6 +685,7 @@ export function openMergeTarget(ask: StoredAsk): MergeTarget | undefined {
 function toEntry(ask: StoredAsk): PendingAskEntry {
   const merge = openMergeTarget(ask);
   const open = ask.closedAt === undefined;
+  const apart = open ? apartReason(ask) : undefined;
   return {
     id: ask.id,
     from: ask.from,
@@ -437,10 +697,11 @@ function toEntry(ask: StoredAsk): PendingAskEntry {
     ...(open && ask.why ? { why: ask.why } : {}),
     ...(open && ask.ifNot ? { ifNot: ask.ifNot } : {}),
     ...(open && ask.question ? { question: true } : {}),
+    ...(open && ask.options?.length ? { options: ask.options } : {}),
     ...(merge
       ? { mergeUrl: merge.url, mergeCommand: `gh pr merge ${merge.url} ${merge.args.join(' ')}` }
       : {}),
-    ...(ask.seemsDone && ask.closedAt === undefined ? { seemsDone: ask.seemsDone } : {}),
+    ...(apart ? { seemsDone: apart } : {}),
     ...(ask.closedAt !== undefined ? { closedAt: ask.closedAt } : {}),
     ...(ask.closedHow ? { closedHow: ask.closedHow } : {}),
     ...(ask.closedAt !== undefined && ask.turnIds.length > 0 ? { turnIds: ask.turnIds } : {}),
