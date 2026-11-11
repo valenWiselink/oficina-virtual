@@ -157,7 +157,12 @@ export function BottomToolbar({
           [
             ['tablero', 'view_kanban', 'Tablero', 'Agentes por estado'],
             ['grafo', 'hub', 'Grafo', 'Cómo trabajan entre ellos'],
-            ['control', 'dashboard', 'Control', 'Pendientes, agenda y Jarvis; los agentes, abajo'],
+            [
+              'control',
+              'forum',
+              'Asistente',
+              'Jarvis y lo que te espera, con el equipo y lo que viene',
+            ],
           ] as const
         ).map(([id, icon, label, title]) => (
           <button

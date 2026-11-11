@@ -67,9 +67,9 @@ export function buildCommands(
     { id: 'grafo', label: 'Ver grafo', icon: 'hub', run: () => actions.onSetView('grafo') },
     {
       id: 'control',
-      label: 'Ver control',
-      icon: 'dashboard',
-      keywords: 'tablero de control pendientes agenda jarvis',
+      label: 'Ver el asistente',
+      icon: 'forum',
+      keywords: 'asistente control decidir pendientes agenda jarvis',
       run: () => actions.onSetView('control'),
     },
     {

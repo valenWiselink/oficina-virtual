@@ -303,9 +303,18 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   left: the board keeps a column for it (`useMeetingsInset`), so it never covers
   «Te necesita»; under 760 px it opens over the board. z-10: Historial and Jarvis
   open above it.
-- `artifacts/`, `pendingAsks/` — panels from the toolbar, over the same spot as
-  Historial: one at a time (`leftPanel` in `App.tsx`). «Pendientes» carries the
-  count. Not in the phone shell or read-only.
+- `artifacts/` — a panel from the toolbar, in the same spot as Historial: one
+  at a time (`leftPanel` in `App.tsx`). Not in the phone shell or read-only.
+- `asistente/` — the «Asistente» view (design C «Momentos», 2026-11-11; view
+  id `control` kept so a remembered choice still works): Jarvis's chat in the
+  middle; in «Decidir» the pending asks as cards right above its box
+  (`DecisionHand`, buttons from `now/AskActions.tsx`), the team on the left
+  with its last half hour (`TeamColumn`, from the day log) and «Lo que viene»
+  on the right (`ComingColumn`: today, later, answered, published today,
+  closed). «Escribir» folds everything into the conversation. The moment is
+  chosen by hand and remembered (`oficina.momento`). Jarvis's own «Te toca:»
+  is a card there, so its strip above the box shows only permissions. The
+  toolbar's «Pendientes» count takes you here.
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.
 - `components/ui/` — Button, Modal, Switch, TextInput, Dropdown.
 
