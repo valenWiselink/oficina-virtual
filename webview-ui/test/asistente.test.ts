@@ -13,8 +13,18 @@ import {
   momentLabel,
   momentReason,
   readChoice,
+  swipeOf,
   urgentInMeeting,
 } from '../src/asistente/asistenteRules.ts';
+
+describe('a swipe on a card', () => {
+  it('sideways and far enough; a tap or a scroll is nothing', () => {
+    assert.equal(swipeOf(120, 10), 'right');
+    assert.equal(swipeOf(-95, 20), 'left');
+    assert.equal(swipeOf(40, 0), undefined);
+    assert.equal(swipeOf(90, 140), undefined);
+  });
+});
 
 const MIN = 60_000;
 /** Wednesday 11 November 2026 at that local time. */

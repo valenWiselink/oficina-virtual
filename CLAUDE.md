@@ -326,7 +326,12 @@ webview's `OfficeState` (office/engine) is kept as the character registry
 resolutions.ts` shows them as «Lo tomé así» (`askResolutions`, privileged)
   with «Deshacer» (`undoAskResolution`) and applies them after `UNDO_MS`; a
   merge is never applied by voice, only by `HoldButton` (held 1.2 s), which
-  runs the usual `mergePendingAsk`. Jarvis's own «Te toca:»
+  runs the usual `mergePendingAsk`. A meeting moment also starts «Modo foco»
+  until it ends (`startMeetingFocus`; the banner and its summary say
+  «reunión»), ended early only if you leave the moment by hand. Under 900px
+  of office the cards become `DecisionStack`: one at a time, swipe right for
+  its main answer (`usePrimaryAction`, never a merge), left for the next.
+  Under 768px the phone shell has no Asistente (as Control before). Jarvis's own «Te toca:»
   is a card there, so its strip above the box shows only permissions. The
   toolbar's «Pendientes» count takes you here.
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.

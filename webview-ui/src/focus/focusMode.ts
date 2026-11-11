@@ -20,6 +20,8 @@ export interface FocusState {
   missed: Record<MissedKind, number>;
   /** Set when a focus ended and its summary was not dismissed yet. */
   ended: boolean;
+  /** Started by a meeting (the Asistente's «Reunión»), by its title. */
+  meeting?: string;
 }
 
 const KEY = 'oficina.foco';
@@ -39,6 +41,7 @@ function recall(): FocusState {
       endsAt: typeof raw.endsAt === 'number' ? raw.endsAt : undefined,
       missed: { ...NONE, ...raw.missed },
       ended: !!raw.ended,
+      ...(typeof raw.meeting === 'string' ? { meeting: raw.meeting } : {}),
     };
   } catch {
     return { active: false, missed: { ...NONE }, ended: false };
@@ -73,6 +76,20 @@ export function startFocus(minutes = DEFAULT_FOCUS_MIN): void {
     missed: { ...NONE },
     ended: false,
   });
+}
+
+/**
+ * A meeting under way (the Asistente's «Reunión»): quiet until it ends, with
+ * the same summary after. A focus already running is left as it is.
+ */
+export function startMeetingFocus(title: string, endsAt: number): void {
+  if (state.active || endsAt <= Date.now()) return;
+  set({ active: true, endsAt, missed: { ...NONE }, ended: false, meeting: title });
+}
+
+/** The meeting moment is over: end the focus only if the meeting started it. */
+export function endMeetingFocus(): void {
+  if (state.active && state.meeting !== undefined) endFocus();
 }
 
 /** Stop it (by hand or on time): the summary shows what it kept quiet. */

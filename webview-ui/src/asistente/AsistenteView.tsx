@@ -1,6 +1,7 @@
 import { type FocusEvent, type FormEvent, useEffect, useState } from 'react';
 
 import { useDayTint } from '../effects/dayTint.js';
+import { endMeetingFocus, startMeetingFocus } from '../focus/focusMode.js';
 import { JarvisChat } from '../jarvis/JarvisChat.js';
 import { useJarvisChatState } from '../jarvis/jarvisChatState.js';
 import type { AskedPermission } from '../jarvis/jarvisRules.js';
@@ -25,6 +26,7 @@ import {
 import { ClosingPanel } from './ClosingPanel.js';
 import { ComingColumn } from './ComingColumn.js';
 import { DecisionHand } from './DecisionHand.js';
+import { DecisionStack } from './DecisionStack.js';
 import { MeetingBanner } from './MeetingBanner.js';
 import { MomentBar } from './MomentBar.js';
 import { useAskResolutions } from './resolutionsStore.js';
@@ -133,7 +135,17 @@ function Conversation({
         aboveBox={
           <>
             <ResolutionsTray />
-            {hand && <DecisionHand waiting={urgent} now={now} meetings={meetings} jarvis={link} />}
+            {hand && (
+              <>
+                {/* Wide: the cards side by side. Narrow: one at a time, swipeable. */}
+                <div className="hidden @min-[900px]:contents">
+                  <DecisionHand waiting={urgent} now={now} meetings={meetings} jarvis={link} />
+                </div>
+                <div className="contents @min-[900px]:hidden">
+                  <DecisionStack waiting={urgent} now={now} meetings={meetings} jarvis={link} />
+                </div>
+              </>
+            )}
           </>
         }
       />
@@ -175,6 +187,17 @@ export function AsistenteView({
     setJarvisHushed(moment === 'reunion');
     return () => setJarvisHushed(false);
   }, [moment]);
+
+  // A meeting quiets the office like «Modo foco», until it ends (with the same
+  // «mientras tanto» after); leaving the moment by hand ends that quiet too.
+  const meeting = moment === 'reunion' ? meetingNow(model.meetings, model.now) : undefined;
+  const meetingKey = meeting ? `${meeting.title}@${meeting.start}` : undefined;
+  useEffect(() => {
+    if (meeting) startMeetingFocus(meeting.title, meeting.end);
+    else endMeetingFocus();
+    // Only when the meeting itself changes, not on every clock tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingKey]);
 
   const deciding = moment === 'decidir';
   const closing = moment === 'cierre';

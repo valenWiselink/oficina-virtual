@@ -148,6 +148,15 @@ export function activityOf(entries: readonly DayLogEntry[], agent: string, now: 
   return buckets;
 }
 
+/** How far a card must travel sideways to count as a swipe (px). */
+export const SWIPE_PX = 80;
+
+/** A drag on a card: mostly sideways and far enough, or nothing (a tap, a scroll). */
+export function swipeOf(dx: number, dy: number): 'left' | 'right' | undefined {
+  if (Math.abs(dx) < SWIPE_PX || Math.abs(dy) > Math.abs(dx)) return undefined;
+  return dx > 0 ? 'right' : 'left';
+}
+
 /** The cards in sight and how many wait behind them. */
 export function handOf<T>(waiting: readonly T[], all: boolean): { shown: T[]; more: number } {
   const shown = all ? [...waiting] : waiting.slice(0, HAND_SHOWN);

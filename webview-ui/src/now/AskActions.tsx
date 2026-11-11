@@ -10,7 +10,7 @@ import {
   snoozePendingAskUntil,
   useMergeState,
 } from '../pendingAsks/pendingAsksStore.js';
-import { sendToAgent } from '../terminal/agentInput.js';
+import { useTellJarvis } from './askHooks.js';
 import { answerChoices, answerLine } from './nowRules.js';
 import type { MeetingTime } from './nowTime.js';
 import { pickedTime, snoozeChoices } from './snoozeRules.js';
@@ -75,19 +75,6 @@ function MergeButton({ ask }: { ask: PendingAskEntry }) {
       )}
     </>
   );
-}
-
-/** Sí / No / Hecho that also tell Jarvis, written as if you typed it. */
-function useTellJarvis(jarvis: JarvisLink | undefined) {
-  const [failed, setFailed] = useState(false);
-  const tell = (text: string, then?: () => void) => {
-    if (!jarvis?.writable) return;
-    void sendToAgent(jarvis.id, text).then((ok) => {
-      setFailed(!ok);
-      if (ok) then?.();
-    });
-  };
-  return { tell, failed, can: jarvis?.writable === true };
 }
 
 /**
