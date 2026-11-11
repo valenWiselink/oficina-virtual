@@ -311,8 +311,17 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   (`DecisionHand`, buttons from `now/AskActions.tsx`), the team on the left
   with its last half hour (`TeamColumn`, from the day log) and «Lo que viene»
   on the right (`ComingColumn`: today, later, answered, published today,
-  closed). «Escribir» folds everything into the conversation. The moment is
-  chosen by hand and remembered (`oficina.momento`). Jarvis's own «Te toca:»
+  closed). «Escribir» folds everything into the conversation. «Reunión» (a
+  calendar meeting under way, not «sin aviso»): Jarvis hushed
+  (`setJarvisHushed`, your «Silenciar» untouched), only cards that hold an
+  agent back or are due by its end, agents needing you on top, and what you
+  write goes as «[Nota de la reunión «X»] …». «Cierre del día» (from 19:00):
+  what is left for tomorrow, closing the finished agents in one go, and the
+  day's story (`DayStoryView`). The office picks the moment
+  (`asistenteRules.ts`: meeting > 19:00 > something waiting > nothing;
+  writing in Jarvis's box folds into «Escribir» except in a meeting); one
+  picked by hand holds until that situation changes (`oficina.momento`,
+  `{moment, base}`), and «Automático» gives it back. Jarvis's own «Te toca:»
   is a card there, so its strip above the box shows only permissions. The
   toolbar's «Pendientes» count takes you here.
 - `history/`, `permissions/`, `handoff/`, `effects/`, `identity/`.

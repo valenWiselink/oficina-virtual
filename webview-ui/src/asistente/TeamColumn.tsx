@@ -97,6 +97,29 @@ function TeamRow({
 }
 
 /**
+ * Only the agents that need you (a held permission, a question): what still
+ * shows in a meeting, since it holds someone back.
+ */
+export function NeedsYouStrip({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
+  const log = useDayLog();
+  const now = useNow();
+  const needing = views.filter(callsForYou);
+  if (needing.length === 0) return null;
+  return (
+    <section
+      aria-label="Te necesitan"
+      className="shrink-0 w-full max-w-[920px] mx-auto soft-panel px-6 py-6"
+    >
+      <ul className="m-0 p-0 list-none grid gap-6 grid-cols-[repeat(auto-fill,minmax(260px,1fr))]">
+        {needing.map((v) => (
+          <TeamRow key={v.id} view={v} actions={actions} activity={activityOf(log, v.name, now)} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
  * «Equipo»: every agent, who needs you first, with what it is doing and how
  * busy it was in the last half hour. A held permission is answered right
  * here; a finished one the office no longer needs closes with its ×.
