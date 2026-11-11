@@ -559,6 +559,7 @@ export interface PendingAskEntry {
   why?: string;
   ifNot?: string;
   question?: boolean;
+  options?: string[];
   mergeUrl?: string;
   mergeCommand?: string;
   closedAt?: number;
@@ -922,19 +923,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_471;
-  supervision?: AnonymousSchema_472;
+  effort?: AnonymousSchema_473;
+  supervision?: AnonymousSchema_474;
 }
 
-export type AnonymousSchema_471 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_473 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_472 {
-  kind: AnonymousSchema_473;
+export interface AnonymousSchema_474 {
+  kind: AnonymousSchema_475;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_473 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_475 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -983,16 +984,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_498;
+  scope: AnonymousSchema_500;
 }
 
-export interface AnonymousSchema_498 {
-  kind: AnonymousSchema_499;
+export interface AnonymousSchema_500 {
+  kind: AnonymousSchema_501;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_499 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_501 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

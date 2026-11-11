@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 
 import { describe, it } from 'vitest';
 
-import { asksAnswer, type NowAsk, nowQueue, rankAsk } from '../src/now/nowRules.ts';
+import {
+  answerChoices,
+  answerLine,
+  asksAnswer,
+  type NowAsk,
+  nowQueue,
+  rankAsk,
+} from '../src/now/nowRules.ts';
 import { timesOf } from '../src/now/nowTime.ts';
 import { dayStrip } from '../src/now/stripRules.ts';
 
@@ -157,6 +164,29 @@ describe('what a tap answers', () => {
     assert.equal(asksAnswer(ask({ id: 'd', text: 'decirme si mergeo el PR treinta' })), true);
     assert.equal(asksAnswer(ask({ id: 'e', text: 'agregar el registro en Namecheap' })), false);
     assert.equal(asksAnswer(ask({ id: 'o', from: 'penta', text: 'decirme si sigo' })), false);
+  });
+
+  it('«¿quiere que…?» is a question too (it only had «Hecho», 2026-11-11)', () => {
+    const q = ask({
+      id: 'p202',
+      text: '¿quiere que las páginas públicas vivan en eventos.wiselink.app?',
+    });
+    assert.deepEqual(answerChoices(q), ['Sí', 'No']);
+  });
+
+  it('the options Jarvis gave, one button each; an errand has none', () => {
+    assert.deepEqual(
+      answerChoices(ask({ id: 'a', text: 'elegir el diseño', options: ['La A', 'La B'] })),
+      ['La A', 'La B'],
+    );
+    assert.deepEqual(answerChoices(ask({ id: 'e', text: 'agregar el registro en Namecheap' })), []);
+  });
+
+  it('a tap sends the id first, so the office marks it answered', () => {
+    assert.equal(
+      answerLine({ id: 'p202', text: '¿eventos o www?' }, 'Sí'),
+      '[p202] Sí. (Sobre «¿eventos o www?»)',
+    );
   });
 });
 

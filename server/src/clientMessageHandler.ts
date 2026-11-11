@@ -316,7 +316,8 @@ export function handleClientMessage(
     }
 
     case 'closePendingAsk': {
-      ctx.runtime?.pendingAsks?.closeById(String(msg.id), 'Lo marcaste hecho');
+      // «Hecho»: closed, and Jarvis hears it so whoever waited can go on.
+      ctx.runtime?.pendingAsks?.closeByHand(String(msg.id));
       break;
     }
 

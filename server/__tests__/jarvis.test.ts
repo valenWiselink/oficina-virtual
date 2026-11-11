@@ -220,14 +220,28 @@ describe('JarvisTools', () => {
       return { ...made, asks, t };
     };
 
-    it('keeps it, and tells Jarvis under which id', () => {
+    it('keeps it out of sight for Jarvis to take, and tells him under which id', () => {
       const { asks, t } = wired();
       const answer = t.cerrarAgente('Coral');
-      const [ask] = asks.open();
+      expect(asks.open()).toEqual([]);
+      const [ask] = asks.pending();
       expect(ask).toMatchObject({ from: 'Coral', text: 'revisar el informe' });
-      expect(answer).toContain(`Pendientes como ${ask.id}`);
+      expect(answer).toContain(`como ${ask.id}`);
+      expect(answer).toContain(`reemplaza ${ask.id}`);
       expect(answer).toContain('«revisar el informe»');
       expect(answer).toContain('cerrar_pendiente');
+    });
+
+    it('passed on by Jarvis with reemplaza, it is one ask in his words', () => {
+      const { asks, t } = wired();
+      t.cerrarAgente('Coral');
+      const [held] = asks.pending();
+      t.dejarPendiente('Revisar el informe de ventas de Coral', undefined, {
+        reemplaza: [held.id],
+      });
+      expect(asks.open().map((a) => [a.id, a.from, a.text])).toEqual([
+        [held.id, 'Jarvis', 'Revisar el informe de ventas de Coral'],
+      ]);
     });
 
     it('pendientes says which ones the office noted and which look done', () => {

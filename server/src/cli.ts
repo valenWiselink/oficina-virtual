@@ -310,22 +310,22 @@ async function main(): Promise<void> {
     runtime.calendar = new CalendarWatch({
       broadcast: (message) => store.broadcast({ ...message }),
     });
+    // What Valentín settled from the office, told to Jarvis in its terminal.
+    const tellJarvis = (text: string): void => {
+      for (const [id, agent] of store.entries()) {
+        const terminal = agent.supervision?.kind === 'all' ? ptyManager.get(id) : undefined;
+        if (terminal) sendToTerminal(terminal, text);
+      }
+    };
     // What is pending of you: Jarvis's «Te toca:» and what closed agents left.
     runtime.pendingAsks = new PendingAsks({
       broadcast: (message) => store.broadcast({ ...message }),
+      tellJarvis,
     });
     runtime.pendingAsksWatch = new PendingAsksWatch(store, runtime.pendingAsks);
     runtime.pendingAsksWatch.start();
     // «Mergear» on a pending ask: gh merges it, and Jarvis hears it in its terminal.
-    runtime.askMerger = new AskMerger({
-      asks: () => runtime.pendingAsks,
-      tellJarvis: (text) => {
-        for (const [id, agent] of store.entries()) {
-          const terminal = agent.supervision?.kind === 'all' ? ptyManager.get(id) : undefined;
-          if (terminal) sendToTerminal(terminal, text);
-        }
-      },
-    });
+    runtime.askMerger = new AskMerger({ asks: () => runtime.pendingAsks, tellJarvis });
     // The artifacts your agents published: read while a tokened page is open.
     runtime.artifacts = new ArtifactWatch({
       broadcast: (message) => store.broadcast({ ...message }),

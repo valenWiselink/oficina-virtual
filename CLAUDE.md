@@ -224,15 +224,25 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   only), in `~/.pixel-agents/pendientes.json`. `PendingAsksWatch` feeds it:
   what Jarvis asks as it comes (what brings it to the middle of the screen stays
   here), and another agent's only when it closes with one left (until then it is
-  on its card). Closed by Jarvis it comes in too, and `cerrar_agente` tells Jarvis
-  the id, to close it if it had relayed it; only a workspace supervisor's closing
-  stays out, and its tool tells it to pass the ask on.
+  on its card). With Jarvis in the office it is held out of sight for 5 min
+  (`heldUntil`) so Jarvis can pass it on (`dejar_pendiente` with `reemplaza`) or
+  drop it; `cerrar_agente` tells Jarvis the id. Only a workspace supervisor's
+  closing stays out, and its tool tells it to pass the ask on.
   Going down is not closing: the watch stops before the terminals do, and only
-  the ✕, `cerrar_agente` and an external session ending count. An ask closes by
-  hand, with Jarvis's `cerrar_pendiente`, when its PR merges or its permission is
-  decided, or when a newer one names the same PR (real transcripts: 75 of 96
-  consecutive asks naming PRs shared one). Same text: no new row. Closed ones can
-  be reopened. `dejar_pendiente` adds one without bringing Jarvis to the middle.
+  the ✕, `cerrar_agente` and an external session ending count.
+  The same thing asked again is one ask (`refs.ts`: same `clave`, same text, or
+  the same PR, migration «M2», ticket or artifact; numbers ≥ 100 spelled in
+  words become digits first): the newer wording wins (Jarvis's over an agent's),
+  the older goes to `history`, the command and PR links stay (p225 lost its
+  «Mergear» when it was replaced instead, 2026-11-11). His message to Jarvis
+  answers asks (`answeredBy`): by id («[p12] listo», the cards' buttons send it)
+  or a short «listo»/«sí» to what Jarvis asked since his previous message;
+  answered, an ask is shown apart and closes by itself in 2 h. An ask closes by
+  hand («Hecho» tells Jarvis), with `cerrar_pendiente`, when its PRs merge and
+  merging was all it asked (`onlyMerge`; otherwise it only looks done), or when
+  its permission is decided. A day untouched: «¿Sigue?». Closed ones can be
+  reopened. The file stays `version: 1` with optional fields, so an older office
+  still reads it. `dejar_pendiente` adds one without bringing Jarvis to the middle.
 - `terminal/` — PTYs (`@lydell/node-pty`, prebuilt) streamed to the browser.
 
 Agent tracking also still loads the old office assets and layout: the

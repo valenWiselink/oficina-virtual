@@ -19,7 +19,8 @@ import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
 import { listDirectories, normalizeDirectoryPath, validateDirectoryPath } from '../directories.js';
 import { collectDirectorySuggestions } from '../directorySuggestions.js';
 import { hostDirectory } from '../hostDirectory.js';
-import { clockAt, prUrlsOf } from '../pendingAsks/pendingAsks.js';
+import { clockAt } from '../pendingAsks/pendingAsks.js';
+import { knownPrLinks } from '../pendingAsks/pendingAsksWatch.js';
 import type { PendingPermission } from '../permissionBroker.js';
 import { claudeProvider } from '../providers/index.js';
 import { closeOfficeAgent } from '../terminal/closeAgent.js';
@@ -102,13 +103,23 @@ export class JarvisTools extends SupervisorTools {
   pendientes(): string {
     const asks = this.jarvis.pendingAsks?.();
     if (!asks) return 'Esta oficina no lleva la lista de pendientes.';
-    const open = asks.open();
+    const open = asks.pending();
     if (open.length === 0) return 'Valentín no tiene nada pendiente en la lista.';
     return open
       .map((a) => {
         const notes = [
+          a.heldUntil !== undefined && a.heldUntil > Date.now()
+            ? `lo dejó «${a.from}» al cerrarse; él todavía no lo ve: si se lo pasás, usá dejar_pendiente con reemplaza ${a.id}; si no hace falta, cerralo`
+            : undefined,
           a.question ? 'una pregunta tuya sin «Te toca:» que anotó la oficina' : undefined,
+          a.answeredAt !== undefined
+            ? `ya te contestó (${a.answeredHow ?? 'en el chat'}): comprobalo y cerralo`
+            : undefined,
           a.seemsDone ? `parece resuelto: ${a.seemsDone}; comprobalo y cerralo` : undefined,
+          a.staleSince !== undefined
+            ? 'nadie lo movió en un día: preguntale si sigue o cerralo'
+            : undefined,
+          a.key ? `clave ${a.key}` : undefined,
         ].filter(Boolean);
         const note = notes.length > 0 ? ` (${notes.join('; ')})` : '';
         return `- ${a.id} · de ${a.from} · ${new Date(a.at).toLocaleString('es-AR')}: ${a.text}${note}`;
@@ -119,7 +130,15 @@ export class JarvisTools extends SupervisorTools {
   dejarPendiente(
     texto: string,
     comando?: string,
-    more: { paraAntesDe?: string; noAntesDe?: string; porQue?: string; siNo?: string } = {},
+    more: {
+      paraAntesDe?: string;
+      noAntesDe?: string;
+      porQue?: string;
+      siNo?: string;
+      clave?: string;
+      opciones?: string[];
+      reemplaza?: string[];
+    } = {},
   ): string {
     const asks = this.jarvis.pendingAsks?.();
     if (!asks) return 'Esta oficina no lleva la lista de pendientes.';
@@ -130,15 +149,19 @@ export class JarvisTools extends SupervisorTools {
       return 'Las horas van como HH:MM de 24 h (por ejemplo 14:45 o 23:00). No lo dejé: probá de nuevo.';
     }
     const noted = asks.open().filter((a) => a.question);
+    const before = new Set(asks.pending().map((a) => a.id));
     const ask = asks.add({
       from: JARVIS_NAME,
       text: texto,
       command: comando?.trim() || undefined,
-      prUrls: prUrlsOf(texto),
+      knownPrs: knownPrLinks(this.deps.store),
       due,
       notBefore,
       why: more.porQue,
       ifNot: more.siNo,
+      key: more.clave,
+      options: more.opciones,
+      replaces: more.reemplaza,
     });
     if (!ask) return 'Falta el texto: qué tiene que hacer Valentín.';
     const twin = noted
@@ -148,7 +171,10 @@ export class JarvisTools extends SupervisorTools {
     const hint = twin
       ? ` La oficina ya le había anotado una pregunta tuya: ${twin}. Si es lo mismo, cerrala con cerrar_pendiente.`
       : '';
-    return `Quedó en sus Pendientes como ${ask.id}, sin interrumpirlo. Cerralo con cerrar_pendiente cuando compruebes que se hizo.${hint}`;
+    const joined = before.has(ask.id)
+      ? `Era lo mismo que ${ask.id}: lo junté ahí, con tus palabras nuevas.`
+      : `Quedó en sus Pendientes como ${ask.id}, sin interrumpirlo.`;
+    return `${joined} Si él te contesta, se marca solo; cerralo con cerrar_pendiente cuando compruebes que se hizo.${hint}`;
   }
 
   cerrarPendiente(id: string, motivo?: string): string {
@@ -326,6 +352,9 @@ export class JarvisTools extends SupervisorTools {
     const ask = asks.byTurn(left.id);
     if (!ask) return ''; // He had marked it done before.
     if (ask.closedAt !== undefined) return '';
+    if (ask.heldUntil !== undefined) {
+      return ` Le había dejado a Valentín: «${ask.text}». La oficina lo guarda como ${ask.id} y se lo muestra en 5 minutos si no lo tomás vos: si se lo pasás, usá dejar_pendiente con reemplaza ${ask.id} (queda uno solo, con tus palabras); si ya no hace falta, cerralo con cerrar_pendiente.`;
+    }
     return ` Le había dejado a Valentín: «${ask.text}». Quedó en sus Pendientes como ${ask.id}: si ya se lo pasaste con un pedido tuyo, cerralo con cerrar_pendiente.`;
   }
 
@@ -457,15 +486,36 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
           ),
         por_que: z.string().optional().describe('Por qué ahora, en pocas palabras'),
         si_no: z.string().optional().describe('Qué pasa si no lo hace, en pocas palabras'),
+        clave: z
+          .string()
+          .optional()
+          .describe(
+            'Un nombre corto y estable para esto (por ejemplo «merge-webapp-2954» o «migracion-M2»): si lo volvés a pedir con la misma clave, se actualiza el mismo pendiente en vez de sumar otro',
+          ),
+        opciones: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Si espera una respuesta, las opciones (por ejemplo ["Sí", "No"] o ["La A", "La B"]): tendrá un botón por opción',
+          ),
+        reemplaza: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Ids de pendientes que este reemplaza o repite (por ejemplo el que dejó un agente al cerrarse): se juntan en uno solo',
+          ),
       },
     },
-    ({ texto, comando, para_antes_de, no_antes_de, por_que, si_no }) =>
+    ({ texto, comando, para_antes_de, no_antes_de, por_que, si_no, clave, opciones, reemplaza }) =>
       text(
         tools.dejarPendiente(texto, comando, {
           paraAntesDe: para_antes_de,
           noAntesDe: no_antes_de,
           porQue: por_que,
           siNo: si_no,
+          clave,
+          opciones,
+          reemplaza,
         }),
       ),
   );

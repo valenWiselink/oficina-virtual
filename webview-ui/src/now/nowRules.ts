@@ -18,6 +18,8 @@ export interface NowAsk {
   why?: string;
   ifNot?: string;
   question?: boolean;
+  /** The answers Jarvis said it waits for: one button each. */
+  options?: string[];
   mergeUrl?: string;
 }
 
@@ -55,11 +57,24 @@ const MINUTE = 60_000;
 export const SOON_MS = 30 * MINUTE;
 const PROD = /\b(?:main|master|producci[oó]n|prod)\b/i;
 const ANSWER =
-  /^(?:decirme|decidir|confirmar|confirmarme|autorizar|autorizarme|elegir|contestar|responder)\b/i;
+  /^(?:¿|decirme|decidir|confirmar|confirmarme|autorizar|autorizarme|elegir|contestar|responder)/i;
 
-/** Jarvis waits for a sí or a no (or a choice): answered in one tap. */
+/** Jarvis waits for a sí or a no (or a choice): answered in one tap. A
+ *  «¿quiere que…?» is one too (2026-11-11: it only had «Hecho»). */
 export function asksAnswer(ask: NowAsk): boolean {
+  if (ask.options?.length) return true;
   return ask.from === 'Jarvis' && (ask.question === true || ANSWER.test(ask.text.trim()));
+}
+
+/** The buttons that answer it: the options Jarvis gave, or Sí and No. */
+export function answerChoices(ask: NowAsk): string[] {
+  if (ask.options?.length) return ask.options;
+  return asksAnswer(ask) ? ['Sí', 'No'] : [];
+}
+
+/** What a tap sends Jarvis, as if typed: the id first, so the office marks it answered. */
+export function answerLine(ask: Pick<NowAsk, 'id' | 'text'>, choice: string): string {
+  return `[${ask.id}] ${choice}. (Sobre «${ask.text}»)`;
 }
 
 /** «a», «a y b», «a, b y c» */

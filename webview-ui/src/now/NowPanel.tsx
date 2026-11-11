@@ -11,7 +11,7 @@ import {
 } from '../pendingAsks/pendingAsksStore.js';
 import { askWhen } from '../pendingAsks/pendingAsksView.js';
 import { sendToAgent } from '../terminal/agentInput.js';
-import { asksAnswer, type Ranked } from './nowRules.js';
+import { answerChoices, answerLine, type Ranked } from './nowRules.js';
 import { hourText } from './nowTime.js';
 import type { NowModel } from './useNowQueue.js';
 
@@ -107,12 +107,8 @@ function NowCard({
 }) {
   const { ask, reasons } = entry;
   const { tell, failed, can } = useTellJarvis(jarvis);
-  const answer = asksAnswer(ask);
-  const reportsBack = ask.from === 'Jarvis' && /\bavis/i.test(ask.text);
-  // A question closes by itself once Jarvis hears you; «decirme si…» you close here.
-  const answered = () => {
-    if (!ask.question) closePendingAsk(ask.id);
-  };
+  // An answer goes to Jarvis with the ask's id: the office marks it answered.
+  const choices = can ? answerChoices(ask) : [];
   const why = ask.why ?? reasons.join(' · ');
   return (
     <article
@@ -152,35 +148,26 @@ function NowCard({
       )}
       <div className="flex flex-wrap items-center gap-6">
         <MergeButton ask={ask} />
-        {answer && can && (
-          <>
-            <Button
-              size="sm"
-              variant={ask.mergeUrl ? 'default' : 'accent'}
-              onClick={() => tell(`Sobre «${ask.text}»: sí.`, answered)}
-            >
-              Sí
-            </Button>
-            <Button size="sm" onClick={() => tell(`Sobre «${ask.text}»: no.`, answered)}>
-              No
-            </Button>
-          </>
-        )}
+        {choices.map((choice, i) => (
+          <Button
+            key={choice}
+            size="sm"
+            variant={i === 0 && !ask.mergeUrl ? 'accent' : 'default'}
+            onClick={() => tell(answerLine(ask, choice))}
+          >
+            {choice}
+          </Button>
+        ))}
         {ask.command && <CopyCommand command={ask.command} />}
-        {!answer && reportsBack && can ? (
+        {choices.length === 0 && (
+          // Jarvis hears it from the office: whoever waited on it can go on.
           <Button
             size="sm"
             variant={ask.mergeUrl ? 'default' : 'accent'}
-            onClick={() => tell(`Listo, ya hice: «${ask.text}».`, () => closePendingAsk(ask.id))}
+            onClick={() => closePendingAsk(ask.id)}
           >
-            Hecho, avisar a Jarvis
+            Hecho
           </Button>
-        ) : (
-          !answer && (
-            <Button size="sm" onClick={() => closePendingAsk(ask.id)}>
-              Hecho
-            </Button>
-          )
         )}
         <Button size="sm" variant="ghost" onClick={() => snoozePendingAsk(ask.id, SNOOZE_MINUTES)}>
           Más tarde (1 h)
