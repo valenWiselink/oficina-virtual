@@ -10,6 +10,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as path from 'path';
 import { z } from 'zod';
 
+import { readWhen, whenText } from '../../../core/src/askTime.js';
 import { readChat } from '../agentChat.js';
 import { cleanEffort, cleanModel } from '../agentEdits.js';
 import { identityMessage, runningBackground, spokenName } from '../agentIdentity.js';
@@ -19,7 +20,7 @@ import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
 import { listDirectories, normalizeDirectoryPath, validateDirectoryPath } from '../directories.js';
 import { collectDirectorySuggestions } from '../directorySuggestions.js';
 import { hostDirectory } from '../hostDirectory.js';
-import { clockAt } from '../pendingAsks/pendingAsks.js';
+import { type NewAsk } from '../pendingAsks/pendingAsks.js';
 import { knownPrLinks } from '../pendingAsks/pendingAsksWatch.js';
 import type { PendingPermission } from '../permissionBroker.js';
 import { claudeProvider } from '../providers/index.js';
@@ -56,6 +57,10 @@ export interface JarvisDeps extends ToolDeps {
 }
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
+
+/** What dejar_pendiente says when it cannot read a time. */
+const UNREAD_TIME =
+  'No entendí la hora. Sirven: HH:MM (14:45), «mañana», «mañana 11:00», «jueves 12 a las 11», «13/11 9:00», «el lunes», «esta noche», «después de: <reunión del calendario>» o «cuando se mergee #12». No lo dejé: probá de nuevo.';
 
 export class JarvisTools extends SupervisorTools {
   private readonly notebook: Notebook;
@@ -138,16 +143,13 @@ export class JarvisTools extends SupervisorTools {
       clave?: string;
       opciones?: string[];
       reemplaza?: string[];
+      cuando?: string;
     } = {},
   ): string {
     const asks = this.jarvis.pendingAsks?.();
     if (!asks) return 'Esta oficina no lleva la lista de pendientes.';
-    const now = Date.now();
-    const due = more.paraAntesDe ? clockAt(more.paraAntesDe, now) : undefined;
-    const notBefore = more.noAntesDe ? clockAt(more.noAntesDe, now) : undefined;
-    if (due === null || notBefore === null) {
-      return 'Las horas van como HH:MM de 24 h (por ejemplo 14:45 o 23:00). No lo dejé: probá de nuevo.';
-    }
+    const times = this.timesFor(more);
+    if (typeof times === 'string') return times;
     const noted = asks.open().filter((a) => a.question);
     const before = new Set(asks.pending().map((a) => a.id));
     const ask = asks.add({
@@ -155,8 +157,7 @@ export class JarvisTools extends SupervisorTools {
       text: texto,
       command: comando?.trim() || undefined,
       knownPrs: knownPrLinks(this.deps.store),
-      due,
-      notBefore,
+      ...times,
       why: more.porQue,
       ifNot: more.siNo,
       key: more.clave,
@@ -174,7 +175,61 @@ export class JarvisTools extends SupervisorTools {
     const joined = before.has(ask.id)
       ? `Era lo mismo que ${ask.id}: lo junté ahí, con tus palabras nuevas.`
       : `Quedó en sus Pendientes como ${ask.id}, sin interrumpirlo.`;
-    return `${joined} Si él te contesta, se marca solo; cerralo con cerrar_pendiente cuando compruebes que se hizo.${hint}`;
+    return `${joined}${this.whenSaid(times)} Si él te contesta, se marca solo; cerralo con cerrar_pendiente cuando compruebes que se hizo.${hint}`;
+  }
+
+  /**
+   * dejar_pendiente's times: «cuando» (a date, «mañana», «el lunes»,
+   * «después de: Demo AgroActiva», «cuando se mergee #12») and the older
+   * para_antes_de / no_antes_de, which now take a day too. A string is why
+   * it could not tell.
+   */
+  private timesFor(more: {
+    paraAntesDe?: string;
+    noAntesDe?: string;
+    cuando?: string;
+  }): Pick<NewAsk, 'due' | 'notBefore' | 'after' | 'afterPr'> | string {
+    const now = Date.now();
+    const meetings = this.deps.meetings?.() ?? [];
+    const read = (said: string) => readWhen(said, now, meetings);
+    const out: Pick<NewAsk, 'due' | 'notBefore' | 'after' | 'afterPr'> = {};
+    if (more.paraAntesDe) {
+      const due = read(more.paraAntesDe);
+      if (!due) return UNREAD_TIME;
+      out.due = due.at;
+    }
+    const start = more.cuando ?? more.noAntesDe;
+    if (!start) return out;
+    const pr = /\bmerge\w*\b.*?(#\d+|https:\/\/github\.com\/\S+\/pull\/\d+)/i.exec(start);
+    if (pr) {
+      const url = pr[1].startsWith('#')
+        ? knownPrLinks(this.deps.store).get(Number(pr[1].slice(1)))
+        : pr[1];
+      if (!url) return `No sé de qué repo es el PR ${pr[1]}: pasalo con su link de GitHub.`;
+      return { ...out, afterPr: url };
+    }
+    const when = read(start);
+    if (!when) {
+      return /^\s*(?:después de|despues de)\b/i.test(start)
+        ? `No encuentro «${start}» en su calendario: pasame el día y la hora (por ejemplo «jueves 12 11:00»). No lo dejé.`
+        : UNREAD_TIME;
+    }
+    return { ...out, notBefore: when.at, ...(when.after ? { after: when.after } : {}) };
+  }
+
+  /** What Jarvis is told about the times it set, so he can tell it was understood. */
+  private whenSaid(times: Pick<NewAsk, 'due' | 'notBefore' | 'after' | 'afterPr'>): string {
+    const now = Date.now();
+    const parts = [
+      times.after
+        ? `Le aparece después de «${times.after}» (${whenText(times.notBefore ?? now, now)}) y se mueve con esa reunión.`
+        : times.notBefore !== undefined
+          ? `No le aparece adelante antes de ${whenText(times.notBefore, now)}.`
+          : undefined,
+      times.afterPr ? `Le aparece cuando se mergee ${times.afterPr}.` : undefined,
+      times.due !== undefined ? `Vence ${whenText(times.due, now)}.` : undefined,
+    ].filter(Boolean);
+    return parts.length ? ` ${parts.join(' ')}` : '';
   }
 
   cerrarPendiente(id: string, motivo?: string): string {
@@ -472,18 +527,20 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
           .string()
           .optional()
           .describe('El comando a correr, si lo hay: tendrá un botón para copiarlo'),
+        cuando: z
+          .string()
+          .optional()
+          .describe(
+            'Desde cuándo corresponde: no le aparece adelante antes. Sirve «23:00», «mañana», «mañana 11:00», «jueves 12 a las 11», «13/11 9:00», «el lunes», «esta noche», «después de: Demo AgroActiva» (una reunión de su calendario: se mueve con ella) o «cuando se mergee #12». Para algo de mañana, SIEMPRE pasalo: si no, le aparece hoy',
+          ),
         para_antes_de: z
           .string()
           .optional()
-          .describe(
-            'Hora límite de hoy, HH:MM (24 h): por ejemplo 14:45 para algo de antes de la demo',
-          ),
+          .describe('Hora límite: HH:MM de hoy (14:45) o con día («viernes 18:00», «13/11 12:00»)'),
         no_antes_de: z
           .string()
           .optional()
-          .describe(
-            'No mostrárselo adelante antes de esta hora, HH:MM: por ejemplo 23:00 para el pase de la noche',
-          ),
+          .describe('Lo mismo que cuando (se mantiene por compatibilidad)'),
         por_que: z.string().optional().describe('Por qué ahora, en pocas palabras'),
         si_no: z.string().optional().describe('Qué pasa si no lo hace, en pocas palabras'),
         clave: z
@@ -506,9 +563,21 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
           ),
       },
     },
-    ({ texto, comando, para_antes_de, no_antes_de, por_que, si_no, clave, opciones, reemplaza }) =>
+    ({
+      texto,
+      comando,
+      cuando,
+      para_antes_de,
+      no_antes_de,
+      por_que,
+      si_no,
+      clave,
+      opciones,
+      reemplaza,
+    }) =>
       text(
         tools.dejarPendiente(texto, comando, {
+          cuando,
           paraAntesDe: para_antes_de,
           noAntesDe: no_antes_de,
           porQue: por_que,

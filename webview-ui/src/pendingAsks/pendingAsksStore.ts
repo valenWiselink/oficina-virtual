@@ -52,6 +52,11 @@ export function snoozePendingAsk(id: string, minutes: number): void {
   transport.send({ type: 'snoozePendingAsk', id, minutes });
 }
 
+/** «Posponer» until a moment (ms): «mañana a la mañana», after a meeting. */
+export function snoozePendingAskUntil(id: string, until: number): void {
+  transport.send({ type: 'snoozePendingAsk', id, until });
+}
+
 /** How a «Mergear» goes: under way, or what gh said. */
 export type MergeState = { busy: true } | { busy: false; ok: boolean; message: string };
 

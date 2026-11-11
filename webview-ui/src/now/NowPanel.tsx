@@ -6,16 +6,16 @@ import { ClosedAsk, CopyCommand, SeemsDoneAsk } from '../pendingAsks/PendingAsks
 import {
   closePendingAsk,
   mergePendingAsk,
-  snoozePendingAsk,
+  snoozePendingAskUntil,
   useMergeState,
 } from '../pendingAsks/pendingAsksStore.js';
 import { askWhen } from '../pendingAsks/pendingAsksView.js';
 import { sendToAgent } from '../terminal/agentInput.js';
 import { answerChoices, answerLine, type Ranked } from './nowRules.js';
-import { hourText } from './nowTime.js';
+import { type MeetingTime, whenText } from './nowTime.js';
+import { pickedTime, snoozeChoices } from './snoozeRules.js';
 import type { NowModel } from './useNowQueue.js';
 
-const SNOOZE_MINUTES = 60;
 const PROD = /\b(?:main|master|producci[oó]n|prod)\b/i;
 
 type Entry = Ranked<PendingAskEntry>;
@@ -93,17 +93,87 @@ function useTellJarvis(jarvis: JarvisLink | undefined) {
   return { tell, failed, can: jarvis?.writable === true };
 }
 
+/**
+ * «Posponer»: times that make sense for this ask (after the meeting it names,
+ * tomorrow morning, Monday…) or a day and time picked by hand.
+ */
+function SnoozeMenu({
+  ask,
+  now,
+  meetings,
+}: {
+  ask: PendingAskEntry;
+  now: number;
+  meetings: readonly MeetingTime[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState('');
+  if (!open) {
+    return (
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} aria-expanded={false}>
+        Posponer…
+      </Button>
+    );
+  }
+  const until = (at: number) => {
+    snoozePendingAskUntil(ask.id, at);
+    setOpen(false);
+  };
+  const pickedAt = pickedTime(picked, now);
+  return (
+    <div
+      role="group"
+      aria-label="Posponer hasta"
+      className="w-full flex flex-col gap-4 rounded-md border border-border bg-bg-thumb px-8 py-7"
+    >
+      <span className="text-2xs text-text-muted">Te lo traigo de nuevo…</span>
+      <span className="flex flex-wrap gap-6">
+        {snoozeChoices(ask, now, meetings).map((c) => (
+          <Button key={c.label} size="sm" onClick={() => until(c.until)} title={c.when}>
+            {c.label} <span className="text-text-muted font-mono text-2xs">{c.when}</span>
+          </Button>
+        ))}
+      </span>
+      <span className="flex flex-wrap items-center gap-6">
+        <label className="text-2xs text-text-muted" htmlFor={`posponer-${ask.id}`}>
+          Otro día y hora
+        </label>
+        <input
+          id={`posponer-${ask.id}`}
+          type="datetime-local"
+          value={picked}
+          onChange={(e) => setPicked(e.target.value)}
+          className="text-xs bg-bg border border-border rounded-md px-6 py-3 text-text"
+        />
+        <Button
+          size="sm"
+          variant={pickedAt ? 'accent' : 'disabled'}
+          disabled={!pickedAt}
+          onClick={() => pickedAt && until(pickedAt)}
+        >
+          Posponer
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cancelar
+        </Button>
+      </span>
+    </div>
+  );
+}
+
 /** The one thing to do now: what, why, what if not, and the button that does it. */
 function NowCard({
   entry,
   first,
   now,
   jarvis,
+  meetings,
 }: {
   entry: Entry;
   first: boolean;
   now: number;
   jarvis?: JarvisLink;
+  meetings: readonly MeetingTime[];
 }) {
   const { ask, reasons } = entry;
   const { tell, failed, can } = useTellJarvis(jarvis);
@@ -169,9 +239,7 @@ function NowCard({
             Hecho
           </Button>
         )}
-        <Button size="sm" variant="ghost" onClick={() => snoozePendingAsk(ask.id, SNOOZE_MINUTES)}>
-          Más tarde (1 h)
-        </Button>
+        <SnoozeMenu ask={ask} now={now} meetings={meetings} />
         {ask.from === 'Jarvis' && jarvis?.onWrite && (
           <Button size="sm" variant="ghost" onClick={jarvis.onWrite}>
             Escribirle a Jarvis…
@@ -200,7 +268,7 @@ function QueueRow({
 }) {
   const { ask, reasons, times } = entry;
   const when =
-    later && times.notBefore !== undefined ? hourText(times.notBefore) : askWhen(ask.at, now);
+    later && times.notBefore !== undefined ? whenText(times.notBefore, now) : askWhen(ask.at, now);
   return (
     <li className="border-b border-border last:border-b-0">
       <button
@@ -260,6 +328,7 @@ export function NowPanel({ model, jarvis }: { model: NowModel; jarvis?: JarvisLi
             first={shown === queue.first}
             now={now}
             jarvis={jarvis}
+            meetings={model.meetings}
           />
         ) : (
           <p className="m-0 px-4 py-8 text-sm text-text-muted">

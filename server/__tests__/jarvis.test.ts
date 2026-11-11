@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { Meeting } from '../../core/src/messages.js';
 import type { AgentRuntime } from '../src/agentRuntime.js';
 import { createAgentState } from '../src/agentState.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
@@ -197,7 +198,7 @@ describe('JarvisTools', () => {
 
   describe('closing an agent with an ask left', () => {
     /** The office as wired: closing goes through the watch that keeps the ask. */
-    const wired = () => {
+    const wired = (meetings: Meeting[] = []) => {
       const made = office();
       const asks = new PendingAsks({
         broadcast: () => undefined,
@@ -209,6 +210,7 @@ describe('JarvisTools', () => {
           ...made.deps,
           pendingAsks: () => asks,
           pendingAsksWatch: () => watch,
+          meetings: () => meetings,
           close: (id: number) => {
             watch.agentClosed(made.store.get(id)!);
             return true;
@@ -275,6 +277,48 @@ describe('JarvisTools', () => {
         ifNot: 'queda abierto el hueco del 403',
         mergeUrl: 'https://github.com/Wiselink/properties/pull/348',
       });
+    });
+
+    it('dejar_pendiente with cuando «mañana»: not today (AgroActiva, 2026-11-11)', () => {
+      const { asks, t } = wired();
+      const answer = t.dejarPendiente('volver a marcar AgroActiva como demo', undefined, {
+        cuando: 'mañana',
+      });
+      const [entry] = asks.message().open;
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
+      expect(entry.notBefore).toBe(tomorrow.getTime());
+      expect(answer).toContain('No le aparece adelante antes de mañana 9:00');
+    });
+
+    it('dejar_pendiente after a meeting of the calendar: tied to it', () => {
+      const end = Date.now() + 20 * 3_600_000;
+      const demo = { id: 'd', title: 'Demo AgroActiva', start: end - 3_600_000, end };
+      const { asks, t } = wired([demo]);
+      const answer = t.dejarPendiente('volver a marcar AgroActiva como demo', undefined, {
+        cuando: 'después de: demo agroactiva',
+      });
+      expect(asks.message().open[0]).toMatchObject({ notBefore: end, after: 'Demo AgroActiva' });
+      expect(answer).toContain('después de «Demo AgroActiva»');
+    });
+
+    it('dejar_pendiente after a meeting it cannot find asks for the day and time', () => {
+      const { asks, t } = wired();
+      expect(
+        t.dejarPendiente('algo', undefined, { cuando: 'después de: la reunión con Andy' }),
+      ).toContain('No encuentro');
+      expect(asks.pending()).toEqual([]);
+    });
+
+    it('dejar_pendiente «cuando se mergee #12»: out of sight until it merges', () => {
+      const { asks, t, store } = wired();
+      const url = 'https://github.com/acme/web/pull/12';
+      store.get(1)!.prLinks = new Map([[12, url]]);
+      t.dejarPendiente('probar el login en prod', undefined, { cuando: 'cuando se mergee #12' });
+      expect(asks.open()).toEqual([]);
+      asks.prChanged(url, () => 'merged');
+      expect(asks.open().map((a) => a.text)).toEqual(['probar el login en prod']);
     });
 
     it('dejar_pendiente points at a question the office already noted', () => {

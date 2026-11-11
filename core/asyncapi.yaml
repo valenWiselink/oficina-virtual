@@ -1249,6 +1249,11 @@ components:
           type: array
           items:
             type: string
+        after:
+          description: |
+            On an open one, the meeting it waits for, by title («después de:
+            Demo AgroActiva»): it shows once that meeting ends, and moves with it.
+          type: string
         mergeUrl:
           description: |
             On an open one, the open PR it asks to merge: the «Mergear» button
@@ -1953,10 +1958,13 @@ components:
           type: string
 
     SnoozePendingAsk:
-      description: The user's «Más tarde», the ask leaves «Ahora» for a while.
+      description: |
+        The user's «Posponer»: the ask leaves «Ahora» until a moment (`until`,
+        ms: «mañana a la mañana», after a meeting; up to 30 days) or for some
+        minutes.
       type: object
       additionalProperties: false
-      required: [type, id, minutes]
+      required: [type, id]
       properties:
         type:
           const: snoozePendingAsk
@@ -1966,6 +1974,8 @@ components:
           type: integer
           minimum: 1
           maximum: 1440
+        until:
+          type: number
 
     MergePendingAsk:
       description: |

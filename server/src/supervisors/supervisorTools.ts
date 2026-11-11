@@ -9,6 +9,7 @@
  * closes agents by its own rules (jarvisTools.ts).
  */
 
+import type { Meeting } from '../../../core/src/messages.js';
 import {
   cleanEffort,
   cleanModel,
@@ -70,6 +71,8 @@ export interface ToolDeps {
   /** Late-bound: the office wires them after the tools. */
   pendingAsks?: () => PendingAsks | undefined;
   pendingAsksWatch?: () => PendingAsksWatch | undefined;
+  /** The meetings ahead (calendar), for «después de la demo». */
+  meetings?: () => readonly Meeting[];
 }
 
 const HEAD_CHARS = 160;
