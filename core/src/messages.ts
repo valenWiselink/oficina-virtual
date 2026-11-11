@@ -559,6 +559,8 @@ export interface PendingAskEntry {
   why?: string;
   ifNot?: string;
   question?: boolean;
+  /** The answers it waits for («Sí», «No», «La A»): one tap each. */
+  options?: string[];
   mergeUrl?: string;
   mergeCommand?: string;
   closedAt?: number;
