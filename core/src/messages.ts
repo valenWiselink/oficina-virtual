@@ -47,6 +47,7 @@ export type ServerMessage =
   | ArtifactsList
   | PendingAsksList
   | PendingAskMerge
+  | AskResolutionsList
   | HooksStatus
   | HookHealth
   | HooksConsentRequest
@@ -93,6 +94,7 @@ export type ClientMessage =
   | KeepPendingAsk
   | SnoozePendingAsk
   | MergePendingAsk
+  | UndoAskResolution
   | MarkYourTurnsDone
   | LaunchAgent
   | FocusAgent
@@ -575,6 +577,20 @@ export interface PendingAskMerge {
   message: string;
 }
 
+export interface AskResolutionsList {
+  type: 'askResolutions';
+  items: AskResolutionEntry[];
+}
+
+export interface AskResolutionEntry {
+  key: string;
+  id: string;
+  text: string;
+  label: string;
+  applyAt?: number;
+  hold: boolean;
+}
+
 export interface HooksStatus {
   type: 'hooksStatus';
   providerId: string;
@@ -911,6 +927,11 @@ export interface MergePendingAsk {
   id: string;
 }
 
+export interface UndoAskResolution {
+  type: 'undoAskResolution';
+  key: string;
+}
+
 export interface MarkYourTurnsDone {
   type: 'markYourTurnsDone';
   ids: string[];
@@ -925,19 +946,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_475;
-  supervision?: AnonymousSchema_476;
+  effort?: AnonymousSchema_485;
+  supervision?: AnonymousSchema_486;
 }
 
-export type AnonymousSchema_475 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_485 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_476 {
-  kind: AnonymousSchema_477;
+export interface AnonymousSchema_486 {
+  kind: AnonymousSchema_487;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_477 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_487 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -986,16 +1007,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_502;
+  scope: AnonymousSchema_512;
 }
 
-export interface AnonymousSchema_502 {
-  kind: AnonymousSchema_503;
+export interface AnonymousSchema_512 {
+  kind: AnonymousSchema_513;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_503 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_513 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

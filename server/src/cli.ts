@@ -40,6 +40,7 @@ import { HookHealth, setCurrentHookHealth } from './hookHealth.js';
 import { AskMerger } from './pendingAsks/askMerger.js';
 import { PendingAsks } from './pendingAsks/pendingAsks.js';
 import { PendingAsksWatch } from './pendingAsks/pendingAsksWatch.js';
+import { AskResolutions } from './pendingAsks/resolutions.js';
 import { createPermissionBroker } from './permissionWiring.js';
 import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/claudeHookInstaller.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
@@ -326,6 +327,16 @@ async function main(): Promise<void> {
     runtime.pendingAsksWatch.start();
     // «Mergear» on a pending ask: gh merges it, and Jarvis hears it in its terminal.
     runtime.askMerger = new AskMerger({ asks: () => runtime.pendingAsks, tellJarvis });
+    // Several asks settled from one sentence: shown with «Deshacer», then applied.
+    const resolutions = new AskResolutions({
+      asks: () => runtime.pendingAsks,
+      broadcast: (message) => store.broadcast({ ...message }),
+      meetings: () => runtime.calendar?.message().meetings ?? [],
+      tellJarvis,
+    });
+    runtime.askResolutions = resolutions;
+    // What closed by other means (merged, answered) leaves the tray too.
+    setInterval(() => resolutions.tick(), 30_000).unref();
     // The artifacts your agents published: read while a tokened page is open.
     runtime.artifacts = new ArtifactWatch({
       broadcast: (message) => store.broadcast({ ...message }),

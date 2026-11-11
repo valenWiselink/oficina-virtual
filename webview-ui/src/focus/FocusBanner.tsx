@@ -26,7 +26,9 @@ export function FocusBanner() {
         <span className="material-symbols-sharp text-sm text-accent" aria-hidden="true">
           do_not_disturb_on
         </span>
-        <span className="text-text font-medium">Modo foco</span>
+        <span className="text-text font-medium">
+          {focus.meeting ? `En reunión: ${focus.meeting}` : 'Modo foco'}
+        </span>
         <span className="text-text-muted">
           · {left <= 1 ? 'queda menos de 1 min' : `quedan ${left} min`}
         </span>
@@ -46,7 +48,10 @@ export function FocusBanner() {
         self_improvement
       </span>
       <span className="text-xs text-text">
-        <span className="font-semibold">Terminó el foco:</span> {missedSummary(focus.missed)}
+        <span className="font-semibold">
+          {focus.meeting ? 'Terminó la reunión:' : 'Terminó el foco:'}
+        </span>{' '}
+        {missedSummary(focus.missed)}
       </span>
       <Button
         size="icon"

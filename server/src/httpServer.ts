@@ -139,6 +139,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
         pendingAsks: () => options.runtime?.pendingAsks,
         pendingAsksWatch: () => options.runtime?.pendingAsksWatch,
         meetings: () => options.runtime?.calendar?.message().meetings ?? [],
+        askResolutions: () => options.runtime?.askResolutions,
         ...jarvisPowers(options),
       },
       allowedHostnames,
@@ -340,6 +341,7 @@ export const PRIVILEGED_ONLY_BROADCASTS: ReadonlySet<string> = new Set([
   'upcomingMeetings',
   'artifactsList',
   'pendingAsks',
+  'askResolutions',
 ]);
 
 // ── Auth Helper ────────────────────────────────────────────────

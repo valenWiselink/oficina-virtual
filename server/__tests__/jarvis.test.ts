@@ -438,6 +438,7 @@ describe('the MCP server', () => {
         'dejar_pendiente',
         'pasar_resultado',
         'pendientes',
+        'resolver_pendientes',
       ].sort(),
     );
   });

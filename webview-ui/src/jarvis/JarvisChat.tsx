@@ -155,6 +155,7 @@ export function JarvisChat({
   asked,
   aboveBox,
   permissionsOnly = false,
+  shapeText,
 }: {
   jarvis: AgentView | undefined;
   actions: BoardActions;
@@ -171,15 +172,19 @@ export function JarvisChat({
   aboveBox?: ReactNode;
   /** Its «Te toca:» is already a card elsewhere: above the box, only permissions. */
   permissionsOnly?: boolean;
+  /** What you write, as it goes (a meeting's note). */
+  shapeText?: (text: string) => string;
 }) {
   const { voice, notice, earsLine, noteText, note, mood, speaks, ears } = state;
   const reply = useReplyTarget();
   // Answering an ask: its id, who asked and what, go with your words.
-  const send = (id: number, text: string, images?: readonly string[]) =>
-    sendToAgent(id, reply ? replyText(reply, text) : text, images).then((sent) => {
+  const send = (id: number, typed: string, images?: readonly string[]) => {
+    const text = shapeText ? shapeText(typed) : typed;
+    return sendToAgent(id, reply ? replyText(reply, text) : text, images).then((sent) => {
       if (sent && reply) clearReply();
       return sent;
     });
+  };
   return (
     <>
       <header className="shrink-0 flex items-start gap-10 px-14 py-10 border-b border-border bg-bg-dark">

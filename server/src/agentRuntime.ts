@@ -44,6 +44,7 @@ import { PathSet, pathsMatch } from './pathKey.js';
 import type { AskMerger } from './pendingAsks/askMerger.js';
 import type { PendingAsks } from './pendingAsks/pendingAsks.js';
 import type { PendingAsksWatch } from './pendingAsks/pendingAsksWatch.js';
+import type { AskResolutions } from './pendingAsks/resolutions.js';
 import type { PrWatch } from './prWatch.js';
 import { duplicateSessionAgents } from './sessionDedupe.js';
 import { SessionRouter } from './sessionRouter.js';
@@ -117,6 +118,8 @@ export class AgentRuntime {
   pendingAsksWatch?: PendingAsksWatch;
   /** «Mergear» on a pending ask (standalone). */
   askMerger?: AskMerger;
+  /** Asks Jarvis settled from one sentence, with «Deshacer» (standalone). */
+  askResolutions?: AskResolutions;
   /** Shut the standalone office down in order (set by the CLI). */
   requestShutdown?: () => void;
   private hookEventHandler: HookEventHandler;

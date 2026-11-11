@@ -27,6 +27,8 @@ export interface JarvisVoiceState {
   status?: JarvisVoiceStatus;
   /** Silenced in this window (its panel's speaker button). */
   muted: boolean;
+  /** Quiet for a while (a meeting under way): «muted» stays as you set it. */
+  hushed?: boolean;
   /** How fast it speaks in this window (the player's rate, same pitch). */
   speed: number;
   /** What it is saying now, for the subtitles. */
@@ -133,7 +135,14 @@ function ask(key: string, what: { id: number } | { text: string }): void {
 
 /** It speaks if a voice is set and you did not silence it here. */
 export function voiceOn(s: JarvisVoiceState = state): boolean {
-  return !!s.status && s.status.engine !== 'off' && !s.muted;
+  return !!s.status && s.status.engine !== 'off' && !s.muted && !s.hushed;
+}
+
+/** A meeting under way: it keeps quiet, without touching your «Silenciar». */
+export function setJarvisHushed(hushed: boolean): void {
+  if (!!state.hushed === hushed) return;
+  if (hushed) stopJarvis();
+  set({ hushed });
 }
 
 /** Say Jarvis's latest answer (agent `id`), after what it is saying now. */
