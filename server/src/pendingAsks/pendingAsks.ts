@@ -82,6 +82,10 @@ export interface StoredAsk {
   touchedAt?: number;
   /** Nobody touched it in a day: «¿Sigue?». */
   staleSince?: number;
+  /** The meeting it waits for, by title: the page puts it after that meeting ends. */
+  after?: string;
+  /** The PR it waits for: out of sight until it merges. */
+  afterPr?: string;
 }
 
 /** What Jarvis can say about an ask beyond its text (dejar_pendiente). */
@@ -111,6 +115,10 @@ export interface NewAsk {
   ifNot?: string;
   key?: string;
   options?: string[];
+  /** The meeting it waits for, by title («después de: Demo AgroActiva»). */
+  after?: string;
+  /** The PR it waits for: out of sight until it merges. */
+  afterPr?: string;
   /** Ids it takes the place of: they join it instead of staying apart. */
   replaces?: string[];
   /** Keep it out of sight this long (a closing agent's ask). */
@@ -222,6 +230,7 @@ export class PendingAsks {
     const now = this.now();
     return this.pending()
       .filter((a) => a.heldUntil === undefined || a.heldUntil <= now)
+      .filter((a) => a.afterPr === undefined)
       .sort((a, b) => Number(lookDone(a)) - Number(lookDone(b)) || a.at - b.at);
   }
 
@@ -318,6 +327,8 @@ export class PendingAsks {
         ? { options: ask.options.map((o) => clip(o.trim(), 60)).filter(Boolean) }
         : {}),
       ...(ask.holdMs ? { heldUntil: this.now() + ask.holdMs } : {}),
+      ...(ask.after?.trim() ? { after: ask.after.trim() } : {}),
+      ...(ask.afterPr ? { afterPr: ask.afterPr } : {}),
     };
   }
 
@@ -334,6 +345,8 @@ export class PendingAsks {
     target.permission ??= incoming.permission;
     target.key ??= incoming.key?.trim() || undefined;
     if (incoming.options?.length) target.options = incoming.options;
+    if (incoming.after?.trim()) target.after = incoming.after.trim();
+    if (incoming.afterPr) target.afterPr = incoming.afterPr;
     for (const field of ['due', 'notBefore', 'why', 'ifNot'] as const) {
       if (incoming[field] !== undefined)
         (target as unknown as Record<string, unknown>)[field] = incoming[field];
@@ -501,7 +514,12 @@ export class PendingAsks {
   prUrls(): string[] {
     const urls = this.pending().flatMap((a) => {
       const merge = mergeTargetOf(a)?.url;
-      return [...(a.prUrls ?? []), ...(a.prUrl ? [a.prUrl] : []), ...(merge ? [merge] : [])];
+      return [
+        ...(a.prUrls ?? []),
+        ...(a.prUrl ? [a.prUrl] : []),
+        ...(merge ? [merge] : []),
+        ...(a.afterPr ? [a.afterPr] : []),
+      ];
     });
     return [...new Set(urls)];
   }
@@ -509,7 +527,15 @@ export class PendingAsks {
   /** A PR changed state: what is done or looks done, and which «Mergear» buttons still make sense. */
   prChanged(url: string, stateOf: (url: string) => string | undefined): void {
     this.settlePrs(stateOf);
-    if (this.open().some((a) => mergeTargetOf(a)?.url === url)) this.changed();
+    // What waited for this PR comes into sight once it merged.
+    const waiting = this.pending().filter((a) => a.afterPr === url && stateOf(url) === 'merged');
+    for (const ask of waiting) {
+      delete ask.afterPr;
+      ask.touchedAt = this.now();
+    }
+    if (waiting.length > 0 || this.open().some((a) => mergeTargetOf(a)?.url === url)) {
+      this.changed();
+    }
   }
 
   /** It was merged from its «Mergear» button. */
@@ -572,6 +598,8 @@ export class PendingAsks {
     const ask = this.find(id);
     if (!ask || ask.closedAt !== undefined) return;
     ask.notBefore = until;
+    // Put off by hand: the new time wins over the meeting it waited for.
+    delete ask.after;
     ask.touchedAt = this.now();
     delete ask.staleSince;
     this.changed();
@@ -698,6 +726,7 @@ function toEntry(ask: StoredAsk): PendingAskEntry {
     ...(open && ask.ifNot ? { ifNot: ask.ifNot } : {}),
     ...(open && ask.question ? { question: true } : {}),
     ...(open && ask.options?.length ? { options: ask.options } : {}),
+    ...(open && ask.after ? { after: ask.after } : {}),
     ...(merge
       ? { mergeUrl: merge.url, mergeCommand: `gh pr merge ${merge.url} ${merge.args.join(' ')}` }
       : {}),

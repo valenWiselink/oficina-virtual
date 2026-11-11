@@ -138,6 +138,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
         consent,
         pendingAsks: () => options.runtime?.pendingAsks,
         pendingAsksWatch: () => options.runtime?.pendingAsksWatch,
+        meetings: () => options.runtime?.calendar?.message().meetings ?? [],
         ...jarvisPowers(options),
       },
       allowedHostnames,

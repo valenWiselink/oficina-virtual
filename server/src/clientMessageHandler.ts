@@ -111,6 +111,8 @@ const KEY_BYPASS_PERMISSIONS = 'pixel-agents.bypassPermissions';
 const KEY_BACKGROUND_AGENTS = 'pixel-agents.backgroundAgents';
 const KEY_SPANISH_TERMINAL = 'pixel-agents.spanishTerminal';
 const KEY_SHOW_HOST_DIRECTORIES = 'pixel-agents.showHostDirectories';
+/** How far «Posponer» may put an ask off. */
+const SNOOZE_MAX_MS = 30 * 24 * 3_600_000;
 
 /**
  * This host's own Directory contribution: the directory the server was started
@@ -332,9 +334,14 @@ export function handleClientMessage(
     }
 
     case 'snoozePendingAsk': {
+      // «Posponer» until a moment (up to 30 days ahead), or for some minutes.
+      const until = Number(msg.until);
       const minutes = Math.round(Number(msg.minutes));
-      if (Number.isFinite(minutes) && minutes >= 1 && minutes <= 1440) {
-        ctx.runtime?.pendingAsks?.snooze(String(msg.id), Date.now() + minutes * 60_000);
+      const now = Date.now();
+      if (Number.isFinite(until) && until > now && until <= now + SNOOZE_MAX_MS) {
+        ctx.runtime?.pendingAsks?.snooze(String(msg.id), until);
+      } else if (Number.isFinite(minutes) && minutes >= 1 && minutes <= 1440) {
+        ctx.runtime?.pendingAsks?.snooze(String(msg.id), now + minutes * 60_000);
       }
       break;
     }

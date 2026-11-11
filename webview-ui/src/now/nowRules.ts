@@ -5,7 +5,14 @@
  * a question of Jarvis's, and how long it has waited. What is for later
  * («a las 23» at 14:00, «Más tarde») stays apart until shortly before.
  */
-import { type AskTimes, hourText, type MeetingTime, timesOf } from './nowTime.js';
+import {
+  type AskTimes,
+  hourText,
+  meetingNamed,
+  type MeetingTime,
+  timesOf,
+  whenText,
+} from './nowTime.js';
 
 export interface NowAsk {
   id: string;
@@ -18,6 +25,8 @@ export interface NowAsk {
   why?: string;
   ifNot?: string;
   question?: boolean;
+  /** The meeting it waits for, by title: it moves with the meeting. */
+  after?: string;
   /** The answers Jarvis said it waits for: one button each. */
   options?: string[];
   mergeUrl?: string;
@@ -96,6 +105,18 @@ interface Part {
   reason?: string;
 }
 
+/** «las 14:45» today, «mañana 9:00» or «jue 12, 9:00» another day. */
+function clockText(ms: number, now: number): string {
+  const when = whenText(ms, now);
+  return when === hourText(ms) ? `las ${when}` : when;
+}
+
+/** «a las 14:45» today, «mañana 9:00» another day. */
+function atText(ms: number, now: number): string {
+  const when = whenText(ms, now);
+  return when === hourText(ms) ? `a las ${when}` : when;
+}
+
 function timeParts(times: AskTimes, now: number): Part[] {
   const parts: Part[] = [];
   if (times.notBefore !== undefined && times.notBefore <= now + SOON_MS) {
@@ -103,23 +124,23 @@ function timeParts(times: AskTimes, now: number): Part[] {
       points: 700,
       reason:
         times.notBefore <= now
-          ? `Era para las ${hourText(times.notBefore)}`
-          : `Es a las ${hourText(times.notBefore)}`,
+          ? `Era para ${clockText(times.notBefore, now)}`
+          : `Es ${atText(times.notBefore, now)}`,
     });
   }
   if (times.due !== undefined) {
     const left = times.due - now;
-    const at = hourText(times.due);
+    const at = atText(times.due, now);
     // Long past: still pending, but the hurry is over.
-    if (left < -2 * 60 * MINUTE) parts.push({ points: 0, reason: `Venció a las ${at}` });
-    else if (left < 0) parts.push({ points: 1000, reason: `Venció a las ${at}` });
+    if (left < -2 * 60 * MINUTE) parts.push({ points: 0, reason: `Venció ${at}` });
+    else if (left < 0) parts.push({ points: 1000, reason: `Venció ${at}` });
     else if (left <= 60 * MINUTE) {
       parts.push({
         points: 800 + (60 - left / MINUTE) * 3,
-        reason: `Vence a las ${at}, en ${Math.max(1, Math.round(left / MINUTE))} min`,
+        reason: `Vence ${at}, en ${Math.max(1, Math.round(left / MINUTE))} min`,
       });
-    } else if (left <= 3 * 60 * MINUTE) parts.push({ points: 400, reason: `Vence a las ${at}` });
-    else parts.push({ points: 100, reason: `Para antes de las ${at}` });
+    } else if (left <= 3 * 60 * MINUTE) parts.push({ points: 400, reason: `Vence ${at}` });
+    else parts.push({ points: 100, reason: `Para antes de ${clockText(times.due, now)}` });
   }
   return parts;
 }
@@ -132,9 +153,13 @@ function waitedText(minutes: number): string {
 
 export function rankAsk<T extends NowAsk>(ask: T, ctx: NowContext): Ranked<T> {
   const read = timesOf(`${ask.text} ${ask.command ?? ''}`, ask.at, ctx.meetings);
+  // Tied to a meeting, it moves with the meeting.
+  const afterMeeting = ask.after
+    ? meetingNamed(ask.after, ctx.meetings ?? [], ask.at)?.end
+    : undefined;
   const times: AskTimes = {
     due: ask.due ?? read.due,
-    notBefore: ask.notBefore ?? read.notBefore,
+    notBefore: afterMeeting ?? ask.notBefore ?? read.notBefore,
   };
   const blocks = agentsNamed(ask, ctx.agents);
   const parts = timeParts(times, ctx.now);
@@ -144,7 +169,12 @@ export function rankAsk<T extends NowAsk>(ask: T, ctx: NowContext): Ranked<T> {
   if (PROD.test(`${ask.text} ${ask.command ?? ''}`))
     parts.push({ points: 120, reason: 'Va a producción' });
   if (asksAnswer(ask)) parts.push({ points: 60, reason: 'Jarvis espera tu respuesta' });
-  const waited = Math.max(0, (ctx.now - ask.at) / MINUTE);
+  // What was for later waits since its time came, not since it was asked.
+  const since =
+    times.notBefore !== undefined && times.notBefore <= ctx.now
+      ? Math.max(ask.at, times.notBefore)
+      : ask.at;
+  const waited = Math.max(0, (ctx.now - since) / MINUTE);
   parts.push({
     points: Math.min(180, waited / 2),
     reason: waited >= 60 ? waitedText(waited) : undefined,

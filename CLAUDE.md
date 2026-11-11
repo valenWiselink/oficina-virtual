@@ -243,6 +243,14 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   its permission is decided. A day untouched: «¿Sigue?». Closed ones can be
   reopened. The file stays `version: 1` with optional fields, so an older office
   still reads it. `dejar_pendiente` adds one without bringing Jarvis to the middle.
+  When an ask is for: `core/src/askTime.ts`, shared by the office and the page.
+  It reads the words («mañana» with no hour is 9:00, «el lunes», «13/11», «apenas
+  termine la demo» is the end of that meeting in the calendar) and Jarvis's
+  `cuando` (`readWhen`; «después de: <reunión>» stores `after`, the meeting's
+  title, so it moves with the meeting; «cuando se mergee #12» stores `afterPr`
+  and keeps it out of sight until it merges). «Posponer» offers
+  `snoozeChoices` (webview `now/snoozeRules.ts`) and a day-and-time picker;
+  `snoozePendingAsk` takes `until` (ms, up to 30 days) besides `minutes`.
 - `terminal/` — PTYs (`@lydell/node-pty`, prebuilt) streamed to the browser.
 
 Agent tracking also still loads the old office assets and layout: the

@@ -5,6 +5,7 @@ import { usePendingAsks } from '../pendingAsks/pendingAsksStore.js';
 import { splitOpen } from '../pendingAsks/pendingAsksView.js';
 import type { AgentKind, AgentView } from '../views/agentViews.js';
 import { type NowQueue, nowQueue } from './nowRules.js';
+import type { MeetingTime } from './nowTime.js';
 import { dayStrip, type StripItem } from './stripRules.js';
 
 /** Kinds that are getting on by themselves: naming them holds nobody back. */
@@ -16,6 +17,8 @@ export interface NowModel {
   strip: StripItem[];
   seemsDone: PendingAskEntry[];
   closed: PendingAskEntry[];
+  /** The meetings ahead, for «Posponer» (empty without a calendar). */
+  meetings: readonly MeetingTime[];
   /** The office never sent the list (read-only, older server). */
   missing: boolean;
 }
@@ -38,6 +41,7 @@ export function useNowQueue(views: readonly AgentView[], jarvisId: number | unde
     strip: dayStrip(meetings, ranked, now),
     seemsDone,
     closed: list?.closed ?? [],
+    meetings,
     missing: list === null,
   };
 }
