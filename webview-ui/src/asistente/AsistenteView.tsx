@@ -67,7 +67,15 @@ function useMoment(ctx: MomentContext) {
   return { moment, chosen, choose, auto, reason: momentReason(moment, ctx, chosen) };
 }
 
-/** Whether you are writing in Jarvis's box: focused, with something typed. */
+/**
+ * Whether you are writing in Jarvis's box: focused, with something typed.
+ *
+ * Read as the events bubble, never in their capture phase: a browser renders
+ * a state set while capturing before the box's own onChange runs, and that
+ * render puts the box's old text back, so the letter just typed was lost
+ * (v1.0.50: «Seguimos» became «eguimos»). Bubbling, it renders together with
+ * the box's own update.
+ */
 function useTyping() {
   const [typing, setTyping] = useState(false);
   const read = (el: EventTarget | null) =>
@@ -75,9 +83,9 @@ function useTyping() {
   return {
     typing,
     handlers: {
-      onFocusCapture: (e: FocusEvent) => read(e.target),
-      onInputCapture: (e: FormEvent) => read(e.target),
-      onBlurCapture: () => setTyping(false),
+      onFocus: (e: FocusEvent) => read(e.target),
+      onInput: (e: FormEvent) => read(e.target),
+      onBlur: () => setTyping(false),
     },
   };
 }
