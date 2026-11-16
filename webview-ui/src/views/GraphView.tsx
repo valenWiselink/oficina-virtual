@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 
 import { type Insets, NO_INSETS } from '../components/cardBar.js';
 import type { AgentView } from './agentViews.js';
@@ -12,6 +12,7 @@ import {
   SlowNotice,
 } from './GraphChrome.js';
 import { GraphContextMenu } from './GraphContextMenu.js';
+import { inOfficeOnly } from './graphFilter.js';
 import { GraphFilterBar } from './GraphFilterBar.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
 import { GraphMeetingBanner } from './GraphMeetingBanner.js';
@@ -36,10 +37,11 @@ type GraphState = ReturnType<typeof useGraphView>;
  * Opening an agent elsewhere (Alt+N, Ctrl+K, a terminal tab) selects it here
  * too, and "Seguir" keeps the camera on it. With the focus on the graph its
  * keys work ("?" lists them). The canvas goes on under the see-through strip
- * of tabs (`under`); everything else stays in this box, clear of it.
+ * of tabs (`under`); everything else stays in this box, clear of it. Only
+ * the agents that run in the office are drawn (`inOfficeOnly`).
  */
 export function GraphView({
-  views,
+  views: all,
   actions,
   under = NO_INSETS,
 }: {
@@ -48,6 +50,7 @@ export function GraphView({
   /** How far the strip of tabs lies over each side of this box. */
   under?: Insets;
 }) {
+  const views = useMemo(() => inOfficeOnly(all), [all]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const g = useGraphView(views, actions, { canvasRef, rootRef, under });

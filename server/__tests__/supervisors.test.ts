@@ -167,9 +167,9 @@ function office(dir: string) {
   const store = new AgentStateStore();
   const registry = new SupervisorRegistry(new SupervisionTeams(path.join(dir, 'teams.json')), dir);
   registry.attach(store);
-  add(store, 1);
-  add(store, 2);
-  add(store, 3, { nickname: 'Pagos' });
+  add(store, 1, { officeTerminal: true });
+  add(store, 2, { officeTerminal: true });
+  add(store, 3, { nickname: 'Pagos', officeTerminal: true });
   add(store, 10, { nickname: 'Jefa', supervision: { kind: 'agents' }, officeTerminal: true });
   add(store, 11, { nickname: 'Todo', supervision: { kind: 'all' }, officeTerminal: true });
   registry.teams.set('s10', ['s1', 's3', 's10']);
@@ -333,6 +333,31 @@ describe('SupervisorRelay', () => {
     run();
     expect(written.get(10)).toBeUndefined();
     expect(written.get(11)).toContain('«A2» terminó su turno.');
+  });
+
+  it('spares the supervisor of everyone the turns of sessions outside the office', () => {
+    // VS Code and desktop-app sessions: Jarvis got their «terminó su turno»
+    // though Valentín works with them himself (2026-11-16). A team picked by
+    // hand still hears them, and a permission still reaches everyone.
+    const { store, r, run, written } = relay();
+    const outside = store.get(1)!;
+    outside.officeTerminal = false;
+    outside.lastReply = 'Listo en VS Code.';
+    r.observe({ type: 'agentStatus', id: 1, status: 'active' });
+    r.observe({ type: 'agentStatus', id: 1, status: 'waiting' });
+    run();
+    run();
+    expect(written.get(11)).toBeUndefined();
+    expect(written.get(10)).toContain('«A1» terminó su turno.');
+    r.observe({
+      type: 'permissionPending',
+      id: 1,
+      requestId: 'p-9',
+      toolName: 'Bash',
+      toolInput: { command: 'git push' },
+    });
+    run();
+    expect(written.get(11)).toContain('«A1» pide permiso p-9');
   });
 
   it('leaves a teammate to its lead: it shares the session but is not an agent', () => {

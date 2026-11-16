@@ -266,6 +266,7 @@ function agentOf(store: AgentStateStore, id: number, over: Partial<AgentState> =
     projectDir: 'C:/x',
     jsonlFile: `C:/x/${id}.jsonl`,
     isExternal: false,
+    officeTerminal: true,
   });
   Object.assign(agent, over);
   store.set(id, agent);
@@ -403,6 +404,19 @@ describe('what feeds the list', () => {
     expect(asks.open()).toEqual([]);
     watch.agentClosed(agent);
     expect(openTexts(asks)).toEqual(['pasarle el link a Valentín']);
+  });
+
+  it('a session from outside the office leaves nothing when it ends', () => {
+    // VS Code and desktop-app sessions: many and old, he does not want their
+    // «Te toca:» in Pendientes (2026-11-16).
+    const { store, asks, watch } = setup();
+    watch.agentClosed(
+      agentOf(store, 2, {
+        officeTerminal: false,
+        yourTurn: turn('t2', 'probar en VS Code'),
+      } as Partial<AgentState>),
+    );
+    expect(asks.open()).toEqual([]);
   });
 
   it('the office going down is not each agent closing', () => {

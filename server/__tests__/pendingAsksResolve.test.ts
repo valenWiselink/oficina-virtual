@@ -49,6 +49,7 @@ function agentOf(store: AgentStateStore, id: number, over: Partial<AgentState> =
     projectDir: 'C:/x',
     jsonlFile: `C:/x/${id}.jsonl`,
     isExternal: false,
+    officeTerminal: true,
   });
   Object.assign(agent, over);
   store.set(id, agent);

@@ -123,30 +123,38 @@ export class SupervisorTools {
       : `«${query}» no está en tu equipo. Tu equipo: ${names || 'nadie todavía'}.`;
   }
 
+  /** Its team, the ones running in the office first; those that run outside
+   *  (VS Code, the desktop app) apart, under their own heading. */
   equipo(): string {
     const members = this.members();
     if (members.length === 0) return 'Todavía no tenés agentes a cargo.';
-    return members
-      .map(([id, agent]) => {
-        const pending = this.pendingOf(agent);
-        const state = teamState(id, agent, pending.length, this.deps.store).words;
-        const doing = [...agent.activeToolStatuses.values()].at(-1);
-        const folder = agent.cwd?.split(/[\\/]/).pop();
-        const parts = [
-          `«${spokenName(agent)}» (id ${id})`,
-          state,
-          folder ? `carpeta ${folder}` : undefined,
-          doing ? `ahora: ${doing}` : undefined,
-          head(agent.lastReply) ? `dijo: ${head(agent.lastReply)}` : undefined,
-          agent.officeTerminal ? undefined : this.outsideNote(),
-        ].filter(Boolean);
-        const asks = pending.map(
-          (p) =>
-            `\n  permiso pendiente ${p.requestId}: ${describeRequest(p.toolName, p.toolInput)}`,
-        );
-        return `- ${parts.join(' · ')}${asks.join('')}`;
-      })
-      .join('\n');
+    const inside = members.filter(([, a]) => a.officeTerminal).map((m) => this.memberLine(m));
+    const outside = members.filter(([, a]) => !a.officeTerminal).map((m) => this.memberLine(m));
+    if (outside.length === 0) return inside.join('\n');
+    return [
+      inside.length > 0 ? inside.join('\n') : 'Ninguno corre en la oficina.',
+      '',
+      `${this.outsideNote()}:`,
+      ...outside,
+    ].join('\n');
+  }
+
+  private memberLine([id, agent]: Member): string {
+    const pending = this.pendingOf(agent);
+    const state = teamState(id, agent, pending.length, this.deps.store).words;
+    const doing = [...agent.activeToolStatuses.values()].at(-1);
+    const folder = agent.cwd?.split(/[\\/]/).pop();
+    const parts = [
+      `«${spokenName(agent)}» (id ${id})`,
+      state,
+      folder ? `carpeta ${folder}` : undefined,
+      doing ? `ahora: ${doing}` : undefined,
+      head(agent.lastReply) ? `dijo: ${head(agent.lastReply)}` : undefined,
+    ].filter(Boolean);
+    const asks = pending.map(
+      (p) => `\n  permiso pendiente ${p.requestId}: ${describeRequest(p.toolName, p.toolInput)}`,
+    );
+    return `- ${parts.join(' · ')}${asks.join('')}`;
   }
 
   ultimaRespuesta(query: string): string {
@@ -206,9 +214,9 @@ export class SupervisorTools {
       : 'Ese permiso ya no está pendiente (se respondió o venció).';
   }
 
-  /** How `equipo` marks an agent whose terminal is not the office's. */
+  /** The heading `equipo` lists the agents whose terminal is not the office's under. */
   protected outsideNote(): string {
-    return 'sin terminal en la oficina (no le podés escribir)';
+    return 'Sin terminal en la oficina (no les podés escribir)';
   }
 
   /** The answer when the office cannot type into an agent's terminal. */

@@ -395,8 +395,13 @@ describe('JarvisTools', () => {
     expect(t.escribirAAgente('Pagos', 'seguí')).toContain('Listo');
     expect(notebook.read()).toContain('Le escribí a «Pagos»: seguí');
     expect(t.escribirAAgente('Vscode', 'hola')).toContain('SendMessage');
-    expect(t.equipo()).toContain('«Vscode» (id 3) · sin tarea');
-    expect(t.equipo()).toContain('no corre en la oficina (escribile con SendMessage)');
+    // Listed apart, after the ones in the office: Jarvis can still write to it.
+    const [inside, outside] = t.equipo().split('No corren en la oficina');
+    expect(inside).toContain('«Pagos» (id 4)');
+    expect(inside).not.toContain('Vscode');
+    expect(outside).toMatch(/^ \(VS Code, la app de escritorio\): escribiles con SendMessage:/);
+    expect(outside).toContain('«Vscode» (id 3) · sin tarea');
+    expect(outside).not.toContain('Pagos');
     expect(t.anotar('Valentín decide el merge')).toBe('Anotado.');
     expect(t.bitacora()).toContain('Valentín decide el merge');
   });

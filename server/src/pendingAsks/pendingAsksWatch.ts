@@ -98,11 +98,14 @@ export class PendingAsksWatch {
     this.closedBySupervisor.add(sessionId);
   }
 
-  /** The agent closes (the ✕, Jarvis, or its own session ending). */
+  /** The agent closes (the ✕, Jarvis, or its own session ending). A session
+   *  that ran outside the office (VS Code, the desktop app) leaves nothing:
+   *  he saw its «Te toca:» where he works with it (2026-11-16). */
   agentClosed(agent: AgentState): void {
     const bySupervisor = this.closedBySupervisor.delete(agent.sessionId);
     const turn = agent.yourTurn;
     if (this.stopped || bySupervisor || isJarvis(agent) || agent.leadAgentId !== undefined) return;
+    if (!agent.officeTerminal) return;
     if (!turn || turn.merged || this.asks.hasSeen(turn.id)) return;
     const name = spokenName(agent);
     const raw = teTocaRawLine(agent.lastReply);
