@@ -293,7 +293,7 @@ export class JarvisTools extends SupervisorTools {
   }
 
   protected override outsideNote(): string {
-    return 'no corre en la oficina (escribile con SendMessage)';
+    return 'No corren en la oficina (VS Code, la app de escritorio): escribiles con SendMessage';
   }
 
   protected override noTerminal(name: string): string {

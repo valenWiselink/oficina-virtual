@@ -52,3 +52,12 @@ export function filterFocus(
   }
   return keys;
 }
+
+/**
+ * The graph draws only the agents that run in the office (in one of its own
+ * terminals). Sessions from VS Code or the desktop app stay on the board and
+ * in Jarvis's `equipo`, not here: there were many, and old (2026-11-16).
+ */
+export function inOfficeOnly(views: readonly AgentView[]): AgentView[] {
+  return views.filter((v) => v.canSetRun);
+}

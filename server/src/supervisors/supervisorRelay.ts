@@ -177,10 +177,13 @@ export class SupervisorRelay {
     // a row, 2026-10-20.
     if (reply && this.replyTold.get(id) === reply) return;
     if (reply) this.replyTold.set(id, reply);
-    this.tell(id, (name) =>
-      reply
-        ? `«${name}» terminó su turno. Lo último que dijo:\n${clip(reply, REPLY_CLIP)}`
-        : `«${name}» terminó su turno.`,
+    this.tell(
+      id,
+      (name) =>
+        reply
+          ? `«${name}» terminó su turno. Lo último que dijo:\n${clip(reply, REPLY_CLIP)}`
+          : `«${name}» terminó su turno.`,
+      { officeOnly: true },
     );
   }
 
@@ -189,8 +192,15 @@ export class SupervisorRelay {
     this.tell(id, line);
   }
 
-  /** Queue a line for every supervisor of agent `id`. */
-  private tell(id: number, line: (name: string) => string): void {
+  /** Queue a line for every supervisor of agent `id`. With `officeOnly`, the
+   *  supervisor of everyone (Jarvis) hears it only from agents that run in the
+   *  office: a VS Code or desktop-app session is Valentín's own, its turns are
+   *  no news to pass on (2026-11-16). A team picked by hand still hears them. */
+  private tell(
+    id: number,
+    line: (name: string) => string,
+    { officeOnly = false }: { officeOnly?: boolean } = {},
+  ): void {
     const agent = this.deps.store.get(id);
     // A teammate or sub-agent shares its lead's session, so it would reach the
     // lead's supervisors as an agent of their own: its turns are its lead's
@@ -199,6 +209,7 @@ export class SupervisorRelay {
     if (!agent || agent.leadAgentId !== undefined || agent.spawnToolUseId) return;
     const name = spokenName(agent);
     for (const supervisorId of this.deps.registry.supervisorsOf(agent.sessionId)) {
+      if (officeOnly && !agent.officeTerminal && this.isOfEveryone(supervisorId)) continue;
       const lines = this.pending.get(supervisorId);
       if (lines) {
         lines.push(line(name));
@@ -207,6 +218,10 @@ export class SupervisorRelay {
       this.pending.set(supervisorId, [line(name)]);
       this.schedule(() => this.flush(supervisorId), this.deps.batchMs ?? BATCH_MS);
     }
+  }
+
+  private isOfEveryone(supervisorId: number): boolean {
+    return this.deps.store.get(supervisorId)?.supervision?.kind === 'all';
   }
 
   private flush(supervisorId: number): void {

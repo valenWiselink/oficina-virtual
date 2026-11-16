@@ -106,7 +106,8 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   Ajustes can append/take back the exact block in the global CLAUDE.md.
 - `supervisors/` — supervisor agents: `supervision.ts` (who watches whom,
   launch files), `supervisorRelay.ts` (what reaches them as `[Oficina]`
-  messages), `supervisorMcp.ts` + `supervisorTools.ts` (their tools at
+  messages; Jarvis hears no «terminó su turno» from sessions outside the
+  office, only their permissions and questions), `supervisorMcp.ts` + `supervisorTools.ts` (their tools at
   `POST /mcp`, one token each), `supervisorGuard.ts` (what they may approve;
   an `askable` refusal — external tool not on production nor deleting, a
   write outside the folder, an unknown tool — Jarvis may approve on Valentín's
@@ -234,7 +235,9 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   drop it; `cerrar_agente` tells Jarvis the id. Only a workspace supervisor's
   closing stays out, and its tool tells it to pass the ask on.
   Going down is not closing: the watch stops before the terminals do, and only
-  the ✕, `cerrar_agente` and an external session ending count.
+  the ✕, `cerrar_agente` and an external session ending count. Only agents that
+  ran in the office (`officeTerminal`) leave an ask: a VS Code or desktop-app
+  session leaves nothing (2026-11-16).
   The same thing asked again is one ask (`refs.ts`: same `clave`, same text, or
   the same PR, migration «M2», ticket or artifact; numbers ≥ 100 spelled in
   words become digits first): the newer wording wins (Jarvis's over an agent's),
@@ -271,6 +274,9 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   `element.animate`; never in calm mode or with reduced motion);
   the graph: `GraphView`, `useGraphCanvas` (camera, gestures, minimap),
   `graphScene` (layout, drawing), `graphDraw` (procedural Clawd), `graphSim`.
+  The graph draws only agents that run in the office (`inOfficeOnly`, by
+  `canSetRun`); VS Code and desktop-app sessions stay on the board, and
+  Jarvis's `equipo` lists them apart («No corren en la oficina»).
 - `components/TerminalDrawer.tsx` and friends — the docked panel: agent tabs,
   per-pane header, Chat | Terminal, split with a pinned agent, search.
 - `chat/` — chat view of a transcript; sending pastes into the agent's PTY.

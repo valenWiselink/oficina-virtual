@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentView } from '../src/views/agentViews.js';
-import { filterCounts, filterFocus, matchesFilter } from '../src/views/graphFilter.js';
+import {
+  filterCounts,
+  filterFocus,
+  inOfficeOnly,
+  matchesFilter,
+} from '../src/views/graphFilter.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
   id,
@@ -46,5 +51,12 @@ describe('graph filter by state', () => {
     expect(filterFocus(office, 'all')).toBeNull();
     expect([...filterFocus(office, 'needs')!].sort()).toEqual(['a1', 'vos']);
     expect([...filterFocus(office, 'work')!].sort()).toEqual(['a2', 'a3', 'library', 's-1']);
+  });
+});
+
+describe('who the graph draws', () => {
+  it('only the agents that run in the office, not VS Code or desktop-app sessions', () => {
+    const views = [view(1, { canSetRun: true }), view(2), view(3, { canSetRun: true })];
+    expect(inOfficeOnly(views).map((v) => v.id)).toEqual([1, 3]);
   });
 });
