@@ -1,4 +1,4 @@
-import { spokenName, teTocaRawLine } from '../agentIdentity.js';
+import { spokenName, teTocaRawLine, teTocaReplaces } from '../agentIdentity.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { prStateOf } from '../mergedAsk.js';
 import type { AgentState } from '../types.js';
@@ -102,6 +102,8 @@ export class PendingAsksWatch {
    *  that ran outside the office (VS Code, the desktop app) leaves nothing:
    *  he saw its «Te toca:» where he works with it (2026-11-16). */
   agentClosed(agent: AgentState): void {
+    // What it was doing for Valentín and nobody closed comes back to «Te toca».
+    if (!this.stopped && agent.leadAgentId === undefined) this.asks.undelegate(spokenName(agent));
     const bySupervisor = this.closedBySupervisor.delete(agent.sessionId);
     const turn = agent.yourTurn;
     if (this.stopped || bySupervisor || isJarvis(agent) || agent.leadAgentId !== undefined) return;
@@ -187,6 +189,7 @@ export class PendingAsksWatch {
       prUrl: turn.prAsk?.url,
       knownPrs: knownPrLinks(this.store),
       permission,
+      replaces: idsOf(teTocaReplaces(agent.lastReply)),
     });
   }
 
@@ -206,4 +209,9 @@ export class PendingAsksWatch {
     const since = before ?? at - RECENT_ASK_MS;
     if (agent.valentinPromptText) this.asks.answeredBy(agent.valentinPromptText, at, since);
   }
+}
+
+/** The pending ask a «Te toca [p556]: …» names, as `add`'s `replaces`. */
+function idsOf(id: string | undefined): string[] | undefined {
+  return id ? [id] : undefined;
 }

@@ -225,6 +225,53 @@ async function deliverPermissionRequest(
   await new Promise<void>((resolve) => process.stdout.write(output, () => resolve()));
 }
 
+/** How long a message may wait for its context: past this it goes without. */
+const PROMPT_CONTEXT_TIMEOUT_MS = 2000;
+
+/** The context an office adds to a message ({ additionalContext }), or null. */
+function parseContext(reply: string): string | null {
+  if (!reply || reply === 'ok') return null;
+  try {
+    const parsed = JSON.parse(reply) as { additionalContext?: unknown };
+    return typeof parsed.additionalContext === 'string' && parsed.additionalContext.trim()
+      ? parsed.additionalContext
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * UserPromptSubmit (installed only on Jarvis, through his own --settings):
+ * the first office that answers with context — his open asks — has it
+ * added to the message. Nothing in time, nothing added: the message is
+ * never held back.
+ */
+async function deliverPromptContext(
+  servers: ServerTarget[],
+  body: string,
+  sid: string,
+): Promise<void> {
+  const context = await new Promise<string | null>((resolve) => {
+    let pending = servers.length;
+    for (const server of servers) {
+      void postToServer(server, body, 'UserPromptSubmit', sid, PROMPT_CONTEXT_TIMEOUT_MS).then(
+        (reply) => {
+          const parsed = parseContext(reply);
+          if (parsed) resolve(parsed);
+          else if (--pending === 0) resolve(null);
+        },
+      );
+    }
+  });
+  hookDebug(`prompt-context sid=${sid} chars=${context?.length ?? 0}`);
+  if (!context) return;
+  const output = JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context },
+  });
+  await new Promise<void>((resolve) => process.stdout.write(output, () => resolve()));
+}
+
 async function main(): Promise<void> {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
@@ -269,6 +316,10 @@ async function main(): Promise<void> {
   const body = JSON.stringify({ ...data, [HOOK_SPAWNED_AT_FIELD]: SPAWNED_AT });
   if (eventName === 'PermissionRequest') {
     await deliverPermissionRequest(servers, body, sid);
+    return;
+  }
+  if (eventName === 'UserPromptSubmit') {
+    await deliverPromptContext(servers, body, sid);
     return;
   }
   await Promise.all(

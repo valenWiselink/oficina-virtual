@@ -76,6 +76,8 @@ export class PixelAgentsServer {
     ptyManager?: PtySessionManager;
     /** Holds PermissionRequest hooks for approval from the office (standalone). */
     permissionBroker?: PermissionBroker;
+    /** Context for a UserPromptSubmit hook, by session (Jarvis: his open asks). */
+    promptContext?: (sessionId: string) => string | undefined;
     /** Extra privileged Host names (standalone; see wsAuth.privilegedHostnames). */
     allowedHosts?: readonly string[];
     /** Replace the persisted standalone token, revoking every URL that carried
@@ -147,6 +149,7 @@ export class PixelAgentsServer {
       onReloadAssets: options?.onReloadAssets,
       ptyManager: options?.ptyManager,
       permissionBroker: options?.permissionBroker,
+      promptContext: options?.promptContext,
       allowedHosts: standalone?.allowedHosts,
     });
 

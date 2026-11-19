@@ -5,6 +5,7 @@ import * as path from 'path';
 import type { PendingAskEntry, PendingAsksList } from '../../../core/src/messages.js';
 import { SERVER_JSON_DIR } from '../constants.js';
 import { prStateOf } from '../mergedAsk.js';
+import { sameAsk, taskCovers } from './askSimilarity.js';
 import { type MergeTarget, mergeTargetOf } from './mergeTarget.js';
 import { askRefs, commandPrUrl, numbersToDigits, onlyMerge, prNumbers, shareRef } from './refs.js';
 
@@ -28,6 +29,11 @@ export const STALE_MS = 24 * HOUR;
 
 export const JARVIS = 'Jarvis';
 export const ANSWERED_HOW = 'Le contestaste a Jarvis';
+/** «no sé», «como quieras»: he leaves it to Jarvis and his recommendation. */
+export const LEFT_TO_JARVIS_HOW = 'Lo tomé así: decide Jarvis con su recomendación';
+/** The copy kept of the list before the first office that delegates asks
+ *  started: going back to an older version can restore it as it was. */
+export const PENDING_ASKS_BACKUP_SUFFIX = '.antes-de-delegar';
 
 export interface AskVersion {
   at: number;
@@ -86,6 +92,9 @@ export interface StoredAsk {
   after?: string;
   /** The PR it waits for: out of sight until it merges. */
   afterPr?: string;
+  /** An agent (or Jarvis) is doing it: out of «Te toca», under «Lo hacen
+   *  agentes». It comes back if that agent closes without it closed. */
+  delegatedTo?: { agent: string; at: number };
 }
 
 /** What Jarvis can say about an ask beyond its text (dejar_pendiente). */
@@ -188,7 +197,13 @@ const hourOf = (ms: number): string =>
 
 /** «listo», «ya lo hice», «sí», «no», «dale»: a short answer to what was just asked. */
 const SHORT_ANSWER =
-  /^\s*(?:listo|lista|hecho|hecha|ya|dale|s[ií]|no|ok|okey|de una|perfecto|joya|confirmo|confirmado|aprobado|corrid[oa]|mergead[oa])(?!\p{L})/iu;
+  /^\s*(?:listo|lista|hecho|hecha|ya|dale|s[ií]|no|ok|okey|de una|perfecto|joya|confirmo|confirmado|aprobado|corrid[oa]|mergead[oa]|nose|no s[eé]|ni idea|como quieras|lo que (?:vos )?(?:recomiendes|digas|te parezca)|decid[ií] vos|eleg[ií] vos|hacelo(?: vos)?|encargate|ocupate|dale vos|lo hac[eé]s vos)(?!\p{L})/iu;
+/** He hands it to Jarvis: «hacelo vos», «encargate». */
+const HAND_TO_JARVIS =
+  /^\s*(?:hacelo(?: vos)?|encargate|ocupate|dale vos|lo hac[eé]s vos)(?!\p{L})/iu;
+/** He leaves the choice to Jarvis: «no sé», «como quieras». */
+const LEAVE_TO_JARVIS =
+  /^\s*(?:nose|no s[eé]|ni idea|como quieras|lo que (?:vos )?(?:recomiendes|digas|te parezca)|decid[ií] vos|eleg[ií] vos)(?!\p{L})/iu;
 const ALL_OF_THEM = /\b(?:todo|todos|todas|ambos|ambas|los dos|las dos|los tres|las tres)\b/i;
 const ID_IN_TEXT = /\[?\b(p\d{1,5})\b\]?/gi;
 
@@ -214,6 +229,18 @@ export class PendingAsks {
     this.file = deps.file ?? path.join(os.homedir(), SERVER_JSON_DIR, PENDING_ASKS_FILE);
     this.now = deps.now ?? Date.now;
     this.load();
+    this.backUpOnce();
+  }
+
+  /** Keep the list as an older office left it, once: going back to that
+   *  version can restore it (the fields added since are optional anyway). */
+  private backUpOnce(): void {
+    const backup = this.file + PENDING_ASKS_BACKUP_SUFFIX;
+    try {
+      if (fs.existsSync(this.file) && !fs.existsSync(backup)) fs.copyFileSync(this.file, backup);
+    } catch (err) {
+      console.warn(`[Pixel Agents] Could not back up the pending asks: ${String(err)}`);
+    }
   }
 
   message(): PendingAsksList {
@@ -298,7 +325,18 @@ export class PendingAsks {
       pending.find((a) => folded(a.text) === folded(incoming.text)) ??
       (incoming.refs.length > 0
         ? pending.find((a) => shareRef(a.refs ?? askRefs(a.text, a.command), incoming.refs))
-        : undefined)
+        : undefined) ??
+      // The same author asking it again in other words.
+      // Not when both name a PR, ticket or artifact and none is the same: then
+      // they are about different things, however alike the words.
+      (incoming.question
+        ? undefined
+        : pending.find((a) => {
+            if (a.from !== incoming.from || a.question) return false;
+            const theirs = a.refs ?? askRefs(a.text, a.command);
+            if (theirs.length > 0 && incoming.refs.length > 0) return false;
+            return sameAsk(a.text, incoming.text);
+          }))
     );
   }
 
@@ -466,7 +504,15 @@ export class PendingAsks {
       .filter((a): a is StoredAsk => !!a && a.closedAt === undefined);
     const answered =
       named.length > 0 ? [...new Set(named)] : this.shortAnswerTargets(said, at, since);
-    const how = `${ANSWERED_HOW}: «${clip(said.replace(ID_IN_TEXT, '').trim() || said, 80)}»`;
+    const plain = said.replace(ID_IN_TEXT, '').trim() || said;
+    if (HAND_TO_JARVIS.test(plain)) {
+      for (const ask of answered) this.handTo(ask, JARVIS, at);
+      if (answered.length > 0) this.changed();
+      return answered;
+    }
+    const how = LEAVE_TO_JARVIS.test(plain)
+      ? LEFT_TO_JARVIS_HOW
+      : `${ANSWERED_HOW}: «${clip(plain, 80)}»`;
     for (const ask of answered) {
       if (ask.answeredAt !== undefined) continue;
       ask.answeredAt = at;
@@ -484,12 +530,77 @@ export class PendingAsks {
       (a) =>
         a.from === JARVIS &&
         a.answeredAt === undefined &&
+        a.delegatedTo === undefined &&
         !a.question &&
         (a.touchedAt ?? a.at) > since &&
         (a.touchedAt ?? a.at) <= at,
     );
     if (recent.length === 1) return recent;
-    return recent.length > 1 && ALL_OF_THEM.test(said) ? recent : [];
+    if (recent.length > 1 && ALL_OF_THEM.test(said)) return recent;
+    // Several and no id: it answers the last «Te toca» Jarvis left (asked
+    // 2026-11-19: «nose», «hacelo vos» go with the latest one).
+    const latest = recent.reduce<StoredAsk | undefined>(
+      // On a tie the later one in the list (the newer ask) wins.
+      (best, a) => (!best || (a.touchedAt ?? a.at) >= (best.touchedAt ?? best.at) ? a : best),
+      undefined,
+    );
+    return latest ? [latest] : [];
+  }
+
+  /**
+   * Jarvis handed these to an agent (lanzar_agente, escribir_a_agente): the
+   * ids he named, or else the open ones the task covers (same PR, ticket or
+   * artifact, or every meaningful word of the ask in the task). They leave
+   * «Te toca» for «Lo hacen agentes».
+   */
+  delegate(agent: string, task: string, ids: readonly string[] = []): StoredAsk[] {
+    const now = this.now();
+    const named = ids
+      .map((id) => this.find(id.trim().replace(/^\[|\]$/g, '')))
+      .filter((a): a is StoredAsk => !!a && a.closedAt === undefined);
+    const taskRefs = askRefs(task);
+    const covered =
+      named.length > 0
+        ? named
+        : this.pending().filter(
+            (a) =>
+              !a.question &&
+              a.delegatedTo === undefined &&
+              ((taskRefs.length > 0 && shareRef(a.refs ?? askRefs(a.text, a.command), taskRefs)) ||
+                taskCovers(task, a.text)),
+          );
+    for (const ask of covered) this.handTo(ask, agent, now);
+    if (covered.length > 0) this.changed();
+    return covered;
+  }
+
+  /** That agent closed: what it was doing for him and nobody closed comes
+   *  back to «Te toca». */
+  undelegate(agent: string): StoredAsk[] {
+    const now = this.now();
+    const back = this.pending().filter((a) => a.delegatedTo?.agent === agent);
+    for (const ask of back) {
+      delete ask.delegatedTo;
+      ask.touchedAt = now;
+    }
+    if (back.length > 0) this.changed();
+    return back;
+  }
+
+  /** «Deshacer» of a delegation, or Valentín taking it back. */
+  takeBack(id: string): boolean {
+    const ask = this.find(id);
+    if (!ask || ask.delegatedTo === undefined) return false;
+    delete ask.delegatedTo;
+    ask.touchedAt = this.now();
+    this.changed();
+    return true;
+  }
+
+  private handTo(ask: StoredAsk, agent: string, at: number): void {
+    ask.delegatedTo = { agent, at };
+    ask.touchedAt = at;
+    delete ask.staleSince;
   }
 
   closeByPr(url: string, how: string): void {
@@ -727,6 +838,7 @@ function toEntry(ask: StoredAsk): PendingAskEntry {
     ...(open && ask.question ? { question: true } : {}),
     ...(open && ask.options?.length ? { options: ask.options } : {}),
     ...(open && ask.after ? { after: ask.after } : {}),
+    ...(open && ask.delegatedTo ? { delegatedTo: ask.delegatedTo } : {}),
     ...(merge
       ? { mergeUrl: merge.url, mergeCommand: `gh pr merge ${merge.url} ${merge.args.join(' ')}` }
       : {}),

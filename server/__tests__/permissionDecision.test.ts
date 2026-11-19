@@ -392,3 +392,46 @@ describe('hook route with a PermissionBroker', () => {
     }
   });
 });
+
+describe('hook route: context for a message (UserPromptSubmit)', () => {
+  const promptEvent = {
+    session_id: 'ses-jarvis',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'hacelo vos',
+  };
+
+  it('answers with the context the office has for that session', async () => {
+    const { app, port } = await createHttpServer({
+      embedded: true,
+      token: TOKEN,
+      store: new AgentStateStore(),
+      promptContext: (sid) => (sid === 'ses-jarvis' ? '[Oficina] Pendientes abiertos' : undefined),
+    });
+    try {
+      expect(JSON.parse(await post(port, promptEvent).reply)).toEqual({
+        additionalContext: '[Oficina] Pendientes abiertos',
+      });
+      expect(await post(port, { ...promptEvent, session_id: 'otro' }).reply).toBe('ok');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('a failing context still lets the message through', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { app, port } = await createHttpServer({
+      embedded: true,
+      token: TOKEN,
+      store: new AgentStateStore(),
+      promptContext: () => {
+        throw new Error('boom');
+      },
+    });
+    try {
+      expect(await post(port, promptEvent).reply).toBe('ok');
+    } finally {
+      await app.close();
+      vi.restoreAllMocks();
+    }
+  });
+});

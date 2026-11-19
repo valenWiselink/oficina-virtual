@@ -120,9 +120,15 @@ export function supervisorMcpServer(deps: JarvisDeps, supervisorId: number): Mcp
       inputSchema: {
         agente: z.string().describe('Nombre o id del agente'),
         mensaje: z.string().describe('Lo que le querés decir'),
+        pendiente: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Ids de los pendientes de Valentín que le pasás (p556): salen de «Te toca» y quedan como «lo hace» este agente. Sin esto, la oficina busca los que cubre el mensaje.',
+          ),
       },
     },
-    ({ agente, mensaje }) => text(tools.escribirAAgente(agente, mensaje)),
+    ({ agente, mensaje, pendiente }) => text(tools.escribirAAgente(agente, mensaje, pendiente)),
   );
   return server;
 }

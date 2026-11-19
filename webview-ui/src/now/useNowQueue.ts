@@ -16,6 +16,8 @@ export interface NowModel {
   queue: NowQueue<PendingAskEntry>;
   strip: StripItem[];
   seemsDone: PendingAskEntry[];
+  /** An agent (or Jarvis) is doing them: «Lo hacen agentes», not counted. */
+  delegated: PendingAskEntry[];
   closed: PendingAskEntry[];
   /** The meetings ahead, for «Posponer» (empty without a calendar). */
   meetings: readonly MeetingTime[];
@@ -28,7 +30,7 @@ export function useNowQueue(views: readonly AgentView[], jarvisId: number | unde
   const list = usePendingAsks();
   const meetingsMsg = useUpcomingMeetings();
   const now = useNow();
-  const { waiting, seemsDone } = splitOpen(list?.open ?? []);
+  const { waiting, seemsDone, delegated } = splitOpen(list?.open ?? []);
   const meetings = meetingsMsg?.connected ? meetingsMsg.meetings : [];
   const agents = views
     .filter((v) => v.id !== jarvisId)
@@ -40,6 +42,7 @@ export function useNowQueue(views: readonly AgentView[], jarvisId: number | unde
     queue,
     strip: dayStrip(meetings, ranked, now),
     seemsDone,
+    delegated,
     closed: list?.closed ?? [],
     meetings,
     missing: list === null,

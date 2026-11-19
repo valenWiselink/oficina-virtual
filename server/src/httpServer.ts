@@ -58,6 +58,10 @@ export interface HttpServerOptions {
   /** Holds PermissionRequest hooks open until the office decides. Absent = the
    *  hook gets 'ok' at once (no decision) and the terminal prompt decides. */
   permissionBroker?: PermissionBroker;
+  /** What a UserPromptSubmit hook adds to the message, by session id (Jarvis
+   *  reads Valentín's open asks: pendingAsks/promptContext.ts). Absent or
+   *  undefined for a session = nothing added. */
+  promptContext?: (sessionId: string) => string | undefined;
   /** Invoked when setHooksEnabled is toggled via WebSocket. Standalone installs/uninstalls hooks here. */
   onSetHooksEnabled?: SetHooksEnabledSideEffect;
   /** Invoked when an external asset directory is added/removed. Standalone reloads + re-broadcasts assets here. */
@@ -191,6 +195,17 @@ function registerHookRoute(app: FastifyInstance, options: HttpServerOptions): vo
 
       if (event.session_id && event.hook_event_name) {
         options.onHookEvent?.(providerId, event);
+      }
+
+      if (providerId === 'claude' && event.hook_event_name === 'UserPromptSubmit') {
+        const sessionId = typeof event.session_id === 'string' ? event.session_id : '';
+        let context: string | undefined;
+        try {
+          context = sessionId ? options.promptContext?.(sessionId) : undefined;
+        } catch (err) {
+          console.warn(`[Pixel Agents] Prompt context for ${sessionId}: ${String(err)}`);
+        }
+        return reply.send(context ? JSON.stringify({ additionalContext: context }) : 'ok');
       }
 
       const broker = options.permissionBroker;

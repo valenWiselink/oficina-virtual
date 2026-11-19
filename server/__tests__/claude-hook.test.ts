@@ -299,3 +299,56 @@ describe('claude-hook.js integration', () => {
     expect(elapsed).toBeLessThan(3500);
   });
 });
+
+describe('claude-hook.js: context for a message (UserPromptSubmit, Jarvis only)', () => {
+  beforeEach(() => {
+    tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-hook-ctx-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpBase, { recursive: true, force: true });
+  });
+  const itBuilt = it.skipIf(!fs.existsSync(HOOK_SCRIPT));
+
+  function answering(reply: string): Promise<{ port: number; close: () => void }> {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200);
+        res.end(reply);
+      });
+    });
+    return new Promise((resolve) => {
+      server.listen(0, '127.0.0.1', () =>
+        resolve({ port: (server.address() as { port: number }).port, close: () => server.close() }),
+      );
+    });
+  }
+
+  const prompt = JSON.stringify({
+    session_id: 'jarvis',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'nose',
+  });
+
+  itBuilt("prints the office's open asks as context for the model", async () => {
+    const context =
+      '[Oficina] Pendientes abiertos de Valentín (1)\n- [p556] Mergear wiselink-pases #4';
+    const server = await answering(JSON.stringify({ additionalContext: context }));
+    writeServerJson(server.port, 'test-token');
+    const { code, stdout } = await runHookScript(prompt);
+    server.close();
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({
+      hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context },
+    });
+  });
+
+  itBuilt('prints nothing when the office has nothing to add', async () => {
+    const server = await answering('ok');
+    writeServerJson(server.port, 'test-token');
+    const { code, stdout } = await runHookScript(prompt);
+    server.close();
+    expect(code).toBe(0);
+    expect(stdout).toBe('');
+  });
+});

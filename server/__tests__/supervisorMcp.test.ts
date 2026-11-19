@@ -12,7 +12,7 @@ import { SupervisionTeams, SupervisorRegistry } from '../src/supervisors/supervi
 import { bearerOf, registerSupervisorMcp } from '../src/supervisors/supervisorMcp.js';
 
 function tokenIn(flags: string[]): string {
-  const config = JSON.parse(fs.readFileSync(flags[1], 'utf-8'));
+  const config = JSON.parse(fs.readFileSync(flags[flags.indexOf('--mcp-config') + 1], 'utf-8'));
   return config.mcpServers.oficina.headers.Authorization.slice('Bearer '.length);
 }
 

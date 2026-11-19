@@ -230,7 +230,7 @@ export class SupervisorTools {
     return `[Supervisor «${me ? spokenName(me) : 'tu supervisor'}»]`;
   }
 
-  escribirAAgente(query: string, mensaje: string): string {
+  escribirAAgente(query: string, mensaje: string, pendiente?: string[]): string {
     const text = mensaje.trim();
     if (!text) return 'El mensaje está vacío.';
     const found = this.find(query);
@@ -239,12 +239,15 @@ export class SupervisorTools {
     const terminal = this.deps.terminalOf(id);
     if (!terminal) return this.noTerminal(spokenName(agent));
     sendToTerminal(terminal, `${this.signature()} ${text}`);
-    this.wrote(agent, text);
-    return `Listo: se lo escribí a «${spokenName(agent)}».`;
+    const moved = this.wrote(agent, text, pendiente);
+    return `Listo: se lo escribí a «${spokenName(agent)}».${moved}`;
   }
 
-  /** After a message reached one of its agents (Jarvis notes it down). */
-  protected wrote(_agent: AgentState, _text: string): void {}
+  /** After a message reached one of its agents (Jarvis notes it down and
+   *  hands it the pending asks it is about); what to add to the answer. */
+  protected wrote(_agent: AgentState, _text: string, _pendiente?: string[]): string {
+    return '';
+  }
 
   /** Where it may open agents: what lands in its scope (supervisorLaunch.ts). */
   private places(me: AgentState, scope: SupervisionScope): LaunchPlaces {
