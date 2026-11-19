@@ -6,6 +6,8 @@ import { isThinking, type PresenceMode, presencePhrase, speakingPlan } from './n
 
 const LISTEN_HOLD_MS = 1500;
 const NEED_HOLD_MS = 1800;
+/** What arrives this soon after the page opens is the state, not news. */
+const OPENING_MS = 3000;
 
 export interface PresenceHandle {
   /** A key in Jarvis's box. */
@@ -120,12 +122,15 @@ export const JarvisPresence = forwardRef<
     };
   }, [answer]);
 
-  // Something new needs Valentín: a bud toward «Te necesita».
+  // Something new needs Valentín: a bud toward «Te necesita». What arrives
+  // right after the page opens (the replay of what already waited) is where
+  // things stand, not news.
   const seenNeed = useRef(needKey);
+  const openedAt = useRef(Date.now());
   useEffect(() => {
     if (needKey === seenNeed.current) return;
     seenNeed.current = needKey;
-    if (!needKey) return;
+    if (!needKey || Date.now() - openedAt.current < OPENING_MS) return;
     engine.current?.need();
     hold('necesita', NEED_HOLD_MS);
   }, [needKey]);
