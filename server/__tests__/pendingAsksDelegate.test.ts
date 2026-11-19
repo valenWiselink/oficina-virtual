@@ -177,12 +177,13 @@ describe('his answer without an id', () => {
     return { first, last };
   };
 
-  it('«nose» goes with the last «Te toca» and leaves it to Jarvis', () => {
+  it('«nose» goes with the last «Te toca» and leaves it to Jarvis: nothing left for him', () => {
     const asks = list();
     const { first, last } = two(asks);
     expect(asks.answeredBy('nose', clock, NOW - MIN).map((a) => a.id)).toEqual([last.id]);
-    expect(asks.pending().find((a) => a.id === last.id)?.answeredHow).toBe(LEFT_TO_JARVIS_HOW);
-    expect(asks.pending().find((a) => a.id === first.id)?.answeredAt).toBeUndefined();
+    expect(asks.find(last.id)?.closedHow).toBe(LEFT_TO_JARVIS_HOW);
+    expect(asks.find(last.id)?.closedAuto).toBe(true);
+    expect(asks.find(first.id)?.closedAt).toBeUndefined();
   });
 
   it('«hacelo vos» hands it to Jarvis', () => {
@@ -196,10 +197,8 @@ describe('his answer without an id', () => {
     const asks = list();
     const { first, last } = two(asks);
     expect(asks.answeredBy('listo', clock, NOW - MIN).map((a) => a.id)).toEqual([last.id]);
-    expect(asks.pending().find((a) => a.id === last.id)?.answeredHow).toBe(
-      `${ANSWERED_HOW}: «listo»`,
-    );
-    expect(asks.pending().find((a) => a.id === first.id)?.answeredAt).toBeUndefined();
+    expect(asks.find(last.id)?.closedHow).toBe(`${ANSWERED_HOW}: «listo»`);
+    expect(asks.find(first.id)?.closedAt).toBeUndefined();
   });
 
   it('«los dos» still answers all of them', () => {

@@ -38,6 +38,7 @@ import { DayLog } from './dayLog.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { HookHealth, setCurrentHookHealth } from './hookHealth.js';
 import { AskMerger } from './pendingAsks/askMerger.js';
+import { AskReviewer } from './pendingAsks/askReviewer.js';
 import { PendingAsks } from './pendingAsks/pendingAsks.js';
 import { PendingAsksWatch } from './pendingAsks/pendingAsksWatch.js';
 import { openAsksContext } from './pendingAsks/promptContext.js';
@@ -324,7 +325,13 @@ async function main(): Promise<void> {
       broadcast: (message) => store.broadcast({ ...message }),
       tellJarvis,
     });
-    runtime.pendingAsksWatch = new PendingAsksWatch(store, runtime.pendingAsks);
+    // Haiku closes what clearly got done, every few minutes and only with news
+    // (OFICINA_REVISOR_PENDIENTES=0 turns it off).
+    const reviewer =
+      process.env.OFICINA_REVISOR_PENDIENTES === '0'
+        ? undefined
+        : new AskReviewer(runtime.pendingAsks);
+    runtime.pendingAsksWatch = new PendingAsksWatch(store, runtime.pendingAsks, Date.now, reviewer);
     runtime.pendingAsksWatch.start();
     // «Mergear» on a pending ask: gh merges it, and Jarvis hears it in its terminal.
     runtime.askMerger = new AskMerger({ asks: () => runtime.pendingAsks, tellJarvis });

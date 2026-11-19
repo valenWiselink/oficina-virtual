@@ -12,6 +12,7 @@ import type { AskedPermission } from '../jarvis/jarvisRules.js';
 import { useUpcomingMeetings } from '../meetings/meetingsStore.js';
 import { AskButtons, type JarvisLink } from '../now/AskActions.js';
 import { type NowModel, useNowQueue } from '../now/useNowQueue.js';
+import { AutoClosedAsks } from '../pendingAsks/AutoClosedAsks.js';
 import { DelegatedAsk } from '../pendingAsks/PendingAsksPanel.js';
 import { askWhen } from '../pendingAsks/pendingAsksView.js';
 import { useWritableAgents } from '../terminal/agentInput.js';
@@ -143,6 +144,7 @@ function NeedsColumn({
           </ul>
         )}
       </section>
+      <AutoClosedAsks closed={model.closed} now={model.now} />
       {model.delegated.length > 0 && (
         <details className="group">
           <summary className="cursor-pointer text-2xs font-mono uppercase tracking-wider text-text-muted">
@@ -344,6 +346,7 @@ export function NucleoView({
           jarvis={jarvis}
           needKey={needKeyOf(views, model)}
           compact={conversing}
+          working={workingCount(others)}
         />
         {/* JarvisChat is a fragment (header, thread, box): it needs a column. */}
         <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden rounded-lg border border-border">

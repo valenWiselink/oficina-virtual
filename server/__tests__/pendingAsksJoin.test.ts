@@ -212,14 +212,22 @@ describe('what a closing agent leaves', () => {
 });
 
 describe('his answer', () => {
-  it('names the ask by its id: it leaves «Ahora» and closes by itself in two hours', () => {
+  it('names the ask by its id: it closes at once, with «Deshacer» on the page', () => {
     const asks = list();
     asks.add({ from: 'Jarvis', text: 'correr la M2 en prod' });
     asks.answeredBy('[p1] listo, ya la corrí', NOW + MIN);
+    expect(asks.find('p1')?.closedHow).toBe('Le contestaste a Jarvis: «listo, ya la corrí»');
+    expect(asks.message().closed.find((a) => a.id === 'p1')?.autoClosed).toBe(true);
+  });
+
+  it('a problem in his answer leaves it answered, closing by itself in two hours', () => {
+    const asks = list();
+    asks.add({ from: 'Jarvis', text: 'correr la M2 en prod' });
+    asks.answeredBy('[p1] me tira error de permisos', NOW + MIN);
     expect(entry(asks, 'p1')?.seemsDone).toContain('Le contestaste a Jarvis');
     clock = NOW + MIN + ANSWER_SETTLE_MS;
     asks.tick();
-    expect(asks.find('p1')?.closedHow).toContain('Le contestaste a Jarvis: «listo, ya la corrí»');
+    expect(asks.find('p1')?.closedHow).toContain('«me tira error de permisos»');
   });
 
   it('a short «listo» answers the one thing Jarvis just asked', () => {
@@ -227,8 +235,8 @@ describe('his answer', () => {
     asks.add({ from: 'Jarvis', text: 'una cosa vieja', at: NOW - 3 * 60 * MIN });
     asks.add({ from: 'Jarvis', text: 'correr la M2 en prod', at: NOW });
     asks.answeredBy('listo', NOW + MIN, NOW - MIN);
-    expect(asks.find('p2')?.answeredAt).toBe(NOW + MIN);
-    expect(asks.find('p1')?.answeredAt).toBeUndefined();
+    expect(asks.find('p2')?.closedAt).toBe(clock);
+    expect(asks.find('p1')?.closedAt).toBeUndefined();
   });
 
   it('two asked at once: «listo» goes with the last one (asked 2026-11-19)', () => {
@@ -263,7 +271,7 @@ describe('his answer', () => {
   it('asked again in new words after he answered: pending again', () => {
     const asks = list();
     asks.add({ from: 'Jarvis', text: 'mergear #7' });
-    asks.answeredBy('[p1] dale', NOW + MIN);
+    asks.answeredBy('[p1] ¿cuál era?', NOW + MIN);
     clock = NOW + 5 * MIN;
     asks.add({ from: 'Jarvis', text: 'mergear #7: sigue abierto, ¿lo hacés?', at: clock });
     expect(entry(asks, 'p1')?.seemsDone).toBeUndefined();
@@ -272,7 +280,7 @@ describe('his answer', () => {
   it('«Sigue pendiente» brings it back', () => {
     const asks = list();
     asks.add({ from: 'Jarvis', text: 'mergear #7' });
-    asks.answeredBy('[p1] dale', NOW + MIN);
+    asks.answeredBy('[p1] no anda el botón', NOW + MIN);
     asks.keep('p1');
     expect(entry(asks, 'p1')?.seemsDone).toBeUndefined();
   });
@@ -337,7 +345,7 @@ describe('the watch', () => {
     jarvis.valentinPromptAt = NOW + MIN;
     jarvis.valentinPromptText = '[p1] listo';
     store.broadcast({ type: 'agentIdentity', id: 1 });
-    expect(asks.find('p1')?.answeredAt).toBe(NOW + MIN);
+    expect(asks.find('p1')?.closedHow).toBe('Le contestaste a Jarvis: «listo»');
     watch.stop();
   });
 
