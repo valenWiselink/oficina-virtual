@@ -49,3 +49,27 @@ describe('what only looks done', () => {
     );
   });
 });
+
+describe('what an agent is doing', () => {
+  it('goes under «Lo hacen agentes», out of the count, even if it looks done', () => {
+    const { waiting, seemsDone, delegated } = splitOpen([
+      { id: 'p1', text: 'mergear #4', delegatedTo: { agent: 'pase3', at: 1 } },
+      {
+        id: 'p2',
+        text: 'probar el panel',
+        seemsDone: 'Se mergeó',
+        delegatedTo: { agent: 'panel', at: 2 },
+      },
+      { id: 'p3', text: 'Chile y privacidad' },
+    ]);
+    assert.deepEqual(
+      waiting.map((a) => a.id),
+      ['p3'],
+    );
+    assert.deepEqual(seemsDone, []);
+    assert.deepEqual(
+      delegated.map((a) => a.id),
+      ['p1', 'p2'],
+    );
+  });
+});

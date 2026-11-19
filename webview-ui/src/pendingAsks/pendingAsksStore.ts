@@ -42,6 +42,11 @@ export function reopenPendingAsk(id: string): void {
   transport.send({ type: 'reopenPendingAsk', id });
 }
 
+/** «Volver a Te toca»: an ask an agent was doing is his again. */
+export function takeBackPendingAsk(id: string): void {
+  transport.send({ type: 'takeBackPendingAsk', id });
+}
+
 /** «Sigue pendiente»: it only looked done. */
 export function keepPendingAsk(id: string): void {
   transport.send({ type: 'keepPendingAsk', id });

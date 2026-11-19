@@ -126,6 +126,7 @@ export class JarvisTools extends SupervisorTools {
             ? 'nadie lo movió en un día: preguntale si sigue o cerralo'
             : undefined,
           a.key ? `clave ${a.key}` : undefined,
+          a.delegatedTo ? `lo hace «${a.delegatedTo.agent}»: no le toca a él` : undefined,
         ].filter(Boolean);
         const note = notes.length > 0 ? ` (${notes.join('; ')})` : '';
         return `- ${a.id} · de ${a.from} · ${new Date(a.at).toLocaleString('es-AR')}: ${a.text}${note}`;
@@ -354,6 +355,7 @@ export class JarvisTools extends SupervisorTools {
     apodo: string;
     modelo?: string;
     esfuerzo?: string;
+    pendiente?: string[];
   }): Promise<string> {
     if (!this.jarvis.launch) return 'Esta oficina no puede abrir agentes (no tiene terminales).';
     const tarea = input.tarea.trim();
@@ -390,7 +392,7 @@ export class JarvisTools extends SupervisorTools {
     if (id === null)
       return `No pude abrir a «${apodo}» en ${folder}: la oficina muestra el motivo.`;
     this.notebook.add(`Abrí a «${apodo}» (id ${id}) en ${path.basename(folder)}: ${tarea}`);
-    return `Abrí a «${apodo}» (id ${id}) en ${folder}. Ya arrancó con la tarea; te aviso cuando termine.`;
+    return `Abrí a «${apodo}» (id ${id}) en ${folder}. Ya arrancó con la tarea; te aviso cuando termine.${this.handOver(apodo, tarea, input.pendiente)}`;
   }
 
   override cerrarAgente(query: string): string {
@@ -453,8 +455,18 @@ export class JarvisTools extends SupervisorTools {
     return `Listo: «${spokenName(toAgent)}» recibió lo último de «${spokenName(fromAgent)}».`;
   }
 
-  protected override wrote(agent: AgentState, message: string): void {
+  protected override wrote(agent: AgentState, message: string, pendiente?: string[]): string {
     this.notebook.add(`Le escribí a «${spokenName(agent)}»: ${message}`);
+    return this.handOver(spokenName(agent), message, pendiente);
+  }
+
+  /** The pending asks a task hands to an agent leave «Te toca» («lo hace
+   *  X»), named by id or found by what the task covers; said back to him. */
+  private handOver(agent: string, task: string, ids?: string[]): string {
+    const moved = this.jarvis.pendingAsks?.()?.delegate(agent, task, ids ?? []) ?? [];
+    if (moved.length === 0) return '';
+    const list = moved.map((a) => a.id).join(', ');
+    return ` Pasé ${list} a «Lo hacen agentes» (lo hace «${agent}»): salió de «Te toca». Si no era eso, cerralo o volvelo con dejar_pendiente reemplaza ${moved[0].id}.`;
   }
 
   bitacora(): string {
@@ -493,6 +505,12 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
           .string()
           .optional()
           .describe('low, medium, high, xhigh o max; sin esto, el de siempre'),
+        pendiente: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Ids de los pendientes de Valentín que le pasás (p556): salen de «Te toca» y quedan como «lo hace» este agente. Sin esto, la oficina busca los que cubre la tarea.',
+          ),
       },
     },
     async (input) => text(await tools.lanzarAgente(input)),

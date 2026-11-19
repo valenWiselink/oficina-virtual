@@ -4,7 +4,7 @@ import { useArtifacts } from '../artifacts/artifactsStore.js';
 import { artifactAuthor } from '../artifacts/artifactsView.js';
 import { whenText } from '../now/nowTime.js';
 import type { NowModel } from '../now/useNowQueue.js';
-import { ClosedAsk, SeemsDoneAsk } from '../pendingAsks/PendingAsksPanel.js';
+import { ClosedAsk, DelegatedAsk, SeemsDoneAsk } from '../pendingAsks/PendingAsksPanel.js';
 
 const DAY = 24 * 3_600_000;
 const ARTIFACTS_SHOWN = 3;
@@ -109,7 +109,7 @@ function PublishedToday({ now }: { now: number }) {
  * the agents published today, and what was closed.
  */
 export function ComingColumn({ model }: { model: NowModel }) {
-  const { now, seemsDone, closed, queue } = model;
+  const { now, seemsDone, delegated, closed, queue } = model;
   return (
     <aside
       aria-label="Lo que viene"
@@ -121,6 +121,15 @@ export function ComingColumn({ model }: { model: NowModel }) {
       {queue.later.length > 0 && (
         <Part title={`Más tarde (${queue.later.length})`}>
           <Later model={model} />
+        </Part>
+      )}
+      {delegated.length > 0 && (
+        <Part title={`Lo hacen agentes (${delegated.length})`}>
+          <ul className="m-0 p-0 list-none">
+            {delegated.map((ask) => (
+              <DelegatedAsk key={ask.id} ask={ask} now={now} />
+            ))}
+          </ul>
         </Part>
       )}
       {seemsDone.length > 0 && (

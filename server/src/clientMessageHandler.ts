@@ -333,6 +333,11 @@ export function handleClientMessage(
       break;
     }
 
+    case 'takeBackPendingAsk': {
+      ctx.runtime?.pendingAsks?.takeBack(String(msg.id));
+      break;
+    }
+
     case 'snoozePendingAsk': {
       // «Posponer» until a moment (up to 30 days ahead), or for some minutes.
       const until = Number(msg.until);

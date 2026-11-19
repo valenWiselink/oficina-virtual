@@ -258,8 +258,10 @@ function yourTurnRecord(
 
 /** Long enough for a whole ask: at 120, 16 of 118 arrived cut (2026-10-20). */
 const YOUR_TURN_MAX = 240;
-/** "Te toca: …" on a line of its own (bold, quoted or arrowed is fine). */
-const YOUR_TURN_LINE = /^[\s>*_\-→]*te toca\**\s*:\**\s*(.+)$/im;
+/** "Te toca: …" on a line of its own (bold, quoted or arrowed is fine).
+ *  "Te toca [p556]: …" rewords the pending ask p556 instead of adding one
+ *  (Jarvis sees the open ids with every message: pendingAsks/promptContext). */
+const YOUR_TURN_LINE = /^[\s>*_\-→]*te toca\**(?:\s*\[(p\d{1,5})\])?\**\s*:\**\s*(.+)$/im;
 const PR_LINK = /https:\/\/github\.com\/[^/\s)]+\/([^/\s)]+)\/pull\/(\d+)/g;
 
 /**
@@ -291,12 +293,17 @@ export function yourTurnOf(
 
 /** That line as written (its `code` spans intact), for the command it may bring. */
 export function teTocaRawLine(reply: string | undefined): string | undefined {
-  return reply?.match(YOUR_TURN_LINE)?.[1]?.trim() || undefined;
+  return reply?.match(YOUR_TURN_LINE)?.[2]?.trim() || undefined;
+}
+
+/** The pending ask a «Te toca [p556]: …» line rewords, if it names one. */
+export function teTocaReplaces(reply: string | undefined): string | undefined {
+  return reply?.match(YOUR_TURN_LINE)?.[1]?.toLowerCase() || undefined;
 }
 
 /** The answer's own «Te toca: …» line, without its label (no PR guessing). */
 export function teTocaLine(reply: string): string | undefined {
-  const line = reply.match(YOUR_TURN_LINE)?.[1]?.replace(/[*_`]/g, '').trim();
+  const line = reply.match(YOUR_TURN_LINE)?.[2]?.replace(/[*_`]/g, '').trim();
   return line ? clip(line, YOUR_TURN_MAX) : undefined;
 }
 

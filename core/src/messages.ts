@@ -92,6 +92,7 @@ export type ClientMessage =
   | ClosePendingAsk
   | ReopenPendingAsk
   | KeepPendingAsk
+  | TakeBackPendingAsk
   | SnoozePendingAsk
   | MergePendingAsk
   | UndoAskResolution
@@ -563,11 +564,18 @@ export interface PendingAskEntry {
   question?: boolean;
   options?: string[];
   after?: string;
+  delegatedTo?: AskDelegation;
   mergeUrl?: string;
   mergeCommand?: string;
   closedAt?: number;
   closedHow?: string;
   turnIds?: string[];
+}
+
+export interface AskDelegation {
+  agent: string;
+  at: number;
+  additionalProperties?: Record<string, any>;
 }
 
 export interface PendingAskMerge {
@@ -915,6 +923,11 @@ export interface KeepPendingAsk {
   id: string;
 }
 
+export interface TakeBackPendingAsk {
+  type: 'takeBackPendingAsk';
+  id: string;
+}
+
 export interface SnoozePendingAsk {
   type: 'snoozePendingAsk';
   id: string;
@@ -946,19 +959,19 @@ export interface LaunchAgent {
   hueShift?: number;
   prompt?: string;
   model?: string;
-  effort?: AnonymousSchema_485;
-  supervision?: AnonymousSchema_486;
+  effort?: AnonymousSchema_489;
+  supervision?: AnonymousSchema_490;
 }
 
-export type AnonymousSchema_485 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AnonymousSchema_489 = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface AnonymousSchema_486 {
-  kind: AnonymousSchema_487;
+export interface AnonymousSchema_490 {
+  kind: AnonymousSchema_491;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_487 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_491 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface FocusAgent {
   type: 'focusAgent';
@@ -1007,16 +1020,16 @@ export interface SetAgentRun {
 export interface SetSupervision {
   type: 'setSupervision';
   id: number;
-  scope: AnonymousSchema_512;
+  scope: AnonymousSchema_516;
 }
 
-export interface AnonymousSchema_512 {
-  kind: AnonymousSchema_513;
+export interface AnonymousSchema_516 {
+  kind: AnonymousSchema_517;
   workspaceId?: string;
   name?: string;
 }
 
-export type AnonymousSchema_513 = 'none' | 'workspace' | 'agents' | 'all';
+export type AnonymousSchema_517 = 'none' | 'workspace' | 'agents' | 'all';
 
 export interface SupervisionTeam {
   type: 'supervisionTeam';

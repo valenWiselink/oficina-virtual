@@ -2,7 +2,12 @@ import { useState } from 'react';
 
 import type { PendingAskEntry } from '../../../core/src/messages.js';
 import { Button } from '../components/ui/Button.js';
-import { closePendingAsk, keepPendingAsk, reopenPendingAsk } from './pendingAsksStore.js';
+import {
+  closePendingAsk,
+  keepPendingAsk,
+  reopenPendingAsk,
+  takeBackPendingAsk,
+} from './pendingAsksStore.js';
 import { askWhen } from './pendingAsksView.js';
 
 const COPIED_MS = 1500;
@@ -44,6 +49,28 @@ export function SeemsDoneAsk({ ask, now }: { ask: PendingAskEntry; now: number }
         </Button>
         <Button size="sm" variant="ghost" onClick={() => keepPendingAsk(ask.id)}>
           Sigue pendiente
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+/** One an agent (or Jarvis) is doing: who and since when; it can come back
+ *  to «Te toca», or be closed once done. */
+export function DelegatedAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
+  const by = ask.delegatedTo;
+  return (
+    <li className="flex flex-col gap-3 px-6 py-6 border-b border-border last:border-b-0">
+      <span className="text-xs text-text-2 break-words">{ask.text}</span>
+      <span className="text-2xs text-text-muted">
+        {by ? `lo hace «${by.agent}» · ${askWhen(by.at, now)}` : ask.from}
+      </span>
+      <div className="flex flex-wrap items-center gap-6 pt-2">
+        <Button size="sm" variant="ghost" onClick={() => takeBackPendingAsk(ask.id)}>
+          Volver a Te toca
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => closePendingAsk(ask.id)}>
+          Ya está hecho
         </Button>
       </div>
     </li>

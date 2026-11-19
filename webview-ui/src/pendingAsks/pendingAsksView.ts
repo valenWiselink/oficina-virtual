@@ -22,12 +22,14 @@ export function askWhen(at: number, now: number): string {
 }
 
 /** What still waits on you, and what only looks done (shown apart, not counted). */
-export function splitOpen<T extends { seemsDone?: string }>(
+export function splitOpen<T extends { seemsDone?: string; delegatedTo?: unknown }>(
   open: readonly T[],
-): { waiting: T[]; seemsDone: T[] } {
+): { waiting: T[]; seemsDone: T[]; delegated: T[] } {
   return {
-    waiting: open.filter((a) => !a.seemsDone),
-    seemsDone: open.filter((a) => !!a.seemsDone),
+    waiting: open.filter((a) => !a.seemsDone && !a.delegatedTo),
+    seemsDone: open.filter((a) => !!a.seemsDone && !a.delegatedTo),
+    // An agent (or Jarvis) is doing it: not his to do, so not counted.
+    delegated: open.filter((a) => !!a.delegatedTo),
   };
 }
 

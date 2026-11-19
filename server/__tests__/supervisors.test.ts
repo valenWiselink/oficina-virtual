@@ -120,6 +120,8 @@ describe('scope, prompt and launch files', () => {
       name: 'Wiselink',
     });
     expect(flags).toEqual([
+      '--settings',
+      path.join(dir, 'ses-sup.settings.json'),
       '--mcp-config',
       path.join(dir, 'ses-sup.mcp.json'),
       '--append-system-prompt-file',
@@ -127,12 +129,15 @@ describe('scope, prompt and launch files', () => {
       '--allowedTools',
       'mcp__oficina__*',
     ]);
-    const config = JSON.parse(fs.readFileSync(flags[1], 'utf-8'));
+    const config = JSON.parse(fs.readFileSync(flags[flags.indexOf('--mcp-config') + 1], 'utf-8'));
     expect(config.mcpServers.oficina.url).toBe('http://127.0.0.1:3199/mcp');
     expect(config.mcpServers.oficina.type).toBe('http');
     expect(config.mcpServers.oficina.headers.Authorization).toMatch(/^Bearer [0-9a-f]{48}$/);
-    expect(fs.readFileSync(flags[3], 'utf-8')).toContain('el espacio «Wiselink»');
+    expect(
+      fs.readFileSync(flags[flags.indexOf('--append-system-prompt-file') + 1], 'utf-8'),
+    ).toContain('el espacio «Wiselink»');
     registry.forget('ses-sup');
+    expect(fs.existsSync(flags[flags.indexOf('--mcp-config') + 1])).toBe(false);
     expect(fs.existsSync(flags[1])).toBe(false);
   });
 
@@ -196,7 +201,7 @@ describe('SupervisorRegistry', () => {
     const { registry } = office(dir);
     const flags = registry.prepareLaunch('s10', { kind: 'agents' });
     const token = JSON.parse(
-      fs.readFileSync(flags[1], 'utf-8'),
+      fs.readFileSync(flags[flags.indexOf('--mcp-config') + 1], 'utf-8'),
     ).mcpServers.oficina.headers.Authorization.slice(7);
     expect(registry.supervisorByToken(token)).toBe(10);
     expect(registry.supervisorByToken('nope')).toBeUndefined();
@@ -208,7 +213,7 @@ describe('SupervisorRegistry', () => {
     const { registry } = office(dir);
     const flags = registry.prepareLaunch('provisorio', { kind: 'all' });
     const token = JSON.parse(
-      fs.readFileSync(flags[1], 'utf-8'),
+      fs.readFileSync(flags[flags.indexOf('--mcp-config') + 1], 'utf-8'),
     ).mcpServers.oficina.headers.Authorization.slice(7);
     expect(registry.supervisorByToken(token)).toBeUndefined();
     registry.rebind('provisorio', 's11');

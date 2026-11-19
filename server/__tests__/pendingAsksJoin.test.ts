@@ -231,11 +231,17 @@ describe('his answer', () => {
     expect(asks.find('p1')?.answeredAt).toBeUndefined();
   });
 
-  it('two asked at once: «listo» is not enough, «sí a todo» is', () => {
+  it('two asked at once: «listo» goes with the last one (asked 2026-11-19)', () => {
     const asks = list();
     asks.add({ from: 'Jarvis', text: 'mergear #1' });
     asks.add({ from: 'Jarvis', text: 'mergear #2' });
-    expect(asks.answeredBy('listo', NOW + MIN, NOW - MIN)).toEqual([]);
+    expect(asks.answeredBy('listo', NOW + MIN, NOW - MIN).map((a) => a.id)).toEqual(['p2']);
+  });
+
+  it('two asked at once: «sí a todo» answers both', () => {
+    const asks = list();
+    asks.add({ from: 'Jarvis', text: 'mergear #1' });
+    asks.add({ from: 'Jarvis', text: 'mergear #2' });
     expect(asks.answeredBy('sí a todo', NOW + 2 * MIN, NOW - MIN).map((a) => a.id)).toEqual([
       'p1',
       'p2',

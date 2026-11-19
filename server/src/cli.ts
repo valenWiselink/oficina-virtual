@@ -40,6 +40,7 @@ import { HookHealth, setCurrentHookHealth } from './hookHealth.js';
 import { AskMerger } from './pendingAsks/askMerger.js';
 import { PendingAsks } from './pendingAsks/pendingAsks.js';
 import { PendingAsksWatch } from './pendingAsks/pendingAsksWatch.js';
+import { openAsksContext } from './pendingAsks/promptContext.js';
 import { AskResolutions } from './pendingAsks/resolutions.js';
 import { createPermissionBroker } from './permissionWiring.js';
 import { uninstallHooks as uninstallClaudeHooks } from './providers/hook/claude/claudeHookInstaller.js';
@@ -474,6 +475,14 @@ async function main(): Promise<void> {
       onReloadAssets,
       ptyManager,
       permissionBroker,
+      // Jarvis reads Valentín's open asks with every message (his own hook).
+      promptContext: (sessionId) => {
+        const jarvis = [...store.values()].some(
+          (a) => a.sessionId === sessionId && a.supervision?.kind === 'all',
+        );
+        const asks = runtime.pendingAsks;
+        return jarvis && asks ? openAsksContext(asks.pending(), Date.now()) : undefined;
+      },
       allowedHosts: args.allowedHosts,
       rotateToken: args.rotateToken,
     });

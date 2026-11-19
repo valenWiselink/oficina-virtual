@@ -177,6 +177,7 @@ components:
         - $ref: '#/components/schemas/ClosePendingAsk'
         - $ref: '#/components/schemas/ReopenPendingAsk'
         - $ref: '#/components/schemas/KeepPendingAsk'
+        - $ref: '#/components/schemas/TakeBackPendingAsk'
         - $ref: '#/components/schemas/SnoozePendingAsk'
         - $ref: '#/components/schemas/MergePendingAsk'
         - $ref: '#/components/schemas/UndoAskResolution'
@@ -730,6 +731,18 @@ components:
           type: string
           description: What the latest such work is (its description or command).
 
+    AskDelegation:
+      description: |
+        On an open pending ask, who is doing it: Jarvis handed it to an agent
+        (lanzar_agente, escribir_a_agente) or Valentín told Jarvis «hacelo
+        vos». It leaves «Te toca» for «Lo hacen agentes».
+      type: object
+      required: [agent, at]
+      properties:
+        agent:
+          type: string
+        at:
+          type: number
     MergedAsk:
       description: |
         A "te toca" settled by its PR's merge: which PR, and whether the
@@ -1295,6 +1308,8 @@ components:
             On an open one, the meeting it waits for, by title («después de:
             Demo AgroActiva»): it shows once that meeting ends, and moves with it.
           type: string
+        delegatedTo:
+          $ref: '#/components/schemas/AskDelegation'
         mergeUrl:
           description: |
             On an open one, the open PR it asks to merge: the «Mergear» button
@@ -1984,6 +1999,19 @@ components:
       properties:
         type:
           const: reopenPendingAsk
+        id:
+          type: string
+
+    TakeBackPendingAsk:
+      description: |
+        «Volver a Te toca» on an ask an agent is doing (delegatedTo): it is
+        Valentín's again.
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          const: takeBackPendingAsk
         id:
           type: string
 

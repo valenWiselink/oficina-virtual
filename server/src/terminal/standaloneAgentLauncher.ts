@@ -104,7 +104,9 @@ function supervisorArgs(sessionId: string, scope: SupervisionScope | undefined):
  *  Built anew on every launch, resume and relaunch. */
 function launchExtras(filesId: string | undefined, scope: SupervisionScope | undefined): string[] {
   const supervisor = filesId ? supervisorArgs(filesId, scope) : [];
-  return [...spinnerLaunchArgs(), ...(supervisor.length > 0 ? supervisor : ruleLaunchArgs())];
+  // A supervisor's own --settings already carries the Spanish (supervision.ts).
+  const spanish = supervisor.includes('--settings') ? [] : spinnerLaunchArgs();
+  return [...spanish, ...(supervisor.length > 0 ? supervisor : ruleLaunchArgs())];
 }
 
 /**

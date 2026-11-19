@@ -19,6 +19,8 @@ import * as path from 'path';
 
 import type { AgentStateStore } from '../agentStateStore.js';
 import { SERVER_JSON_DIR } from '../constants.js';
+import { makeHookCommand } from '../providers/hook/claude/hookCommand.js';
+import { spanishTerminalOn, spinnerSettings } from '../spinnerSettings.js';
 import type { AgentState } from '../types.js';
 import { jarvisPrompt } from './jarvis.js';
 
@@ -101,6 +103,30 @@ Vas a recibir mensajes que empiezan con "[Oficina]": te los escribe la oficina, 
 - No mandás resúmenes por tu cuenta: sólo cuando Valentín te los pide.
 - Respuestas cortas, en castellano rioplatense.
 `;
+}
+
+/** How long a message waits for its context before going without (s). */
+export const PROMPT_HOOK_TIMEOUT_S = 5;
+
+/**
+ * A supervisor's own --settings: Claude Code in Spanish when that is on
+ * (the one --settings an agent gets otherwise: spinnerSettings.ts), plus a
+ * UserPromptSubmit hook that only it has — the office answers it with
+ * Valentín's open asks for Jarvis (pendingAsks/promptContext.ts). The
+ * user's ~/.claude/settings.json is never touched.
+ */
+export function supervisorSettings(
+  spanish: boolean,
+  hook: { command: string; args?: string[] } = makeHookCommand(),
+): Record<string, unknown> {
+  return {
+    ...(spanish ? spinnerSettings() : {}),
+    hooks: {
+      UserPromptSubmit: [
+        { matcher: '', hooks: [{ type: 'command', ...hook, timeout: PROMPT_HOOK_TIMEOUT_S }] },
+      ],
+    },
+  };
 }
 
 /** The --mcp-config file: the office's MCP endpoint with this supervisor's token. */
@@ -396,12 +422,19 @@ export class SupervisorRegistry {
     fs.mkdirSync(this.filesDir, { recursive: true });
     const mcpPath = path.join(this.filesDir, `${sessionId}.mcp.json`);
     const promptPath = path.join(this.filesDir, `${sessionId}.rol.md`);
+    const settingsPath = path.join(this.filesDir, `${sessionId}.settings.json`);
     fs.writeFileSync(mcpPath, mcpConfig(url, token));
+    fs.writeFileSync(
+      settingsPath,
+      `${JSON.stringify(supervisorSettings(spanishTerminalOn()), null, 2)}\n`,
+    );
     const prompt = supervisorPrompt(scope);
     fs.writeFileSync(promptPath, prompt);
     this.roles.set(sessionId, roleHash(prompt));
     this.saveRoles();
     return [
+      '--settings',
+      settingsPath,
       '--mcp-config',
       mcpPath,
       '--append-system-prompt-file',
@@ -442,7 +475,7 @@ export class SupervisorRegistry {
     if (this.roles.delete(sessionId)) this.saveRoles();
     this.folders.remove(sessionId);
     this.launched.remove(sessionId);
-    for (const ext of ['mcp.json', 'rol.md']) {
+    for (const ext of ['mcp.json', 'rol.md', 'settings.json']) {
       fs.rmSync(path.join(this.filesDir, `${sessionId}.${ext}`), { force: true });
     }
   }
