@@ -16,7 +16,7 @@ export interface PaletteCommand {
 export interface PaletteActions {
   onOpenAgent: (id: number) => void;
   onNewAgent: () => void;
-  onSetView: (view: 'tablero' | 'grafo' | 'control') => void;
+  onSetView: (view: 'nucleo' | 'tablero' | 'grafo' | 'control') => void;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
   onBroadcast: () => void;
@@ -57,6 +57,13 @@ export function buildCommands(
       icon: 'add',
       keywords: 'crear lanzar',
       run: actions.onNewAgent,
+    },
+    {
+      id: 'nucleo',
+      label: 'Ver Núcleo',
+      icon: 'blur_on',
+      keywords: 'nucleo jarvis inicio te toca pendientes en marcha',
+      run: () => actions.onSetView('nucleo'),
     },
     {
       id: 'tablero',

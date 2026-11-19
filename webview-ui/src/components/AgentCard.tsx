@@ -1,5 +1,8 @@
+import { useContext } from 'react';
+
 import { type AgentKind, KIND_COLOR } from '../views/agentViews.js';
 import type { CardVariant } from './cardBar.js';
+import { CardLookContext, initialsOf } from './cardLook.js';
 import { CharacterMugShot } from './CharacterMugShot.js';
 
 /** How a given agent's character looks, for the tab mug shot. */
@@ -48,13 +51,23 @@ export function AgentCard({
   onSelect,
   onClose,
 }: AgentCardProps) {
+  const look = useContext(CardLookContext);
   return (
     <div
       className={`group relative pointer-events-auto flex items-center justify-center w-52 h-52 rounded-xl cursor-pointer border shrink-0 transition-colors ${CARD_VARIANT[variant]}`}
       onClick={() => onSelect(agentId)}
       title={label ?? `Agente ${agentId}`}
     >
-      <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} size={36} />
+      {look === 'sober' ? (
+        <span
+          className="font-mono text-sm font-medium tracking-wide text-text-2"
+          aria-hidden="true"
+        >
+          {initialsOf(label, agentId)}
+        </span>
+      ) : (
+        <CharacterMugShot palette={appearance.palette} hueShift={appearance.hueShift} size={36} />
+      )}
       {/* The state dot, ringed so it reads on any mug shot. */}
       {status && (
         <span

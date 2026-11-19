@@ -11,6 +11,7 @@ import { useCommandPaletteShortcut } from './command/usePaletteShortcut.js';
 import { AgentCardBar } from './components/AgentCardBar.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
 import { drawerPull, officeRoom, stripOverlap } from './components/cardBar.js';
+import { CardLookContext } from './components/cardLook.js';
 import { CloseAgentConfirm } from './components/CloseAgentConfirm.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
@@ -46,6 +47,7 @@ import { OfficeTopRow } from './meetings/OfficeTopRow.js';
 import { MobileShell } from './mobile/MobileShell.js';
 import { useMobileShell } from './mobile/useMobileShell.js';
 import { playCheerSound, useAgentsInView } from './notificationSound.js';
+import { NucleoView } from './nucleo/NucleoView.js';
 import { OfficeState } from './office/engine/officeState.js';
 import { useOnboarding } from './onboarding/useOnboarding.js';
 import { usePendingAsks } from './pendingAsks/pendingAsksStore.js';
@@ -163,7 +165,10 @@ function App() {
   // right-docked drawer.
   const isMobile = useIsMobile();
   // Control is a desktop layout: a phone shows the board instead.
-  const shownView = isMobile && view === 'control' ? 'tablero' : view;
+  // Núcleo and the Asistente are desktop screens: a phone shows the board.
+  const shownView = isMobile && (view === 'control' || view === 'nucleo') ? 'tablero' : view;
+  // Jarvis has a column of his own there: no floating bubble.
+  const jarvisOnStage = shownView === 'control' || shownView === 'nucleo';
   // Software keyboard: whether it is up (the key bar shows), and the height
   // to clamp the shell to so the terminal shrinks (and the PTY resizes)
   // instead of hiding its input line under the keys (iOS only — Android
@@ -460,7 +465,7 @@ function App() {
   // beside its bubble — never a visor over the middle (2026-11-11).
   const jarvisAsked = askedPermission(jarvis, agentViews);
   const jarvisBubble =
-    !isDebugMode && shownView !== 'control' && (terminalAvailable || jarvis) ? (
+    !isDebugMode && !jarvisOnStage && (terminalAvailable || jarvis) ? (
       <JarvisBubble
         jarvis={jarvis}
         actions={agentActions}
@@ -497,9 +502,7 @@ function App() {
           Historial, Artifacts, the meetings) beside the stage, in flow, so it
           never lies over the board, the tabs or Jarvis (asked 2026-11-06). */}
       <div className="relative flex-1 min-h-0 flex">
-        {!isMobile && !isDebugMode && (
-          <SideDock panel={sidePanel} meetings={shownView !== 'control'} />
-        )}
+        {!isMobile && !isDebugMode && <SideDock panel={sidePanel} meetings={!jarvisOnStage} />}
         <div className="relative flex-1 min-w-0">
           {!isDebugMode ? (
             // The views replace the pixel office (decided 2026-10-19): the
@@ -511,6 +514,14 @@ function App() {
                   views={workspaces.shown}
                   actions={agentActions}
                   space={workspaces.space}
+                />
+              ) : shownView === 'nucleo' ? (
+                <NucleoView
+                  views={workspaces.shown}
+                  actions={agentActions}
+                  jarvis={jarvis}
+                  onSummonJarvis={summonJarvis}
+                  asked={jarvisAsked}
                 />
               ) : shownView === 'control' ? (
                 <AsistenteView
@@ -538,7 +549,10 @@ function App() {
 
           {/* The tabs and the next meeting, in one row. Under what opens on
               purpose (Jarvis): z-10 against their 20+. */}
-          {!isDebugMode && <OfficeTopRow bar={workspaces.bar} meetings={!isMobile} />}
+          {!isDebugMode && (
+            // Núcleo shows the next meeting in its own column.
+            <OfficeTopRow bar={workspaces.bar} meetings={!isMobile && shownView !== 'nucleo'} />
+          )}
 
           {!isMobile && !isDebugMode && <DayKeeper views={agentViews} />}
           {!isMobile && <FocusBanner />}
@@ -594,8 +608,8 @@ function App() {
             isArtifactsOpen={leftPanel === 'artifacts'}
             onToggleArtifacts={() => toggleLeftPanel('artifacts')}
             // Pendientes live in Control's «Ahora»: the button takes you there.
-            isPendingAsksOpen={shownView === 'control'}
-            onTogglePendingAsks={() => setView('control')}
+            isPendingAsksOpen={jarvisOnStage}
+            onTogglePendingAsks={() => setView('nucleo')}
             launchSignal={launchSignal}
             directories={directories}
             onAddDirectory={directoryEditor.add}
@@ -642,8 +656,9 @@ function App() {
         <>
           <div className={`flex-1 min-h-0 flex ${DOCK_DIRECTION[terminalDock]}`}>
             {officeRegion}
-
-            {/* Standalone with a terminal: terminalAvailable is only ever true when
+            {/* Núcleo: the tabs show initials, not Clawds (no game look). */}
+            <CardLookContext.Provider value={shownView === 'nucleo' ? 'sober' : 'clawd'}>
+              {/* Standalone with a terminal: terminalAvailable is only ever true when
               the server reports a working PTY to a tokened session, which VS
               Code's surface never does. In flow as a flex sibling so the office
               region reflows beside it instead of being overlaid.
@@ -652,44 +667,45 @@ function App() {
               bar stands alone with every agent in the office, external sessions
               included — the at-a-glance "who needs attention" strip, with a
               click raising the agent's editor terminal where there is one. */}
-            {terminalAvailable ? (
-              <TerminalDrawer
-                agentIds={terminalAgentIds}
-                onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
-                tabIds={drawerTabIds}
-                shownAgentId={terminalDrawer.shownAgentId}
-                onSelectAgent={selectTab}
-                onCloseAgent={handleCloseAgent}
-                // A space with no agents of its own shows no one else's terminal
-                // (the panes stay mounted, only hidden).
-                isOpen={terminalDrawer.isOpen && (workspaces.tabIds?.length ?? 1) > 0}
-                onClosePanel={terminalDrawer.close}
-                dock={terminalDock}
-                style={drawerPull(stripOver)}
-                sizePx={terminalDrawer.sizePx}
-                onResizeStart={terminalDrawer.onResizeStart}
-                getAppearance={terminalDrawer.getAppearance}
-                statusFor={terminalDrawer.statusFor}
-                onStatusChange={terminalDrawer.onStatusChange}
-                viewFor={(id) => agentViews.find((v) => v.id === id)}
-                actions={agentActions}
-                pinnedId={terminalDrawer.pinnedId}
-                onTogglePin={terminalDrawer.togglePin}
-              />
-            ) : (
-              !isDebugMode && (
-                <AgentCardBar
-                  agentIds={agents}
+              {terminalAvailable ? (
+                <TerminalDrawer
+                  agentIds={terminalAgentIds}
                   onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
-                  focusedAgentId={focusedAgentId}
+                  tabIds={drawerTabIds}
+                  shownAgentId={terminalDrawer.shownAgentId}
+                  onSelectAgent={selectTab}
+                  onCloseAgent={handleCloseAgent}
+                  // A space with no agents of its own shows no one else's terminal
+                  // (the panes stay mounted, only hidden).
+                  isOpen={terminalDrawer.isOpen && (workspaces.tabIds?.length ?? 1) > 0}
+                  onClosePanel={terminalDrawer.close}
+                  dock={terminalDock}
+                  style={drawerPull(stripOver)}
+                  sizePx={terminalDrawer.sizePx}
+                  onResizeStart={terminalDrawer.onResizeStart}
                   getAppearance={terminalDrawer.getAppearance}
-                  labelFor={(id) => agentViews.find((v) => v.id === id)?.name}
                   statusFor={terminalDrawer.statusFor}
-                  onSelect={handleCardSelect}
-                  onClose={handleCloseAgent}
+                  onStatusChange={terminalDrawer.onStatusChange}
+                  viewFor={(id) => agentViews.find((v) => v.id === id)}
+                  actions={agentActions}
+                  pinnedId={terminalDrawer.pinnedId}
+                  onTogglePin={terminalDrawer.togglePin}
                 />
-              )
-            )}
+              ) : (
+                !isDebugMode && (
+                  <AgentCardBar
+                    agentIds={agents}
+                    onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
+                    focusedAgentId={focusedAgentId}
+                    getAppearance={terminalDrawer.getAppearance}
+                    labelFor={(id) => agentViews.find((v) => v.id === id)?.name}
+                    statusFor={terminalDrawer.statusFor}
+                    onSelect={handleCardSelect}
+                    onClose={handleCloseAgent}
+                  />
+                )
+              )}
+            </CardLookContext.Provider>
           </div>
         </>
       )}

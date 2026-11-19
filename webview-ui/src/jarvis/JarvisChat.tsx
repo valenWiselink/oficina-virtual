@@ -156,6 +156,7 @@ export function JarvisChat({
   aboveBox,
   permissionsOnly = false,
   shapeText,
+  bare = false,
 }: {
   jarvis: AgentView | undefined;
   actions: BoardActions;
@@ -174,6 +175,9 @@ export function JarvisChat({
   permissionsOnly?: boolean;
   /** What you write, as it goes (a meeting's note). */
   shapeText?: (text: string) => string;
+  /** Núcleo already shows him (the glass sphere, his name, what he does):
+   *  the header keeps only its buttons. */
+  bare?: boolean;
 }) {
   const { voice, notice, earsLine, noteText, note, mood, speaks, ears } = state;
   const reply = useReplyTarget();
@@ -187,17 +191,25 @@ export function JarvisChat({
   };
   return (
     <>
-      <header className="shrink-0 flex items-start gap-10 px-14 py-10 border-b border-border bg-bg-dark">
-        <JarvisRing mood={mood} size={30} />
-        <div className="flex-1 min-w-0">
-          <div className="text-2xs font-bold tracking-[0.14em] text-jarvis">JARVIS</div>
-          <p
-            className="m-0 text-xs leading-snug text-text-2 line-clamp-2"
-            title={jarvis ? jarvisLine(jarvis) : undefined}
-          >
-            {jarvis ? jarvisLine(jarvis) : 'No está en la oficina.'}
-          </p>
-        </div>
+      <header
+        className={`shrink-0 flex items-start gap-10 px-14 border-b border-border bg-bg-dark ${bare ? 'py-4' : 'py-10'}`}
+      >
+        {bare ? (
+          <div className="flex-1" />
+        ) : (
+          <>
+            <JarvisRing mood={mood} size={30} />
+            <div className="flex-1 min-w-0">
+              <div className="text-2xs font-bold tracking-[0.14em] text-jarvis">JARVIS</div>
+              <p
+                className="m-0 text-xs leading-snug text-text-2 line-clamp-2"
+                title={jarvis ? jarvisLine(jarvis) : undefined}
+              >
+                {jarvis ? jarvisLine(jarvis) : 'No está en la oficina.'}
+              </p>
+            </div>
+          </>
+        )}
         <div className="shrink-0 flex items-center gap-2 -mr-6">
           {jarvis && speaks && (
             <Button

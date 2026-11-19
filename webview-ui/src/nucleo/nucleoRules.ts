@@ -1,0 +1,68 @@
+import type { Meeting } from '../../../core/src/messages.js';
+import type { NowModel } from '../now/useNowQueue.js';
+import type { AgentView } from '../views/agentViews.js';
+import { callsForYou } from '../views/controlRules.js';
+
+const MIN = 60_000;
+
+/** The meeting that is on or comes next (a quiet one too: it is still yours). */
+export function nextMeeting(meetings: readonly Meeting[], now: number): Meeting | undefined {
+  return [...meetings].filter((m) => m.end > now).sort((a, b) => a.start - b.start)[0];
+}
+
+/** «ahora», «en 12 min», «en 6 h 12 min». */
+export function untilText(meeting: Meeting, now: number): string {
+  if (meeting.start <= now) return 'ahora';
+  const min = Math.ceil((meeting.start - now) / MIN);
+  if (min < 60) return `en ${min} min`;
+  const h = Math.floor(min / 60);
+  const rest = min % 60;
+  return rest > 0 ? `en ${h} h ${rest} min` : `en ${h} h`;
+}
+
+/** Agents doing something right now. */
+export function workingCount(views: readonly AgentView[]): number {
+  return views.filter((v) => ['work', 'think', 'research', 'meet'].includes(v.kind)).length;
+}
+
+/**
+ * What needs Valentín, as one key: it changes when a new permission or a new
+ * first «Te toca» shows up (the sphere buds toward «Te necesita» once), not
+ * when one goes away. Empty when nothing needs him.
+ */
+export function needKeyOf(views: readonly AgentView[], model: Pick<NowModel, 'queue'>): string {
+  const holding = views
+    .filter(callsForYou)
+    .map((v) => v.permission?.requestId ?? `a${v.id}`)
+    .sort();
+  const first = model.queue.first?.ask.id;
+  return [...holding, ...(first ? [first] : [])].join(',');
+}
+
+/** What Jarvis is doing, as the sphere and its sentence show it. */
+export type PresenceMode = 'reposo' | 'escucha' | 'piensa' | 'habla' | 'necesita';
+
+const PHRASE: Record<Exclude<PresenceMode, 'reposo'>, string> = {
+  escucha: 'Lo escucho, señor.',
+  piensa: 'Déjeme ver…',
+  habla: 'Le respondo.',
+  necesita: 'Necesito su permiso, señor.',
+};
+
+/** The sentence beside his name (pure: tested). */
+export function presencePhrase(mode: PresenceMode, jarvis: AgentView | undefined): string {
+  if (mode !== 'reposo') return PHRASE[mode];
+  if (!jarvis) return 'No está en la oficina';
+  return jarvis.statusText;
+}
+
+/** His turn is under way: thinking, a tool, research (pure: tested). */
+export function isThinking(jarvis: AgentView | undefined): boolean {
+  return !!jarvis && ['think', 'work', 'research', 'meet'].includes(jarvis.kind);
+}
+
+/** How long an answer «speaks»: its words, quick, within bounds (pure: tested). */
+export function speakingPlan(text: string): { words: number; everyMs: number } {
+  const words = Math.max(1, Math.min(60, text.trim().split(/\s+/).length));
+  return { words, everyMs: Math.max(45, Math.min(150, 2000 / words)) };
+}
