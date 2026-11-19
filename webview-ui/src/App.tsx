@@ -11,6 +11,7 @@ import { useCommandPaletteShortcut } from './command/usePaletteShortcut.js';
 import { AgentCardBar } from './components/AgentCardBar.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
 import { drawerPull, officeRoom, stripOverlap } from './components/cardBar.js';
+import { CardLookContext } from './components/cardLook.js';
 import { CloseAgentConfirm } from './components/CloseAgentConfirm.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
@@ -655,8 +656,9 @@ function App() {
         <>
           <div className={`flex-1 min-h-0 flex ${DOCK_DIRECTION[terminalDock]}`}>
             {officeRegion}
-
-            {/* Standalone with a terminal: terminalAvailable is only ever true when
+            {/* Núcleo: the tabs show initials, not Clawds (no game look). */}
+            <CardLookContext.Provider value={shownView === 'nucleo' ? 'sober' : 'clawd'}>
+              {/* Standalone with a terminal: terminalAvailable is only ever true when
               the server reports a working PTY to a tokened session, which VS
               Code's surface never does. In flow as a flex sibling so the office
               region reflows beside it instead of being overlaid.
@@ -665,44 +667,45 @@ function App() {
               bar stands alone with every agent in the office, external sessions
               included — the at-a-glance "who needs attention" strip, with a
               click raising the agent's editor terminal where there is one. */}
-            {terminalAvailable ? (
-              <TerminalDrawer
-                agentIds={terminalAgentIds}
-                onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
-                tabIds={drawerTabIds}
-                shownAgentId={terminalDrawer.shownAgentId}
-                onSelectAgent={selectTab}
-                onCloseAgent={handleCloseAgent}
-                // A space with no agents of its own shows no one else's terminal
-                // (the panes stay mounted, only hidden).
-                isOpen={terminalDrawer.isOpen && (workspaces.tabIds?.length ?? 1) > 0}
-                onClosePanel={terminalDrawer.close}
-                dock={terminalDock}
-                style={drawerPull(stripOver)}
-                sizePx={terminalDrawer.sizePx}
-                onResizeStart={terminalDrawer.onResizeStart}
-                getAppearance={terminalDrawer.getAppearance}
-                statusFor={terminalDrawer.statusFor}
-                onStatusChange={terminalDrawer.onStatusChange}
-                viewFor={(id) => agentViews.find((v) => v.id === id)}
-                actions={agentActions}
-                pinnedId={terminalDrawer.pinnedId}
-                onTogglePin={terminalDrawer.togglePin}
-              />
-            ) : (
-              !isDebugMode && (
-                <AgentCardBar
-                  agentIds={agents}
+              {terminalAvailable ? (
+                <TerminalDrawer
+                  agentIds={terminalAgentIds}
                   onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
-                  focusedAgentId={focusedAgentId}
+                  tabIds={drawerTabIds}
+                  shownAgentId={terminalDrawer.shownAgentId}
+                  onSelectAgent={selectTab}
+                  onCloseAgent={handleCloseAgent}
+                  // A space with no agents of its own shows no one else's terminal
+                  // (the panes stay mounted, only hidden).
+                  isOpen={terminalDrawer.isOpen && (workspaces.tabIds?.length ?? 1) > 0}
+                  onClosePanel={terminalDrawer.close}
+                  dock={terminalDock}
+                  style={drawerPull(stripOver)}
+                  sizePx={terminalDrawer.sizePx}
+                  onResizeStart={terminalDrawer.onResizeStart}
                   getAppearance={terminalDrawer.getAppearance}
-                  labelFor={(id) => agentViews.find((v) => v.id === id)?.name}
                   statusFor={terminalDrawer.statusFor}
-                  onSelect={handleCardSelect}
-                  onClose={handleCloseAgent}
+                  onStatusChange={terminalDrawer.onStatusChange}
+                  viewFor={(id) => agentViews.find((v) => v.id === id)}
+                  actions={agentActions}
+                  pinnedId={terminalDrawer.pinnedId}
+                  onTogglePin={terminalDrawer.togglePin}
                 />
-              )
-            )}
+              ) : (
+                !isDebugMode && (
+                  <AgentCardBar
+                    agentIds={agents}
+                    onNewAgent={officeReadOnly ? undefined : () => setLaunchSignal((n) => n + 1)}
+                    focusedAgentId={focusedAgentId}
+                    getAppearance={terminalDrawer.getAppearance}
+                    labelFor={(id) => agentViews.find((v) => v.id === id)?.name}
+                    statusFor={terminalDrawer.statusFor}
+                    onSelect={handleCardSelect}
+                    onClose={handleCloseAgent}
+                  />
+                )
+              )}
+            </CardLookContext.Provider>
           </div>
         </>
       )}

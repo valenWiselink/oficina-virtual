@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Meeting } from '../../core/src/messages.js';
+import { initialsOf } from '../src/components/cardLook.js';
 import {
   type NucleoState,
   parseRgb,
@@ -23,6 +24,16 @@ import { recallView } from '../src/views/useOfficeView.js';
 
 const MIN = 60_000;
 const NOW = 1_800_000_000_000;
+
+describe('sober tabs in Núcleo', () => {
+  it('show a few letters of the name, telling pase3 from panel', () => {
+    expect(initialsOf('pase3', 1)).toBe('PAS');
+    expect(initialsOf('panel', 4)).toBe('PAN');
+    expect(initialsOf('wiselink app', 2)).toBe('WA');
+    expect(initialsOf('selector-identidades', 3)).toBe('SI');
+    expect(initialsOf(undefined, 7)).toBe('7');
+  });
+});
 
 const view = (over: Partial<AgentView>): AgentView =>
   ({
