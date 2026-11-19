@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import { CHAT_HINT } from '../../core/src/chatHint.js';
 import { identityMessage, observeIdentity, spokenReply } from '../src/agentIdentity.js';
 import { wakePrompt } from '../src/supervisors/jarvisKeeper.js';
 import type { AgentState } from '../src/types.js';
 import { promptAuthor } from '../src/voice/turnAuthor.js';
 
 const blank = (): AgentState => ({}) as AgentState;
+/** What the office chat sends (webview-ui/src/chat/chatText.ts). */
+const withChatHintOf = (text: string) => `${text}\n\n${CHAT_HINT}`;
 
 // Record shapes as Claude Code 2.1 writes them.
 const prompt = (content: unknown) => ({ type: 'user', message: { role: 'user', content } });
@@ -143,6 +146,11 @@ describe('when he last wrote to it, and when it last answered', () => {
     expect(agent.valentinPromptAt).toBe(Date.parse('2026-11-06T17:00:00Z'));
     observeIdentity(agent, { ...queued('y apurate'), ...at('2026-11-06T17:06:00Z') });
     expect(agent.valentinPromptAt).toBe(Date.parse('2026-11-06T17:06:00Z'));
+  });
+
+  it('what he wrote in the office chat reads without the chat’s note: «listo» stays «listo»', () => {
+    const agent = feed({ ...prompt(withChatHintOf('listo')), ...at('2026-11-19T19:36:23Z') });
+    expect(agent.valentinPromptText).toBe('listo');
   });
 
   it('a second prompt of his is news for the office', () => {

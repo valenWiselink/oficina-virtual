@@ -9,6 +9,7 @@
  * too — the answer at its end is for him.
  */
 
+import { withoutChatHint } from '../../../core/src/chatHint.js';
 import { userItem, userText } from '../agentChat.js';
 import type { AgentState } from '../types.js';
 
@@ -81,9 +82,10 @@ function noteValentin(
   const at = typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : NaN;
   if (Number.isNaN(at) || at < (agent.valentinPromptAt ?? 0)) return;
   agent.valentinPromptAt = at;
+  // Without the office chat's note: «listo» from the chat must read «listo».
   const said = texts
     .filter((t) => promptAuthor(t) === 'valentin')
-    .map((t) => userText(t) ?? '')
+    .map((t) => withoutChatHint(userText(t) ?? ''))
     .join('\n')
     .trim();
   agent.valentinPromptText = said.slice(0, PROMPT_TEXT_MAX) || undefined;

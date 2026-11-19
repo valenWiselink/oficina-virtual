@@ -3,22 +3,15 @@
  * without a DOM.
  */
 
-/** Sent after a message written in the chat, so the answer fits a bubble
- *  (asked 2026-10-20: long answers made the bubble huge). Never shown in the
- *  chat: withoutChatHint drops it. */
-export const CHAT_HINT =
-  '(Te escribo desde el chat de la oficina: respondé corto, como en un chat; sin títulos ni tablas salvo que hagan falta.)';
+import { CHAT_HINT, withoutChatHint } from '../../../core/src/chatHint.js';
+
+/** Sent after a message written in the chat (core/src/chatHint.ts). Never
+ *  shown in the chat: withoutChatHint drops it. */
+export { CHAT_HINT, withoutChatHint };
 
 export function withChatHint(text: string): string {
   // A message of only images is the hint alone (after their «[Image #1]»).
   return text.trim() ? `${text.trim()}\n\n${CHAT_HINT}` : CHAT_HINT;
-}
-
-/** The message as you wrote it: without the hint the chat added. */
-export function withoutChatHint(text: string): string {
-  const at = text.lastIndexOf(CHAT_HINT);
-  if (at < 0) return text;
-  return (text.slice(0, at) + text.slice(at + CHAT_HINT.length)).trim();
 }
 
 /** Characters you cannot see that Claude Code drops from what it records: a
