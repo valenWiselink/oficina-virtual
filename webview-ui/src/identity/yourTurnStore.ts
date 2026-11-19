@@ -1,3 +1,5 @@
+import { bumpViews } from '../views/viewsSignal.js';
+
 /**
  * Answers whose "te toca" the operator already handled ("Hecho"). Keyed by
  * the answer's record id, so the agent's next ask shows up again. Kept in
@@ -30,6 +32,7 @@ export function allYourTurnsDone(): readonly string[] {
 export function markYourTurnDone(turnId: string): void {
   if (done.includes(turnId)) return;
   done = [...done, turnId].slice(-MAX_KEPT);
+  bumpViews();
   try {
     localStorage.setItem(KEY, JSON.stringify(done));
   } catch {

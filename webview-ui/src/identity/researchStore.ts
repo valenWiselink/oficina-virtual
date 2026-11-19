@@ -1,5 +1,6 @@
-import { createResearchTracker } from '../office/behaviors/researchTracker.js';
+import { createResearchTracker, RESEARCH_LINGER_MS } from '../office/behaviors/researchTracker.js';
 import { transport } from '../transport/index.js';
+import { bumpViews } from '../views/viewsSignal.js';
 
 /**
  * Who is researching right now (a web search, or a streak of reads with no
@@ -15,12 +16,27 @@ export function registerSubagentKey(parentId: number, parentToolId: string, subI
   subKeys.set(`${parentId}:${parentToolId}`, subId);
 }
 
+/** "Investigando" ends on its own once the linger runs out with no new read:
+ *  nothing else would tell the views (they no longer redraw on a timer). */
+let lingerTimer: ReturnType<typeof setTimeout> | undefined;
+function bumpWhenLingerEnds(): void {
+  if (lingerTimer !== undefined) clearTimeout(lingerTimer);
+  lingerTimer = setTimeout(() => {
+    lingerTimer = undefined;
+    bumpViews();
+  }, RESEARCH_LINGER_MS + 50);
+}
+
 transport.onMessage((msg) => {
   if (msg.type === 'agentToolStart') {
     tracker.toolStarted(msg.id, msg.toolName, msg.status);
+    bumpWhenLingerEnds();
   } else if (msg.type === 'subagentToolStart') {
     const subId = subKeys.get(`${msg.id}:${msg.parentToolId}`);
-    if (subId !== undefined) tracker.toolStarted(subId, undefined, msg.status);
+    if (subId !== undefined) {
+      tracker.toolStarted(subId, undefined, msg.status);
+      bumpWhenLingerEnds();
+    }
   } else if (msg.type === 'agentToolsClear') {
     tracker.stop(msg.id);
   } else if (msg.type === 'agentStatus' && msg.status === 'waiting') {
