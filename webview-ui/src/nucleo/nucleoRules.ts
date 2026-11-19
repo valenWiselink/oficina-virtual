@@ -49,10 +49,34 @@ const PHRASE: Record<Exclude<PresenceMode, 'reposo'>, string> = {
   necesita: 'Necesito su permiso, señor.',
 };
 
-/** The sentence beside his name (pure: tested). */
-export function presencePhrase(mode: PresenceMode, jarvis: AgentView | undefined): string {
+/** Between turns: a finished answer or nothing to do (his quiet kinds). */
+function between(jarvis: AgentView): boolean {
+  return jarvis.kind === 'done' || jarvis.kind === 'idle';
+}
+
+/**
+ * Jarvis between turns while agents work: he is not done, he is directing
+ * them (pure: tested). A permission or a turn under way keep their own look.
+ */
+export function coordinating(jarvis: AgentView | undefined, working: number): boolean {
+  return !!jarvis && working > 0 && between(jarvis);
+}
+
+/**
+ * The sentence beside his name (pure: tested). `working` counts the OTHER
+ * agents at work: between turns he coordinates them, or waits when nobody
+ * works. «Terminó» is an agent's word for a finished turn, never his.
+ */
+export function presencePhrase(
+  mode: PresenceMode,
+  jarvis: AgentView | undefined,
+  working = 0,
+): string {
   if (mode !== 'reposo') return PHRASE[mode];
   if (!jarvis) return 'No está en la oficina';
+  if (coordinating(jarvis, working))
+    return `Coordinando a ${working} ${working === 1 ? 'agente' : 'agentes'}`;
+  if (between(jarvis)) return 'En espera';
   return jarvis.statusText;
 }
 

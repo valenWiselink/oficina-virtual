@@ -14,6 +14,9 @@ import { NUCLEO_FRAGMENT, NUCLEO_VERTEX } from './nucleoShader.js';
  *   the screen's refresh rate.
  * - A hidden tab, reduced motion or a lost WebGL context: no animation; the
  *   page shows a still fallback (`onFallback`).
+ * - Coordinating (Jarvis between turns while agents work) is a pose, not a
+ *   motion: the ember rises to the center and glows a little more; one short
+ *   settle and the loop stops again.
  */
 export interface NucleoState {
   listen: number;
@@ -21,8 +24,17 @@ export interface NucleoState {
   speak: number;
   word: number;
   need: number;
+  coord: number;
   rot: number;
   t: number;
+}
+
+/** Where the states head to (the sustained ones). */
+export interface NucleoTarget {
+  think: number;
+  speak: number;
+  need: number;
+  coord: number;
 }
 
 const SETTLED = 0.01;
@@ -39,6 +51,7 @@ const UNIFORMS = [
   'uSpeak',
   'uWord',
   'uNeed',
+  'uCoord',
   'uRot',
   'uF',
   'uPx',
@@ -46,11 +59,7 @@ const UNIFORMS = [
 ] as const;
 
 /** One step of the states toward their targets (pure: tested). */
-export function stepState(
-  st: NucleoState,
-  target: { think: number; speak: number; need: number },
-  dt: number,
-): NucleoState {
+export function stepState(st: NucleoState, target: NucleoTarget, dt: number): NucleoState {
   const toward = (v: number, t: number, k: number) => v + (t - v) * Math.min(1, dt * k);
   return {
     listen: st.listen * Math.exp(-dt / 0.11),
@@ -58,6 +67,7 @@ export function stepState(
     think: toward(st.think, target.think, 9),
     speak: toward(st.speak, target.speak, 9),
     need: toward(st.need, target.need, 8),
+    coord: toward(st.coord, target.coord, 7),
     rot: st.rot + dt * 2.6 * st.think,
     t: st.t + dt,
   };
@@ -72,11 +82,7 @@ export function stepState(
 export const THINK_SPIN_MS = 2500;
 
 /** Whether there is still something to draw (pure: tested). */
-export function stillMoving(
-  st: NucleoState,
-  target: { think: number; speak: number; need: number },
-  msSinceEvent: number,
-): boolean {
+export function stillMoving(st: NucleoState, target: NucleoTarget, msSinceEvent: number): boolean {
   if (target.speak || target.need) return true;
   if (target.think) return msSinceEvent <= THINK_SPIN_MS;
   if (msSinceEvent > SETTLE_MS) return false;
@@ -85,7 +91,8 @@ export function stillMoving(
     st.word > SETTLED ||
     st.think > SETTLED ||
     st.speak > SETTLED ||
-    st.need > SETTLED
+    st.need > SETTLED ||
+    Math.abs(st.coord - target.coord) > SETTLED
   );
 }
 
@@ -99,8 +106,17 @@ export function parseRgb(color: string): [number, number, number] {
 export class NucleoEngine {
   private gl: WebGLRenderingContext | null = null;
   private uniforms: Partial<Record<(typeof UNIFORMS)[number], WebGLUniformLocation | null>> = {};
-  private st: NucleoState = { listen: 0, think: 0, speak: 0, word: 0, need: 0, rot: 0, t: 0 };
-  private target = { think: 0, speak: 0, need: 0 };
+  private st: NucleoState = {
+    listen: 0,
+    think: 0,
+    speak: 0,
+    word: 0,
+    need: 0,
+    coord: 0,
+    rot: 0,
+    t: 0,
+  };
+  private target: NucleoTarget = { think: 0, speak: 0, need: 0, coord: 0 };
   private raf = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private needTimer: ReturnType<typeof setTimeout> | undefined;
@@ -221,6 +237,7 @@ export class NucleoEngine {
     gl.uniform1f(u.uSpeak!, this.st.speak);
     gl.uniform1f(u.uWord!, this.st.word);
     gl.uniform1f(u.uNeed!, this.st.need);
+    gl.uniform1f(u.uCoord!, this.st.coord);
     gl.uniform1f(u.uRot!, this.st.rot);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     this.frames++;
@@ -245,6 +262,14 @@ export class NucleoEngine {
 
   speak(on: boolean): void {
     this.target.speak = on ? 1 : 0;
+    this.kick();
+  }
+
+  /** Agents at work while he is between turns: the coordinating pose. */
+  coordinate(on: boolean): void {
+    const next = on ? 1 : 0;
+    if (this.target.coord === next) return;
+    this.target.coord = next;
     this.kick();
   }
 

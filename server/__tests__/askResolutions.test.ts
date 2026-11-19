@@ -78,7 +78,7 @@ describe('several asks settled from one sentence', () => {
     expect(asks.find('p2')?.answeredAt).toBeUndefined();
     clock += UNDO_MS;
     resolutions.tick();
-    expect(asks.find('p2')?.answeredHow).toContain('«Sí»');
+    expect(asks.find('p2')?.closedHow).toContain('«Sí»');
     expect(asks.find('p3')?.notBefore).toBe(NOW + 19 * 3_600_000);
     expect(asks.find('p4')?.closedHow).toBe('Lo diste por hecho hablando');
     expect(shown.at(-1)?.items).toEqual([]);

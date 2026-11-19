@@ -1323,6 +1323,12 @@ components:
         closedHow:
           description: How it left the list, in words.
           type: string
+        autoClosed:
+          description: |
+            On a closed one, the office closed it on its own reading (his
+            answer, its author's next step, the background reviewer): the page
+            offers «Deshacer» (reopenPendingAsk) for a while.
+          type: boolean
         turnIds:
           description: |
             On a closed one, the answers that asked it: their «Te toca» is over on

@@ -11,6 +11,7 @@ import {
   THINK_SPIN_MS,
 } from '../src/nucleo/nucleoEngine.js';
 import {
+  coordinating,
   isThinking,
   needKeyOf,
   nextMeeting,
@@ -108,8 +109,17 @@ describe('Núcleo: the agents', () => {
 });
 
 describe('Núcleo: Jarvis in glass', () => {
-  const rest: NucleoState = { listen: 0, think: 0, speak: 0, word: 0, need: 0, rot: 0, t: 0 };
-  const none = { think: 0, speak: 0, need: 0 };
+  const rest: NucleoState = {
+    listen: 0,
+    think: 0,
+    speak: 0,
+    word: 0,
+    need: 0,
+    coord: 0,
+    rot: 0,
+    t: 0,
+  };
+  const none = { think: 0, speak: 0, need: 0, coord: 0 };
 
   it('settles by itself after a key; while he thinks it turns a moment, then stays still', () => {
     let st = { ...rest, listen: 1 };
@@ -126,10 +136,22 @@ describe('Núcleo: Jarvis in glass', () => {
 
   it('goes toward what it is asked, without overshooting', () => {
     let st = rest;
-    for (let i = 0; i < 60; i++) st = stepState(st, { think: 1, speak: 0, need: 0 }, 1 / 60);
+    for (let i = 0; i < 60; i++) st = stepState(st, { ...none, think: 1 }, 1 / 60);
     expect(st.think).toBeGreaterThan(0.99);
     expect(st.think).toBeLessThanOrEqual(1);
     expect(st.rot).toBeGreaterThan(0);
+  });
+
+  it('coordinating is a still pose: it settles once and stops, not a loop', () => {
+    const target = { ...none, coord: 1 };
+    let st = rest;
+    expect(stillMoving(st, target, 0)).toBe(true);
+    for (let i = 0; i < 36; i++) st = stepState(st, target, 1 / 60);
+    expect(st.coord).toBeGreaterThan(0.95);
+    expect(st.rot).toBe(0);
+    // Past the settle time nothing more is drawn, however long agents work.
+    expect(stillMoving(st, target, 700)).toBe(false);
+    expect(stillMoving({ ...rest, coord: 1 }, target, 0)).toBe(false);
   });
 
   it('reads the color behind it', () => {
@@ -146,6 +168,22 @@ describe('Núcleo: Jarvis in glass', () => {
     expect(presencePhrase('reposo', undefined)).toBe('No está en la oficina');
     expect(isThinking(jarvis)).toBe(true);
     expect(isThinking(view({ kind: 'done' }))).toBe(false);
+  });
+
+  it('between turns he coordinates the agents at work, or waits; never «Terminó»', () => {
+    const done = view({ name: 'Jarvis', statusText: 'Terminó', kind: 'done' });
+    const idle = view({ name: 'Jarvis', statusText: 'Sin tarea', kind: 'idle' });
+    expect(presencePhrase('reposo', done, 4)).toBe('Coordinando a 4 agentes');
+    expect(presencePhrase('reposo', idle, 1)).toBe('Coordinando a 1 agente');
+    expect(presencePhrase('reposo', done, 0)).toBe('En espera');
+    expect(presencePhrase('reposo', idle)).toBe('En espera');
+    expect(coordinating(done, 2)).toBe(true);
+    expect(coordinating(done, 0)).toBe(false);
+    // His own turn or a permission keep their sentence.
+    const asks = view({ name: 'Jarvis', statusText: 'Espera permiso', kind: 'needs' });
+    expect(coordinating(asks, 3)).toBe(false);
+    expect(presencePhrase('reposo', asks, 3)).toBe('Espera permiso');
+    expect(coordinating(undefined, 3)).toBe(false);
   });
 
   it('speaks an answer word by word, quickly and within bounds', () => {

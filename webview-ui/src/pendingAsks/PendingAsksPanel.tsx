@@ -88,7 +88,7 @@ export function ClosedAsk({ ask, now }: { ask: PendingAskEntry; now: number }) {
         </span>
       </span>
       <Button size="sm" variant="ghost" onClick={() => reopenPendingAsk(ask.id)}>
-        Reabrir
+        {ask.autoClosed ? 'Deshacer' : 'Reabrir'}
       </Button>
     </li>
   );

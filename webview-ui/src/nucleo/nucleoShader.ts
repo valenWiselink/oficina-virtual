@@ -3,14 +3,15 @@
  * with a warm ember inside, raymarched in one full-screen triangle. The
  * uniforms are its states: uListen (leans toward the box), uThink (contracts,
  * the ember turns), uSpeak/uWord (it beats with each word), uNeed (a bud grows
- * toward «Te necesita»). Ported as is from the published prototype.
+ * toward «Te necesita»), uCoord (coordinating agents: the ember rises to the
+ * center and glows wider, still). Ported from the published prototype.
  */
 export const NUCLEO_FRAGMENT = `precision highp float;
-uniform vec2 uRes;uniform float uT,uDark,uListen,uThink,uSpeak,uWord,uNeed,uRot,uF,uPx;uniform vec3 uBg;
+uniform vec2 uRes;uniform float uT,uDark,uListen,uThink,uSpeak,uWord,uNeed,uCoord,uRot,uF,uPx;uniform vec3 uBg;
 const vec3 L=vec3(-0.5571,0.7428,0.3714);
 const vec3 LR=vec3(0.5547,0.0,0.8321);
 const vec3 LU=vec3(-0.6181,-0.6696,0.4120);
-vec3 corePos(){vec3 c=vec3(0.0,-0.08,0.0);
+vec3 corePos(){vec3 c=vec3(0.0,-0.08+0.10*uCoord,0.0);
   c.y-=0.40*uListen;c.z+=0.36*uListen;
   c.xz+=0.26*uThink*vec2(cos(uRot),sin(uRot));
   c+=vec3(-1.08,-0.10,0.05)*uNeed;return c;}
@@ -44,14 +45,14 @@ vec3 env(vec3 d){
   c+=smoothstep(0.88,0.98,dot(d,vec3(-0.9138,0.0,-0.4061)))*mix(0.12,0.55,uDark)*vec3(0.68,0.83,1.0);
   return c;}
 vec3 tm(vec3 x){vec3 k=vec3(0.72);return mix(x,k+(1.0-k)*(1.0-exp(-(x-k)/(1.0-k))),step(k,x));}
-float inten(){return 1.0+0.7*uListen+0.45*uThink+0.45*uWord+0.35*uNeed;}
+float inten(){return 1.0+0.7*uListen+0.45*uThink+0.45*uWord+0.35*uNeed+0.3*uCoord;}
 vec3 glass(vec3 p,vec3 rd){
   vec3 n=nrm(p);float ci=clamp(dot(-rd,n),0.0,1.0);float F=0.04+0.96*pow(1.0-ci,5.0);
   vec3 rr=refract(rd,n,1.0/1.5);float t=0.03;
   for(int i=0;i<24;i++){float d=-sdf(p+rr*t);if(d<0.002)break;t+=max(d*0.9,0.02);}
   vec3 pe=p+rr*t,ne=-nrm(pe);vec3 ro=refract(rr,ne,1.5);if(dot(ro,ro)<1e-4)ro=reflect(rr,ne);
   vec3 col=env(ro)*exp(-t*mix(vec3(0.05,0.04,0.03),vec3(0.08,0.06,0.04),uDark));
-  float sh=mix(11.0,26.0,uThink)+6.0*uListen;vec3 cp=corePos();float g=0.0;
+  float sh=mix(11.0,26.0,uThink)+6.0*uListen-2.5*uCoord;vec3 cp=corePos();float g=0.0;
   for(int i=0;i<16;i++){float s=(float(i)+0.5)/16.0;vec3 q=p+rr*(t*s)-cp;g+=exp(-dot(q,q)*sh);}
   g*=t/16.0;
   col+=coreCol()*g*sqrt(sh/11.0)*mix(1.6,1.7,uDark)*inten();

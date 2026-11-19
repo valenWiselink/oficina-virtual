@@ -1,4 +1,4 @@
-import type { PendingAsksList } from '../../../core/src/messages.js';
+import type { PendingAskEntry, PendingAsksList } from '../../../core/src/messages.js';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -38,4 +38,19 @@ export function readPendingAsksMessage(msg: Record<string, unknown>): PendingAsk
     return null;
   }
   return msg as unknown as PendingAsksList;
+}
+
+/** How long one the office closed by itself keeps its «Deshacer» in sight. */
+export const AUTO_UNDO_MS = 2 * 3_600_000;
+const SHOWN = 3;
+
+/** The ones the office closed on its own reading, newest first, still undoable (pure: tested). */
+export function recentAutoClosed(
+  closed: readonly PendingAskEntry[],
+  now: number,
+): PendingAskEntry[] {
+  return closed
+    .filter((a) => a.autoClosed && a.closedAt !== undefined && now - a.closedAt < AUTO_UNDO_MS)
+    .sort((a, b) => (b.closedAt ?? 0) - (a.closedAt ?? 0))
+    .slice(0, SHOWN);
 }

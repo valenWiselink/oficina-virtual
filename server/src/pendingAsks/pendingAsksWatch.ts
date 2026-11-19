@@ -2,6 +2,7 @@ import { spokenName, teTocaRawLine, teTocaReplaces } from '../agentIdentity.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { prStateOf } from '../mergedAsk.js';
 import type { AgentState } from '../types.js';
+import type { AskReviewer } from './askReviewer.js';
 import { openQuestionOf } from './openQuestion.js';
 import { commandOf, HOLD_MS, JARVIS, type PendingAsks } from './pendingAsks.js';
 
@@ -58,6 +59,9 @@ export function knownPrLinks(store: AgentStateStore): Map<number, string> {
  *   stays out (its tool tells it to pass the ask on). If it only waited for an
  *   answer itself («avisarme cuando…»), nobody waits any more: it looks done.
  * Once every PR an ask names is merged, it is done (or looks done).
+ * - Each finished answer of Jarvis or an office agent: what Valentín answered
+ *   before it and is still open was taken (pendingAsks.movedOn), and the
+ *   answer, with what he wrote, goes to the background reviewer (askReviewer.ts).
  */
 export class PendingAsksWatch {
   private stopped = false;
@@ -66,11 +70,16 @@ export class PendingAsksWatch {
   private readonly closedBySupervisor = new Set<string>();
   /** His last message to Jarvis already read, per Jarvis session. */
   private readonly promptSeen = new Map<string, number>();
+  /** The last finished answer already read, per session. */
+  private readonly turnSeen = new Map<string, string>();
+  /** His last message already handed to the reviewer, per session. */
+  private readonly promptNoted = new Map<string, number>();
 
   constructor(
     private readonly store: AgentStateStore,
     private readonly asks: PendingAsks,
     private readonly now: () => number = Date.now,
+    private readonly reviewer?: AskReviewer,
   ) {}
 
   start(): void {
@@ -132,8 +141,43 @@ export class PendingAsksWatch {
     if (this.stopped) return;
     for (const [, agent] of this.store) {
       if (isJarvis(agent)) this.askOpenQuestion(agent);
+      this.finishedTurn(agent);
     }
     this.asks.tick();
+    void this.reviewer?.tick();
+  }
+
+  /**
+   * A finished answer of Jarvis or an office agent, once: the reviewer hears
+   * it (and what Valentín wrote before it), and what he answered before it
+   * and is still open closes — the author went on to the next step. The first
+   * look after a restart only learns where things were.
+   */
+  private finishedTurn(agent: AgentState): void {
+    if (this.stopped || agent.leadAgentId !== undefined) return;
+    if (!isJarvis(agent) && !agent.officeTerminal) return;
+    const name = isJarvis(agent) ? JARVIS : spokenName(agent);
+    this.notePrompt(agent, name);
+    const { lastReply, lastReplyId, lastReplyAt } = agent;
+    if (!lastReply || !lastReplyId || lastReplyAt === undefined) return;
+    if (!agent.isWaiting || agent.activeToolIds.size > 0) return;
+    const before = this.turnSeen.get(agent.sessionId);
+    if (before === lastReplyId) return;
+    this.turnSeen.set(agent.sessionId, lastReplyId);
+    if (before === undefined && this.now() - lastReplyAt > QUESTION_GRACE_MS) return;
+    this.reviewer?.note({ at: lastReplyAt, who: name, text: lastReply });
+    const turnId = agent.yourTurn?.id === lastReplyId ? lastReplyId : undefined;
+    this.asks.movedOn(name, lastReplyAt, turnId);
+  }
+
+  private notePrompt(agent: AgentState, name: string): void {
+    const at = agent.valentinPromptAt;
+    if (at === undefined || !agent.valentinPromptText) return;
+    const before = this.promptNoted.get(agent.sessionId);
+    if (before !== undefined && at <= before) return;
+    this.promptNoted.set(agent.sessionId, at);
+    if (before === undefined && this.now() - at > QUESTION_GRACE_MS) return;
+    this.reviewer?.note({ at, who: `Valentín → ${name}`, text: agent.valentinPromptText });
   }
 
   private askOpenQuestion(agent: AgentState): void {
@@ -165,11 +209,23 @@ export class PendingAsksWatch {
     } else if (message.type === 'agentIdentity' && typeof message.id === 'number') {
       const agent = this.store.get(message.id);
       if (agent) this.observe(message.id, agent);
+    } else if (message.type === 'agentStatus' && message.status === 'waiting') {
+      const agent = typeof message.id === 'number' ? this.store.get(message.id) : undefined;
+      if (agent) this.finishedTurn(agent);
     }
   };
 
   private observe(_id: number, agent: AgentState): void {
-    if (!isJarvis(agent)) return;
+    if (!isJarvis(agent)) {
+      this.finishedTurn(agent);
+      return;
+    }
+    this.observeJarvis(agent);
+    // After its «Te toca» joined the list: the same thing asked again stays.
+    this.finishedTurn(agent);
+  }
+
+  private observeJarvis(agent: AgentState): void {
     this.asks.closeByPermission(agent.asksValentin, 'Se decidió el permiso');
     this.readAnswer(agent);
     const turn = agent.yourTurn;

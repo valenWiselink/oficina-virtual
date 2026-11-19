@@ -2,12 +2,16 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import type { PendingAskEntry, PendingAsksList } from '../../../core/src/messages.js';
+import type { PendingAsksList } from '../../../core/src/messages.js';
 import { SERVER_JSON_DIR } from '../constants.js';
-import { prStateOf } from '../mergedAsk.js';
+import { answerKind, SHORT_ANSWER } from './answerKinds.js';
+import { isStale, lookDone, STALE_MS, toEntry } from './askEntry.js';
 import { sameAsk, taskCovers } from './askSimilarity.js';
-import { type MergeTarget, mergeTargetOf } from './mergeTarget.js';
-import { askRefs, commandPrUrl, numbersToDigits, onlyMerge, prNumbers, shareRef } from './refs.js';
+import { prLabel, prUrlsOf } from './askText.js';
+import { mergeTargetOf } from './mergeTarget.js';
+import { askRefs, commandPrUrl, numbersToDigits, onlyMerge, shareRef } from './refs.js';
+
+export { clockAt, commandOf, prUrlsOf } from './askText.js';
 
 export const PENDING_ASKS_FILE = 'pendientes.json';
 const TEXT_MAX = 240;
@@ -24,13 +28,15 @@ const HOUR = 60 * MINUTE;
 export const HOLD_MS = 5 * MINUTE;
 /** Answered and nobody reopened it: done. */
 export const ANSWER_SETTLE_MS = 2 * HOUR;
-/** Nobody touched it in this long: «¿Sigue?». */
-export const STALE_MS = 24 * HOUR;
+export { openMergeTarget } from './askEntry.js';
+export { STALE_MS };
 
 export const JARVIS = 'Jarvis';
 export const ANSWERED_HOW = 'Le contestaste a Jarvis';
 /** «no sé», «como quieras»: he leaves it to Jarvis and his recommendation. */
 export const LEFT_TO_JARVIS_HOW = 'Lo tomé así: decide Jarvis con su recomendación';
+/** He answered it and its author already went on to the next step. */
+export const MOVED_ON_HOW = 'siguió después de tu respuesta';
 /** The copy kept of the list before the first office that delegates asks
  *  started: going back to an older version can restore it as it was. */
 export const PENDING_ASKS_BACKUP_SUFFIX = '.antes-de-delegar';
@@ -55,6 +61,9 @@ export interface StoredAsk {
   permission?: string;
   closedAt?: number;
   closedHow?: string;
+  /** The office closed it on its own reading (an answer, the next step, the
+   *  reviewer): the page offers «Deshacer» for a while. */
+  closedAuto?: boolean;
   /** Brought back by hand: what a browser remembers from before must not close it. */
   reopened?: boolean;
   /** A question Jarvis left without «Te toca:» (openQuestion.ts): his next
@@ -144,66 +153,10 @@ interface PendingAsksDeps {
   now?: () => number;
 }
 
-/** A command worth a copy button: the first `code` span with an argument (a lone
- *  `main` or `informe.md` is a name, not something to run). */
-export function commandOf(rawLine: string | undefined): string | undefined {
-  if (!rawLine) return undefined;
-  for (const match of rawLine.matchAll(/`([^`\n]+)`/g)) {
-    const code = match[1].trim();
-    if (/\s/.test(code)) return code;
-  }
-  return undefined;
-}
-
-const PR_URL = /https:\/\/github\.com\/[^/\s)]+\/[^/\s)]+\/pull\/\d+/g;
-
-/**
- * «23:00» as a moment: today at that time on this machine's clock, or
- * tomorrow when today's has long passed (said at 23:30, «09:00» is the
- * morning). Null when it is not HH:MM.
- */
-export function clockAt(hhmm: string, now: number): number | null {
-  const m = /^\s*(\d{1,2})(?::|\.|h)?(\d{2})?\s*(?:h|hs)?\s*$/i.exec(hhmm);
-  if (!m) return null;
-  const h = Number(m[1]);
-  const min = Number(m[2] ?? 0);
-  if (h > 23 || min > 59) return null;
-  const at = new Date(now);
-  at.setHours(h, min, 0, 0);
-  if (at.getTime() < now - 6 * 3600_000) at.setDate(at.getDate() + 1);
-  return at.getTime();
-}
-
-/** «#12» for a PR URL. */
-const prLabel = (url: string): string => `#${url.split('/').pop() ?? ''}`;
-
-/** The PR URLs an ask names: its own links, and «#12» or «PR 12» when an
- *  agent's answers linked that number before (`known`, mergedAsk.ts). */
-export function prUrlsOf(text: string, known?: ReadonlyMap<number, string>): string[] {
-  const plain = numbersToDigits(text);
-  const urls = [...plain.matchAll(PR_URL)].map((m) => m[0]);
-  for (const n of prNumbers(plain.replace(PR_URL, ' '))) {
-    const url = known?.get(n);
-    if (url) urls.push(url);
-  }
-  return [...new Set(urls)];
-}
-
 const folded = (text: string): string => text.trim().toLowerCase().replace(/\s+/g, ' ');
 const clip = (text: string, max: number): string =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text;
-const hourOf = (ms: number): string =>
-  new Date(ms).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
-/** «listo», «ya lo hice», «sí», «no», «dale»: a short answer to what was just asked. */
-const SHORT_ANSWER =
-  /^\s*(?:listo|lista|hecho|hecha|ya|dale|s[ií]|no|ok|okey|de una|perfecto|joya|confirmo|confirmado|aprobado|corrid[oa]|mergead[oa]|nose|no s[eé]|ni idea|como quieras|lo que (?:vos )?(?:recomiendes|digas|te parezca)|decid[ií] vos|eleg[ií] vos|hacelo(?: vos)?|encargate|ocupate|dale vos|lo hac[eé]s vos)(?!\p{L})/iu;
-/** He hands it to Jarvis: «hacelo vos», «encargate». */
-const HAND_TO_JARVIS =
-  /^\s*(?:hacelo(?: vos)?|encargate|ocupate|dale vos|lo hac[eé]s vos)(?!\p{L})/iu;
-/** He leaves the choice to Jarvis: «no sé», «como quieras». */
-const LEAVE_TO_JARVIS =
-  /^\s*(?:nose|no s[eé]|ni idea|como quieras|lo que (?:vos )?(?:recomiendes|digas|te parezca)|decid[ií] vos|eleg[ií] vos)(?!\p{L})/iu;
 const ALL_OF_THEM = /\b(?:todo|todos|todas|ambos|ambas|los dos|las dos|los tres|las tres)\b/i;
 const ID_IN_TEXT = /\[?\b(p\d{1,5})\b\]?/gi;
 
@@ -213,8 +166,8 @@ const ID_IN_TEXT = /\[?\b(p\d{1,5})\b\]?/gi;
  * cleaning its transcripts and any restart. Asked again (same key, same text or
  * the same PR, migration, ticket or artifact) it is the same ask, worded anew.
  * It leaves the list by hand («Hecho» tells Jarvis), by Jarvis, when he answers
- * it (then it waits for Jarvis or closes by itself in two hours), when its PRs
- * merge, or when its permission is decided. Closed ones stay for a while: one
+ * it, when its author goes on after his answer, when the reviewer reads it as
+ * done (askReviewer.ts), when its PRs merge, or when its permission is decided. Closed ones stay for a while: one
  * can be reopened, so nothing is lost silently. The file stays version 1: new
  * fields are optional, so an older office still reads it.
  */
@@ -448,6 +401,7 @@ export class PendingAsks {
     if (!ask || ask.closedAt === undefined) return;
     delete ask.closedAt;
     delete ask.closedHow;
+    delete ask.closedAuto;
     delete ask.answeredAt;
     delete ask.answeredHow;
     delete ask.staleSince;
@@ -493,8 +447,10 @@ export class PendingAsks {
    * He wrote to Jarvis (`text`, at `at`; his previous message was at `since`):
    * the asks it names by id are answered, and a short «listo», «sí», «ya lo
    * hice» answers what Jarvis asked since his previous message — the one, or
-   * all of them with «todo», «los dos». Answered, an ask leaves «Ahora» and
-   * waits for Jarvis to check (or closes by itself in two hours).
+   * all of them with «todo», «los dos». An answer closes it at once (with
+   * «Deshacer» on the page); «todavía no» keeps it; a question back or a
+   * problem leaves it answered until its author's next step (movedOn) or two
+   * hours (answerKinds.ts).
    */
   answeredBy(text: string, at: number, since = 0): StoredAsk[] {
     const said = text.trim();
@@ -504,24 +460,53 @@ export class PendingAsks {
       .filter((a): a is StoredAsk => !!a && a.closedAt === undefined);
     const answered =
       named.length > 0 ? [...new Set(named)] : this.shortAnswerTargets(said, at, since);
+    if (answered.length === 0) return answered;
     const plain = said.replace(ID_IN_TEXT, '').trim() || said;
-    if (HAND_TO_JARVIS.test(plain)) {
-      for (const ask of answered) this.handTo(ask, JARVIS, at);
-      if (answered.length > 0) this.changed();
-      return answered;
-    }
-    const how = LEAVE_TO_JARVIS.test(plain)
-      ? LEFT_TO_JARVIS_HOW
-      : `${ANSWERED_HOW}: «${clip(plain, 80)}»`;
+    const kind = answerKind(plain);
     for (const ask of answered) {
-      if (ask.answeredAt !== undefined) continue;
-      ask.answeredAt = at;
-      ask.answeredHow = how;
-      ask.touchedAt = at;
-      delete ask.staleSince;
+      if (kind === 'hand') this.handTo(ask, JARVIS, at);
+      else if (kind === 'leave') this.close(ask, LEFT_TO_JARVIS_HOW, true);
+      else if (kind === 'done') this.close(ask, `${ANSWERED_HOW}: «${clip(plain, 80)}»`, true);
+      else {
+        // Not done yet, or a problem: it stays; a problem waits for the next step.
+        if (kind === 'trouble' && ask.answeredAt === undefined) {
+          ask.answeredAt = at;
+          ask.answeredHow = `${ANSWERED_HOW}: «${clip(plain, 80)}»`;
+        }
+        ask.touchedAt = at;
+        delete ask.staleSince;
+      }
     }
-    if (answered.length > 0) this.changed();
+    this.changed();
     return answered;
+  }
+
+  /**
+   * `from` finished a new turn at `at` (`turnId`: the record of its «Te toca»,
+   * if it left one): what Valentín answered before it and is still open was
+   * taken, and the author went on to the next step. Asked again in that turn
+   * (same thing) it stays: `add` already made it pending again.
+   */
+  movedOn(from: string, at: number, turnId?: string): StoredAsk[] {
+    const done = this.pending().filter(
+      (a) =>
+        a.from === from &&
+        a.answeredAt !== undefined &&
+        a.answeredAt < at &&
+        !(turnId && a.turnIds.includes(turnId)),
+    );
+    for (const ask of done) this.close(ask, `${from} ${MOVED_ON_HOW}`, true);
+    if (done.length > 0) this.changed();
+    return done;
+  }
+
+  /** The reviewer read it as done: closed with its reason, «Deshacer» on the page. */
+  closeReviewed(id: string, why: string): StoredAsk | undefined {
+    const ask = this.find(id);
+    if (!ask || ask.closedAt !== undefined || ask.reopened) return undefined;
+    this.close(ask, `Se cerró solo: ${clip(why, 140)}`, true);
+    this.changed();
+    return ask;
   }
 
   private shortAnswerTargets(said: string, at: number, since: number): StoredAsk[] {
@@ -735,9 +720,10 @@ export class PendingAsks {
     this.changed();
   }
 
-  private close(ask: StoredAsk, how: string): void {
+  private close(ask: StoredAsk, how: string, auto = false): void {
     ask.closedAt = this.now();
     ask.closedHow = how;
+    if (auto) ask.closedAuto = true;
     delete ask.heldUntil;
   }
 
@@ -787,64 +773,4 @@ export class PendingAsks {
       console.warn(`[Pixel Agents] Could not save the pending asks: ${String(err)}`);
     }
   }
-}
-
-/** Shown apart from what waits: looks done, he answered it, or «¿Sigue?». */
-function lookDone(ask: StoredAsk): boolean {
-  return !!ask.seemsDone || ask.answeredAt !== undefined || ask.staleSince !== undefined;
-}
-
-function isStale(ask: StoredAsk, now: number): boolean {
-  if (lookDone(ask) || ask.heldUntil !== undefined) return false;
-  if (ask.notBefore !== undefined && ask.notBefore > now) return false;
-  return now - (ask.touchedAt ?? ask.at) >= STALE_MS;
-}
-
-/** Why it is shown apart, in words for its card. */
-function apartReason(ask: StoredAsk): string | undefined {
-  if (ask.seemsDone) return ask.seemsDone;
-  if (ask.answeredAt !== undefined) {
-    return `Le contestaste a Jarvis a las ${hourOf(ask.answeredAt)}: se cierra solo en 2 h si nadie lo reabre`;
-  }
-  if (ask.staleSince !== undefined) {
-    const hours = Math.round((ask.staleSince - (ask.touchedAt ?? ask.at)) / HOUR);
-    return `¿Sigue? Nadie lo movió en ${hours} h`;
-  }
-  return undefined;
-}
-
-/** The PR its «Mergear» button merges: only while it is not merged or closed. */
-export function openMergeTarget(ask: StoredAsk): MergeTarget | undefined {
-  if (ask.closedAt !== undefined) return undefined;
-  const target = mergeTargetOf(ask);
-  const state = target ? prStateOf(target.url) : undefined;
-  return state === 'merged' || state === 'closed' ? undefined : target;
-}
-
-function toEntry(ask: StoredAsk): PendingAskEntry {
-  const merge = openMergeTarget(ask);
-  const open = ask.closedAt === undefined;
-  const apart = open ? apartReason(ask) : undefined;
-  return {
-    id: ask.id,
-    from: ask.from,
-    text: ask.text,
-    at: ask.at,
-    ...(ask.command ? { command: ask.command } : {}),
-    ...(open && ask.due !== undefined ? { due: ask.due } : {}),
-    ...(open && ask.notBefore !== undefined ? { notBefore: ask.notBefore } : {}),
-    ...(open && ask.why ? { why: ask.why } : {}),
-    ...(open && ask.ifNot ? { ifNot: ask.ifNot } : {}),
-    ...(open && ask.question ? { question: true } : {}),
-    ...(open && ask.options?.length ? { options: ask.options } : {}),
-    ...(open && ask.after ? { after: ask.after } : {}),
-    ...(open && ask.delegatedTo ? { delegatedTo: ask.delegatedTo } : {}),
-    ...(merge
-      ? { mergeUrl: merge.url, mergeCommand: `gh pr merge ${merge.url} ${merge.args.join(' ')}` }
-      : {}),
-    ...(apart ? { seemsDone: apart } : {}),
-    ...(ask.closedAt !== undefined ? { closedAt: ask.closedAt } : {}),
-    ...(ask.closedHow ? { closedHow: ask.closedHow } : {}),
-    ...(ask.closedAt !== undefined && ask.turnIds.length > 0 ? { turnIds: ask.turnIds } : {}),
-  };
 }

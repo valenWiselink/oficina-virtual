@@ -2,7 +2,13 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 
 import type { AgentView } from '../views/agentViews.js';
 import { NucleoEngine } from './nucleoEngine.js';
-import { isThinking, type PresenceMode, presencePhrase, speakingPlan } from './nucleoRules.js';
+import {
+  coordinating,
+  isThinking,
+  type PresenceMode,
+  presencePhrase,
+  speakingPlan,
+} from './nucleoRules.js';
 
 const LISTEN_HOLD_MS = 1500;
 const NEED_HOLD_MS = 1800;
@@ -27,8 +33,10 @@ export const JarvisPresence = forwardRef<
     /** Changes when something new needs Valentín (a permission, a «Te toca»). */
     needKey: string;
     compact: boolean;
+    /** Other agents at work right now (between turns he coordinates them). */
+    working: number;
   }
->(function JarvisPresence({ jarvis, needKey, compact }, ref) {
+>(function JarvisPresence({ jarvis, needKey, compact, working }, ref) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const engine = useRef<NucleoEngine | null>(null);
@@ -96,6 +104,12 @@ export const JarvisPresence = forwardRef<
     else setMode((m) => (m === 'piensa' ? 'reposo' : m));
   }, [thinking]);
 
+  // Between turns with agents at work: the coordinating pose (still, one settle).
+  const directing = coordinating(jarvis, working);
+  useEffect(() => {
+    engine.current?.coordinate(directing);
+  }, [directing]);
+
   // A new answer: it beats with each word, then rests.
   const answer = jarvis?.lastReplyHead ?? '';
   const seenAnswer = useRef(answer);
@@ -141,6 +155,7 @@ export const JarvisPresence = forwardRef<
     <div
       ref={stage}
       data-mode={mode}
+      data-coordinating={directing ? '' : undefined}
       className={`nucleo-stage shrink-0 flex flex-col items-center ${compact ? 'gap-2' : 'gap-6'}`}
     >
       <div
@@ -156,7 +171,9 @@ export const JarvisPresence = forwardRef<
         >
           Jarvis
         </span>
-        <span className="text-sm text-text-2 truncate">{presencePhrase(mode, jarvis)}</span>
+        <span className="text-sm text-text-2 truncate">
+          {presencePhrase(mode, jarvis, working)}
+        </span>
       </p>
     </div>
   );
