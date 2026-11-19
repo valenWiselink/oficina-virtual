@@ -39,6 +39,8 @@ const DETAIL_OFF = 1.25;
 /** Frame time that, sustained, turns decorative effects off. */
 const SLOW_FRAME_MS = 50;
 const SLOW_FRAMES = 240;
+/** Below this total node motion per frame the layout reads as still. */
+const SETTLED_MOTION = 0.05;
 /** Room the bottom toolbar takes over the canvas. */
 const TOOLBAR_CLEARANCE_PX = 64;
 /** A double click comes this close (at least). */
@@ -151,6 +153,25 @@ export class GraphStage implements PointerHost {
   private t = 0;
   private last = performance.now();
   private slow = false;
+  /** How far the nodes moved in the last frame, all together (world units). */
+  private moved = Infinity;
+
+  /** Nothing of its own is moving: the simulation rests, the camera is not
+   *  gliding, nothing is held or about to be focused. */
+  settled(): boolean {
+    return (
+      this.moved < SETTLED_MOTION &&
+      this.rig.resting &&
+      this.held === null &&
+      this.pendingFocus === null &&
+      !this.pointers.busy
+    );
+  }
+
+  /** The Clawds still breathe and float (no calm mode, not a slow PC). */
+  decorative(): boolean {
+    return !(this.inputs().calm || this.slow);
+  }
   private readonly frameTimes: number[] = [];
   /** The mouse over the canvas (no button), for the hover card. */
   private mouse: Pt | null = null;
@@ -253,7 +274,11 @@ export class GraphStage implements PointerHost {
     // What you hold pulls nobody: dragging a member leaves its lead in place.
     const held = this.held?.node;
     const edges = edgesOf(inp.views).filter((e) => e.a !== held && e.b !== held);
+    const before = [...this.nodes.values()].map((n) => n.x + n.y);
     stepGraph(this.nodes, edges, dt, { w: WORLD.w, h: WORLD.h, margin: 48 }, held);
+    let i = 0;
+    this.moved = 0;
+    for (const n of this.nodes.values()) this.moved += Math.abs(n.x + n.y - (before[i++] ?? 0));
     // Fit above the toolbar, which floats over the bottom of the office.
     const fit = this.rig.frame();
     const followed =

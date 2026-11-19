@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
 
 import type { GraphTarget } from './graphHit.js';
+import { createGraphPace } from './graphPace.js';
 import { type GraphControls, type GraphInputs, GraphStage } from './graphStage.js';
 
 export type { GraphControls, GraphInputs, GraphSelection } from './graphStage.js';
@@ -77,6 +78,7 @@ export function useGraphCanvas(
   const inputsRef = useRef(inputs);
   inputsRef.current = inputs;
   const api = useRef<GraphControls | null>(null);
+  const wakeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -86,21 +88,32 @@ export function useGraphCanvas(
     const observer = new ResizeObserver(() => stage.resize());
     observer.observe(canvas);
     const detach = attachInput(canvas, stage);
-    let raf = 0;
-    const loop = (now: number) => {
-      stage.frame(now);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
+    const pace = createGraphPace((now) => stage.frame(now), stage);
+    const wakeOn = ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown'] as const;
+    for (const type of wakeOn) canvas.addEventListener(type, pace.wake, { passive: true });
+    window.addEventListener('keydown', pace.wake);
+    const onResize = new ResizeObserver(pace.wake);
+    onResize.observe(canvas);
+    wakeRef.current = pace.wake;
+    pace.wake();
     api.current = stage.controls();
     return () => {
       stage.saveCamera();
-      cancelAnimationFrame(raf);
+      pace.stop();
+      for (const type of wakeOn) canvas.removeEventListener(type, pace.wake);
+      window.removeEventListener('keydown', pace.wake);
+      onResize.disconnect();
+      wakeRef.current = null;
       observer.disconnect();
       detach();
       api.current = null;
     };
   }, [canvasRef]);
+
+  // New views (a message arrived): draw them, then settle again.
+  useEffect(() => {
+    wakeRef.current?.();
+  });
 
   return {
     zoomBy: (factor) => api.current?.zoomBy(factor),

@@ -39,6 +39,8 @@ function approach(cam: Camera, target: Camera, k: number): Camera {
 export class CameraRig {
   cam: Camera = { x: 0, y: 0, zoom: 1 };
   target: Camera | null = null;
+  /** The camera is where it was going (or going nowhere): nothing to animate. */
+  resting = false;
   autoFit = true;
   /** The agent the camera goes along with. */
   following: number | null = null;
@@ -136,6 +138,7 @@ export class CameraRig {
       this.target = fromFrame(fitCamera(content, fit, FIT_PADDING), at);
     }
     const target = this.target;
+    this.resting = !target;
     if (!target) return;
     const k = this.calm
       ? 1
@@ -149,6 +152,7 @@ export class CameraRig {
       Math.abs(this.cam.zoom - target.zoom) < 0.001 &&
       Math.abs(this.cam.x - target.x) < 0.5 &&
       Math.abs(this.cam.y - target.y) < 0.5;
+    this.resting = arrived;
     if (arrived) {
       this.cam = target;
       if (!this.autoFit && this.following === null) this.target = null;
