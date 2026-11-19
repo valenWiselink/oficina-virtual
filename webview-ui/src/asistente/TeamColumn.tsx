@@ -28,7 +28,7 @@ function Activity({ counts, color }: { counts: number[]; color: string }) {
 }
 
 /** One agent: what it does, how busy it was, the permission it holds. */
-function TeamRow({
+export function TeamRow({
   view,
   actions,
   activity,

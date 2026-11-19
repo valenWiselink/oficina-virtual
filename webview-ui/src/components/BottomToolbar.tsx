@@ -155,6 +155,12 @@ export function BottomToolbar({
       >
         {(
           [
+            [
+              'nucleo',
+              'blur_on',
+              'Núcleo',
+              'Jarvis al centro, lo que te necesita y lo que está en marcha',
+            ],
             ['tablero', 'view_kanban', 'Tablero', 'Agentes por estado'],
             ['grafo', 'hub', 'Grafo', 'Cómo trabajan entre ellos'],
             [
@@ -204,7 +210,7 @@ export function BottomToolbar({
         </Button>
       )}
       {/* Control already shows them, large: no button for the column. */}
-      {pendingAsks && view !== 'control' && (
+      {pendingAsks && view !== 'control' && view !== 'nucleo' && (
         <Button
           variant={isPendingAsksOpen ? 'active' : 'ghost'}
           onClick={onTogglePendingAsks}
