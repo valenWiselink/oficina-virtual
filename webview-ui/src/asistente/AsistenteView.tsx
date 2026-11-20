@@ -11,6 +11,7 @@ import { type NowModel, useNowQueue } from '../now/useNowQueue.js';
 import { useWritableAgents } from '../terminal/agentInput.js';
 import type { AgentView } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
+import { inOfficeOnly } from '../views/inOffice.js';
 import {
   currentMoment,
   meetingNote,
@@ -170,7 +171,7 @@ function Conversation({
  * what you write.
  */
 export function AsistenteView({
-  views,
+  views: everyone,
   actions,
   jarvis,
   onSummonJarvis,
@@ -184,6 +185,8 @@ export function AsistenteView({
   asked?: AskedPermission;
 }) {
   const tint = useDayTint();
+  // Only the office's own agents, as in Núcleo and the graph (2026-11-20).
+  const views = inOfficeOnly(everyone);
   const model = useNowQueue(views, jarvis?.id);
   const { typing, handlers } = useTyping();
   const waiting = (model.queue.first ? 1 : 0) + model.queue.next.length;

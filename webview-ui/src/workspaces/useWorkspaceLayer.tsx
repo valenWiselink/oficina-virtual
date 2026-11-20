@@ -2,10 +2,11 @@ import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
 import type { Directory } from '../hooks/useExtensionMessages.js';
 import type { AgentView } from '../views/agentViews.js';
+import { inOfficeOnly } from '../views/inOffice.js';
 import { useWorkspaceViews } from './useWorkspaceViews.js';
 import { WorkspaceBar } from './WorkspaceBar.js';
 import { WorkspaceDialog } from './WorkspaceDialog.js';
-import { ALL, type Workspace, workspaceToShow } from './workspaceRules.js';
+import { ALL, needsByWorkspace, type Workspace, workspaceToShow } from './workspaceRules.js';
 import { selectWorkspace } from './workspaceStore.js';
 
 const lastSegment = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
@@ -23,6 +24,8 @@ export function useWorkspaceLayer(input: {
   shownAgentId: number | null;
   showTab: (agentId: number) => void;
   directories: Directory[];
+  /** The screen shows only the office's own agents (`showsOfficeOnly`). */
+  officeOnly?: boolean;
 }): {
   shown: AgentView[];
   tabIds: number[] | undefined;
@@ -34,6 +37,9 @@ export function useWorkspaceLayer(input: {
 } {
   const { enabled, views, terminalAgentIds, shownAgentId, showTab } = input;
   const ws = useWorkspaceViews(views);
+  // The tabs' «waiting» counts what the screen shows: on Núcleo, the graph
+  // and the Asistente, a session from outside the office is not counted.
+  const needs = input.officeOnly ? needsByWorkspace(inOfficeOnly(views), ws.state) : ws.needs;
   const [editing, setEditing] = useState<Workspace | null | undefined>(undefined);
   const filtering = enabled && ws.state.current !== ALL;
   const shown = filtering ? ws.shown : views;
@@ -70,7 +76,7 @@ export function useWorkspaceLayer(input: {
     bar: enabled ? (
       <WorkspaceBar
         state={ws.state}
-        needs={ws.needs}
+        needs={needs}
         onNew={() => setEditing(null)}
         onEdit={setEditing}
       />

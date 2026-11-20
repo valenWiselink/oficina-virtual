@@ -19,6 +19,7 @@ import { useWritableAgents } from '../terminal/agentInput.js';
 import { type AgentView, KIND_COLOR } from '../views/agentViews.js';
 import type { BoardActions } from '../views/BoardCard.js';
 import { callsForYou } from '../views/controlRules.js';
+import { inOfficeOnly } from '../views/inOffice.js';
 import { JarvisPresence, type PresenceHandle } from './JarvisPresence.js';
 import { needKeyOf, nextMeeting, untilText, workingCount } from './nucleoRules.js';
 
@@ -287,7 +288,11 @@ export function NucleoView({
   onSummonJarvis?: () => void;
   asked?: AskedPermission;
 }) {
-  const model = useNowQueue(views, jarvis?.id);
+  // Only the office's own agents, in every list and count here: a VS Code or
+  // desktop-app session showed up «Terminó» and could not be brought in
+  // (2026-11-20, as #42 did for the graph).
+  const office = inOfficeOnly(views);
+  const model = useNowQueue(office, jarvis?.id);
   const meetingsMsg = useUpcomingMeetings();
   const meetings = meetingsMsg?.connected ? meetingsMsg.meetings : [];
   const state = useJarvisChatState(jarvis, true);
@@ -296,7 +301,7 @@ export function NucleoView({
   const presence = useRef<PresenceHandle>(null);
   const [conversing, setConversing] = useState(false);
   const quiet = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const others = views.filter((v) => v.id !== jarvis?.id);
+  const others = office.filter((v) => v.id !== jarvis?.id);
 
   const link: JarvisLink | undefined = jarvis
     ? {
@@ -344,7 +349,7 @@ export function NucleoView({
         <JarvisPresence
           ref={presence}
           jarvis={jarvis}
-          needKey={needKeyOf(views, model)}
+          needKey={needKeyOf(others, model)}
           compact={conversing}
           working={workingCount(others)}
         />

@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentView } from '../src/views/agentViews.js';
-import {
-  filterCounts,
-  filterFocus,
-  inOfficeOnly,
-  matchesFilter,
-} from '../src/views/graphFilter.js';
+import { filterCounts, filterFocus, matchesFilter } from '../src/views/graphFilter.js';
+import { inOfficeOnly, showsOfficeOnly } from '../src/views/inOffice.js';
 
 const view = (id: number, over: Partial<AgentView> = {}): AgentView => ({
   id,
@@ -58,5 +54,12 @@ describe('who the graph draws', () => {
   it('only the agents that run in the office, not VS Code or desktop-app sessions', () => {
     const views = [view(1, { canSetRun: true }), view(2), view(3, { canSetRun: true })];
     expect(inOfficeOnly(views).map((v) => v.id)).toEqual([1, 3]);
+  });
+
+  it('only the board keeps the sessions from outside the office', () => {
+    expect(showsOfficeOnly('tablero')).toBe(false);
+    expect(showsOfficeOnly('nucleo')).toBe(true);
+    expect(showsOfficeOnly('grafo')).toBe(true);
+    expect(showsOfficeOnly('control')).toBe(true);
   });
 });
