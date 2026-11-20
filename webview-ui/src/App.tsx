@@ -67,6 +67,7 @@ import { requestCelebration } from './views/celebrate.js';
 import { DayKeeper } from './views/DayKeeper.js';
 import { revealOnGraph } from './views/graphReveal.js';
 import { GraphView } from './views/GraphView.js';
+import { showsOfficeOnly } from './views/inOffice.js';
 import { OfficeCheers } from './views/OfficeCheers.js';
 import { useOfficeLife } from './views/officeLife.js';
 import { useReadMarks } from './views/unread.js';
@@ -341,6 +342,7 @@ function App() {
     shownAgentId: terminalDrawer.shownAgentId,
     showTab: terminalDrawer.showTab,
     directories,
+    officeOnly: showsOfficeOnly(shownView),
   });
   // Opening an agent from anywhere global (Alt+N, Ctrl+K, the history)
   // first switches to a workspace where it shows; the graph, if on screen,

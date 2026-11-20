@@ -274,9 +274,11 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   `element.animate`; never in calm mode or with reduced motion);
   the graph: `GraphView`, `useGraphCanvas` (camera, gestures, minimap),
   `graphScene` (layout, drawing), `graphDraw` (procedural Clawd), `graphSim`.
-  The graph draws only agents that run in the office (`inOfficeOnly`, by
-  `canSetRun`); VS Code and desktop-app sessions stay on the board, and
-  Jarvis's `equipo` lists them apart («No corren en la oficina»).
+  Núcleo, the graph and the Asistente show only agents that run in the
+  office (`views/inOffice.ts`: `inOfficeOnly` by `canSetRun`,
+  `showsOfficeOnly` for the workspace tabs' counts); VS Code and
+  desktop-app sessions stay on the board, and Jarvis's `equipo` lists them
+  apart («No corren en la oficina»).
 - `components/TerminalDrawer.tsx` and friends — the docked panel: agent tabs,
   per-pane header, Chat | Terminal, split with a pinned agent, search.
 - `chat/` — chat view of a transcript; sending pastes into the agent's PTY.

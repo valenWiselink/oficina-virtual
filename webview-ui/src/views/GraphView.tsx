@@ -12,12 +12,12 @@ import {
   SlowNotice,
 } from './GraphChrome.js';
 import { GraphContextMenu } from './GraphContextMenu.js';
-import { inOfficeOnly } from './graphFilter.js';
 import { GraphFilterBar } from './GraphFilterBar.js';
 import { GraphHoverCard } from './GraphHoverCard.js';
 import { GraphMeetingBanner } from './GraphMeetingBanner.js';
 import { GraphMemberPanel } from './GraphMemberPanel.js';
 import { GraphPillActions } from './GraphPillActions.js';
+import { inOfficeOnly } from './inOffice.js';
 import { useGraphView } from './useGraphView.js';
 
 type GraphState = ReturnType<typeof useGraphView>;
