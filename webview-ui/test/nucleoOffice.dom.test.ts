@@ -5,6 +5,8 @@
  * hears; Núcleo (1.0.54) listed them again on its right: «¿Qué me estás
  * queriendo decir?» (Terminó), a desktop-app conversation that, touched,
  * only said «Traer a la oficina… no la puede traer» (2026-11-20).
+ * 2026-11-26: the ones outside that work or need him peek in, folded and
+ * closed, as «Otras sesiones»; finished ones stay out.
  */
 import './browserTicks.ts';
 
@@ -57,6 +59,14 @@ const vscode = agent(4, 'webapp-vscode', {
   canSetRun: false,
   hasTerminal: false,
 });
+/** A desktop-app session that waits on Jarvis: stopped, not shown. */
+const attended = agent(6, 'Programas para ver fotos Nikon', {
+  kind: 'work',
+  statusText: 'Lo atiende Jarvis',
+  canSetRun: false,
+  hasTerminal: false,
+  askingSupervisor: { id: 1, name: 'Jarvis' },
+});
 /** A VS Code session holding a permission: answered in VS Code, not here. */
 const asking = agent(5, 'permiso-vscode', {
   kind: 'needs',
@@ -95,7 +105,7 @@ beforeEach(() => {
     root.render(
       createElement(NucleoView, {
         // What App hands it: the office without Jarvis, outsiders included.
-        views: [penta, desktop, vscode, asking],
+        views: [penta, desktop, vscode, asking, attended],
         actions: { onSelect: (id: number) => selected.push(id) },
         jarvis,
       }),
@@ -119,11 +129,27 @@ const section = (label: string): HTMLElement => {
 describe('Núcleo shows only the agents that run in the office', () => {
   it('lists the office agent and none of the outside sessions', () => {
     const agents = section('Agentes');
-    const names = [...agents.querySelectorAll('li')].map((li) => li.textContent ?? '');
+    const names = [...agents.querySelectorAll(':scope > ul > li')].map(
+      (li) => li.textContent ?? '',
+    );
     assert.equal(names.length, 1);
     assert.match(names[0], /penta/);
     assert.doesNotMatch(document.body.textContent ?? '', /Qué me estás queriendo decir/);
-    assert.doesNotMatch(document.body.textContent ?? '', /webapp-vscode/);
+    assert.doesNotMatch(document.body.textContent ?? '', /fotos Nikon/);
+  });
+
+  it('folds the outside ones that work or need him, closed at first', () => {
+    const others = section('Agentes').querySelector('details');
+    assert.ok(others, '«Otras sesiones» is there');
+    assert.equal(others.open, false);
+    assert.match(
+      others.querySelector('summary')?.textContent ?? '',
+      /Otras sesiones 2 · 1 te necesita/,
+    );
+    const inside = [...others.querySelectorAll('li')].map((li) => li.textContent ?? '');
+    assert.equal(inside.length, 2);
+    assert.match(inside.join(' '), /webapp-vscode/);
+    assert.match(inside.join(' '), /permiso-vscode/);
   });
 
   it('counts only the office agents at work', () => {

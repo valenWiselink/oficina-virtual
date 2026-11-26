@@ -20,9 +20,36 @@ export function untilText(meeting: Meeting, now: number): string {
   return rest > 0 ? `en ${h} h ${rest} min` : `en ${h} h`;
 }
 
+const BUSY: readonly AgentView['kind'][] = ['work', 'think', 'research', 'meet'];
+
+/** Doing something right now: busy, and not one that only waits for its
+ *  supervisor («Lo atiende Jarvis» is painted as working, but it is stopped). */
+export function isWorking(v: Pick<AgentView, 'kind' | 'askingSupervisor'>): boolean {
+  return BUSY.includes(v.kind) && !v.askingSupervisor;
+}
+
 /** Agents doing something right now. */
 export function workingCount(views: readonly AgentView[]): number {
-  return views.filter((v) => ['work', 'think', 'research', 'meet'].includes(v.kind)).length;
+  return views.filter(isWorking).length;
+}
+
+/** A session outside the office that wrote nothing for this long is not
+ *  working, whatever its last state says (a desktop-app window closed mid-turn
+ *  keeps «Corriendo» forever). */
+export const OUTSIDE_STILL_MS = 30 * MIN;
+
+/**
+ * The sessions outside the office (VS Code, the desktop app) worth a look in
+ * Núcleo's folded «Otras sesiones»: the ones that need Valentín (a permission,
+ * a «Te toca») or really work. Finished ones and the ones Jarvis attends stay
+ * out: they filled «En marcha» and its count (2026-11-26).
+ */
+export function outsideWorthSeeing(outside: readonly AgentView[], now: number): AgentView[] {
+  return outside.filter(
+    (v) =>
+      callsForYou(v) ||
+      (isWorking(v) && (v.lastRecordAt === undefined || now - v.lastRecordAt < OUTSIDE_STILL_MS)),
+  );
 }
 
 /**
