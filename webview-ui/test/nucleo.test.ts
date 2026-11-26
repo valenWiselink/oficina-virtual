@@ -13,8 +13,11 @@ import {
 import {
   coordinating,
   isThinking,
+  isWorking,
   needKeyOf,
   nextMeeting,
+  OUTSIDE_STILL_MS,
+  outsideWorthSeeing,
   presencePhrase,
   speakingPlan,
   untilText,
@@ -92,6 +95,25 @@ describe('Núcleo: the agents', () => {
         view({ id: 4, kind: 'needs' }),
       ]),
     ).toBe(2);
+  });
+
+  it('one waiting for Jarvis is not counted as working', () => {
+    const attended = view({ id: 5, kind: 'work', askingSupervisor: { id: 9, name: 'Jarvis' } });
+    expect(isWorking(attended)).toBe(false);
+    expect(workingCount([attended, view({ id: 6, kind: 'work' })])).toBe(1);
+  });
+
+  it('of the sessions outside, only the ones that work or need him peek in', () => {
+    const outside = [
+      view({ id: 1, kind: 'done', statusText: 'Terminó' }),
+      view({ id: 2, kind: 'idle' }),
+      view({ id: 3, kind: 'work', askingSupervisor: { id: 9, name: 'Jarvis' } }),
+      view({ id: 4, kind: 'work', lastRecordAt: NOW - 2 * MIN }),
+      view({ id: 5, kind: 'needs', yourTurnId: 't1' }),
+      view({ id: 6, kind: 'done', permission: { requestId: 'r2' } as AgentView['permission'] }),
+      view({ id: 7, kind: 'work', lastRecordAt: NOW - OUTSIDE_STILL_MS - MIN }),
+    ];
+    expect(outsideWorthSeeing(outside, NOW).map((v) => v.id)).toEqual([4, 5, 6]);
   });
 
   it('a new permission or a new first «Te toca» changes what needs him', () => {

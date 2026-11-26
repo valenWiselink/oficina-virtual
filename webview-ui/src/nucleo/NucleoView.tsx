@@ -21,7 +21,13 @@ import type { BoardActions } from '../views/BoardCard.js';
 import { callsForYou } from '../views/controlRules.js';
 import { inOfficeOnly } from '../views/inOffice.js';
 import { JarvisPresence, type PresenceHandle } from './JarvisPresence.js';
-import { needKeyOf, nextMeeting, untilText, workingCount } from './nucleoRules.js';
+import {
+  needKeyOf,
+  nextMeeting,
+  outsideWorthSeeing,
+  untilText,
+  workingCount,
+} from './nucleoRules.js';
 
 const ARTIFACTS_SHOWN = 4;
 /** After the last key or answer, the sphere stays small this long. */
@@ -162,14 +168,66 @@ function NeedsColumn({
   );
 }
 
+/** One agent in «En marcha»: its state dot, name and what it does. */
+function AgentRow({ view: v, actions }: { view: AgentView; actions: BoardActions }) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => actions.onSelect(v.id)}
+        title={`${v.name}: ${v.statusText}`}
+        className="w-full flex items-baseline gap-8 py-4 border-0 bg-transparent text-left cursor-pointer rounded-sm hover:bg-bg-thumb focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <span
+          className="w-7 h-7 rounded-full shrink-0 translate-y-[-1px]"
+          style={{ background: KIND_COLOR[v.kind] }}
+          aria-hidden="true"
+        />
+        <span className="text-xs font-semibold text-text shrink-0">{v.name}</span>
+        <span className="flex-1 min-w-0 text-2xs text-text-muted truncate">{v.statusText}</span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * The sessions outside the office that work or need him, folded and closed
+ * at first (2026-11-26): «En marcha» is the office's; these only peek in.
+ */
+function OtherSessions({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
+  if (views.length === 0) return null;
+  const needing = views.filter(callsForYou).length;
+  return (
+    <details className="group pt-6">
+      <summary className="cursor-pointer text-2xs font-mono uppercase tracking-wider text-text-muted">
+        Otras sesiones {views.length}
+        {needing > 0 && (
+          <span className="normal-case tracking-normal font-sans">
+            {' · '}
+            {needing === 1 ? '1 te necesita' : `${needing} te necesitan`}
+          </span>
+        )}
+      </summary>
+      <ul className="m-0 p-0 pt-4 list-none flex flex-col">
+        {views.map((v) => (
+          <AgentRow key={v.id} view={v} actions={actions} />
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 /** «En marcha»: the agents and what each does, the rest of today, the artifacts. */
 function UnderwayColumn({
   views,
+  outside,
   actions,
   model,
   meetings,
 }: {
   views: AgentView[];
+  /** Sessions outside the office worth a look (`outsideWorthSeeing`). */
+  outside: AgentView[];
   actions: BoardActions;
   model: NowModel;
   meetings: readonly Meeting[];
@@ -193,27 +251,11 @@ function UnderwayColumn({
         ) : (
           <ul className="m-0 p-0 list-none flex flex-col">
             {views.map((v) => (
-              <li key={v.id}>
-                <button
-                  type="button"
-                  onClick={() => actions.onSelect(v.id)}
-                  title={`${v.name}: ${v.statusText}`}
-                  className="w-full flex items-baseline gap-8 py-4 border-0 bg-transparent text-left cursor-pointer rounded-sm hover:bg-bg-thumb focus-visible:outline-2 focus-visible:outline-accent"
-                >
-                  <span
-                    className="w-7 h-7 rounded-full shrink-0 translate-y-[-1px]"
-                    style={{ background: KIND_COLOR[v.kind] }}
-                    aria-hidden="true"
-                  />
-                  <span className="text-xs font-semibold text-text shrink-0">{v.name}</span>
-                  <span className="flex-1 min-w-0 text-2xs text-text-muted truncate">
-                    {v.statusText}
-                  </span>
-                </button>
-              </li>
+              <AgentRow key={v.id} view={v} actions={actions} />
             ))}
           </ul>
         )}
+        <OtherSessions views={outside} actions={actions} />
       </section>
       {later.length > 0 && (
         <section aria-label="Agenda" className="flex flex-col gap-4">
@@ -302,6 +344,12 @@ export function NucleoView({
   const [conversing, setConversing] = useState(false);
   const quiet = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const others = office.filter((v) => v.id !== jarvis?.id);
+  // Jarvis still sees and writes to the ones outside (equipo, SendMessage):
+  // here only those that work or need him, folded.
+  const outside = outsideWorthSeeing(
+    views.filter((v) => !v.canSetRun && v.id !== jarvis?.id),
+    model.now,
+  );
 
   const link: JarvisLink | undefined = jarvis
     ? {
@@ -368,7 +416,13 @@ export function NucleoView({
         </div>
       </section>
       <div className="min-h-0 hidden @min-[1100px]:flex">
-        <UnderwayColumn views={others} actions={actions} model={model} meetings={meetings} />
+        <UnderwayColumn
+          views={others}
+          outside={outside}
+          actions={actions}
+          model={model}
+          meetings={meetings}
+        />
       </div>
     </div>
   );
