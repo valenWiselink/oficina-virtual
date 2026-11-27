@@ -67,6 +67,10 @@ import { UsageLimitsWatch } from './usageLimits/usageLimitsWatch.js';
 import { gpuEars } from './voice/gpuEars.js';
 import { isLoopbackHost, normalizeHostname, startupUrl } from './wsAuth.js';
 
+/** A refused supervisor is relaunched this long after it shows (ms): its
+ *  attach settles and its first turn starts before the relaunch queues. */
+const MCP_HEAL_DELAY_MS = 5_000;
+
 // ── Argument parsing ──────────────────────────────────────────
 
 export interface CliArgs {
@@ -567,6 +571,19 @@ async function main(): Promise<void> {
             permissionBroker.pending().some((p) => p.sessionId === agent.sessionId),
         })
       : undefined;
+    // A supervisor the MCP route had to refuse (it woke before the office knew
+    // it, and did not show in time): relaunched once it shows, so it does not
+    // stay without tools until someone reconnects it by hand.
+    if (jarvisKeeper) {
+      store.on('agentAdded', (id, added) => {
+        setTimeout(() => {
+          const agent = store.get(id);
+          if (!agent?.supervision || agent.sessionId !== added.sessionId) return;
+          if (!supervisors().takeMcpRefused(agent.sessionId)) return;
+          void jarvisKeeper.healRefused(id, agent.sessionId);
+        }, MCP_HEAL_DELAY_MS);
+      });
+    }
     void resumeOfficeSessions(
       { store, runtime, ptyManager, provider: claudeProvider },
       adapter.getSetting('pixel-agents.bypassPermissions', false),

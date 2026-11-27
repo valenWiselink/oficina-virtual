@@ -374,9 +374,33 @@ function promptNeedsTerminal(prompt: string | undefined): boolean {
  * the office leaves it running. Anything that does not fit (an untrusted
  * folder, `claude --bg` failing) launches it the regular way instead.
  */
+/** Sessions being resumed right now: a supervisor resumed in the background
+ *  calls the office's MCP before its terminal is attached, and that must not
+ *  start a second launch of the same session (supervisorMcp → revive). */
+const resuming = new Set<string>();
+
+export function isResuming(sessionId: string): boolean {
+  return resuming.has(sessionId);
+}
+
 export async function launchAgent(
   deps: LaunchStandaloneAgentDeps,
   options: LaunchStandaloneAgentOptions = {},
+): Promise<number | null> {
+  const resumingId = options.resume?.sessionId;
+  if (!resumingId) return launchAgentNow(deps, options);
+  if (resuming.has(resumingId)) return null;
+  resuming.add(resumingId);
+  try {
+    return await launchAgentNow(deps, options);
+  } finally {
+    resuming.delete(resumingId);
+  }
+}
+
+async function launchAgentNow(
+  deps: LaunchStandaloneAgentDeps,
+  options: LaunchStandaloneAgentOptions,
 ): Promise<number | null> {
   if (!backgroundAgentsOn() || !deps.ptyManager.isAvailable()) {
     return launchStandaloneAgent(deps, options);
@@ -385,9 +409,28 @@ export async function launchAgent(
   const cwd = resume?.cwd ?? options.directoryPath ?? process.cwd();
   try {
     if (resume?.bgId) {
-      // Still there (running, done or stopped: attaching wakes it).
+      // Still there (running, done or stopped: attaching wakes it). A failed
+      // one does NOT wake by attaching: its process died (out of memory on
+      // 27/11) and `claude attach` exits 1 at once, again and again, until
+      // the office gave up. It is revived with a bare `--resume <id> --bg`:
+      // Claude Code brings it back under the same id with the options it
+      // saved — the supervisor files and token it was started with, which
+      // the office still honours. New files here would revoke that token
+      // while Claude kept using it: a supervisor without tools.
       const row = await findBackground(resume.bgId, cwd);
-      if (row && row.sessionId === resume.sessionId) {
+      if (row && row.state === 'failed') {
+        console.warn(`[Pixel Agents] Background session ${resume.bgId} failed: reviving it`);
+        const revived = await startBackground(cwd, ['--resume', resume.sessionId, '--bg']);
+        if (revived.sessionId === resume.sessionId) {
+          return launchStandaloneAgent(deps, {
+            ...options,
+            attach: { ...revived, name: resume.bgName ?? revived.bgId },
+          });
+        }
+        // Claude made a copy instead: drop it, resume the regular way.
+        await stopBackground(revived.bgId, cwd);
+        return launchStandaloneAgent(deps, options);
+      } else if (row && row.sessionId === resume.sessionId) {
         return launchStandaloneAgent(deps, {
           ...options,
           attach: { bgId: row.id, sessionId: resume.sessionId, name: resume.bgName },

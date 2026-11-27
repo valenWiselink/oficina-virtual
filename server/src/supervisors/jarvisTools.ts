@@ -28,7 +28,11 @@ import { claudeProvider } from '../providers/index.js';
 import { closeOfficeAgent } from '../terminal/closeAgent.js';
 import { handOffText, sendToTerminal } from '../terminal/handOff.js';
 import type { PtySessionManager } from '../terminal/ptySessionManager.js';
-import { launchAgent } from '../terminal/standaloneAgentLauncher.js';
+import {
+  isResuming,
+  launchAgent,
+  type LaunchStandaloneAgentDeps,
+} from '../terminal/standaloneAgentLauncher.js';
 import { windowEnters } from '../terminal/windowInput.js';
 import type { AgentState } from '../types.js';
 import { JARVIS_NAME, Notebook } from './jarvis.js';
@@ -55,6 +59,10 @@ export interface JarvisDeps extends ToolDeps {
   /** Where an agent can be opened: the office's folders and recent ones. */
   folders?: () => Array<{ name: string; path: string }>;
   notebook?: Notebook;
+  /** Bring back a supervisor the office lost track of (its session runs or
+   *  can be resumed, but no terminal of the office shows it): supervisorMcp
+   *  calls it when a known token arrives with no live supervisor. */
+  reviveSupervisor?: (sessionId: string) => void;
 }
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
@@ -683,10 +691,12 @@ export function jarvisPowers(office: {
   store: AgentStateStore;
   runtime?: AgentRuntime;
   ptyManager?: PtySessionManager;
-}): Pick<JarvisDeps, 'launch' | 'close' | 'folders'> {
+}): Pick<JarvisDeps, 'launch' | 'close' | 'folders' | 'reviveSupervisor'> {
   const { store, runtime, ptyManager } = office;
   if (!runtime || !ptyManager) return {};
   return {
+    reviveSupervisor: (sessionId) =>
+      reviveSupervisor({ store, runtime, ptyManager, provider: claudeProvider }, sessionId),
     launch: (o) =>
       launchAgent(
         { store, runtime, ptyManager, provider: claudeProvider },
@@ -709,4 +719,32 @@ export function jarvisPowers(office: {
       ];
     },
   };
+}
+
+/** Sessions being brought back now: several MCP calls arrive at once. */
+const reviving = new Map<string, number>();
+const REVIVE_GRACE_MS = 60_000;
+
+/**
+ * Attach (or resume) a supervisor the office lost: it is one of the office's
+ * resumable sessions but no live agent shows it. Once per minute per session.
+ */
+export function reviveSupervisor(deps: LaunchStandaloneAgentDeps, sessionId: string): void {
+  const { store, runtime } = deps;
+  for (const agent of store.values()) if (agent.sessionId === sessionId) return;
+  // The office is resuming it right now: its terminal comes with that launch.
+  if (isResuming(sessionId)) return;
+  const record = runtime.resumableSessions?.list().find((s) => s.sessionId === sessionId);
+  if (!record) return;
+  const now = Date.now();
+  if (now - (reviving.get(sessionId) ?? 0) < REVIVE_GRACE_MS) return;
+  reviving.set(sessionId, now);
+  console.log(`[Pixel Agents] MCP: bringing supervisor ${sessionId.slice(0, 8)} back`);
+  const bypassPermissions =
+    store.getAdapter()?.getSetting('pixel-agents.bypassPermissions', false) ?? false;
+  void launchAgent(deps, { resume: record, bypassPermissions }).catch((err: unknown) =>
+    console.warn(
+      `[Pixel Agents] MCP: could not bring ${sessionId.slice(0, 8)} back: ${String(err)}`,
+    ),
+  );
 }

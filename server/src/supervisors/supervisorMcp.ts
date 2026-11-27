@@ -133,6 +133,44 @@ export function supervisorMcpServer(deps: JarvisDeps, supervisorId: number): Mcp
   return server;
 }
 
+/** How long a known token waits for its supervisor to show (ms). Claude
+ *  Code gives an MCP server about 30 s to connect: this answers before that. */
+export const SUPERVISOR_WAIT_MS = 20_000;
+const SUPERVISOR_POLL_MS = 250;
+
+/**
+ * The supervisor a request comes from. A token the office handed out whose
+ * supervisor is not live yet (it woke before the office attached it again:
+ * revived by hand, or a background session faster than the attach) is not
+ * refused at once: a 401 makes Claude Code mark the server failed for good,
+ * so the supervisor would stay without tools until someone reconnects it by
+ * hand. The office is asked to bring it in and the request waits for it.
+ * Still not there: refused, and noted so the office relaunches it once it
+ * shows (with a fresh token, in the right order).
+ */
+export async function supervisorFor(
+  deps: Pick<JarvisDeps, 'registry' | 'reviveSupervisor'>,
+  token: string | undefined,
+  waitMs = SUPERVISOR_WAIT_MS,
+): Promise<number | undefined> {
+  const live = deps.registry.supervisorByToken(token);
+  if (live !== undefined) return live;
+  const sessionId = deps.registry.sessionOfToken(token);
+  if (!sessionId) return undefined;
+  deps.reviveSupervisor?.(sessionId);
+  const until = Date.now() + waitMs;
+  while (Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, SUPERVISOR_POLL_MS));
+    const id = deps.registry.supervisorByToken(token);
+    if (id !== undefined) return id;
+  }
+  console.warn(
+    `[Pixel Agents] MCP: supervisor ${sessionId.slice(0, 8)} did not show in ${waitMs} ms: refused, relaunched when it shows`,
+  );
+  deps.registry.noteMcpRefused(sessionId);
+  return undefined;
+}
+
 /** POST /mcp: authenticate the supervisor by its token, then serve its tools. */
 export function registerSupervisorMcp(
   app: FastifyInstance,
@@ -146,7 +184,7 @@ export function registerSupervisorMcp(
     if (!host || !allowedHostnames.has(host)) {
       return reply.code(403).send({ error: 'forbidden host' });
     }
-    const supervisorId = deps.registry.supervisorByToken(bearerOf(request.headers.authorization));
+    const supervisorId = await supervisorFor(deps, bearerOf(request.headers.authorization));
     if (supervisorId === undefined) return reply.code(401).send({ error: 'unauthorized' });
     if (request.method !== 'POST') {
       return reply.code(405).header('allow', 'POST').send({ error: 'method not allowed' });

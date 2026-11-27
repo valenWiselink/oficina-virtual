@@ -12,6 +12,7 @@ import {
   noteJarvisChoice,
   readJarvisState,
   updateJarvisState,
+  usableFolder,
   wakePrompt,
 } from '../src/supervisors/jarvisKeeper.js';
 import { roleHash, SupervisionTeams, SupervisorRegistry } from '../src/supervisors/supervision.js';
@@ -188,5 +189,33 @@ describe('which role a supervisor was launched with', () => {
     expect(again.roleOf('s9')).toBe(CURRENT);
     again.forget('s9');
     expect(again.roleOf('s9')).toBeUndefined();
+  });
+});
+
+describe('Jarvis keeper: folders it can use (27/11)', () => {
+  it('knows a folder that is not there, a file or a relative path is not one', () => {
+    expect(usableFolder(folder)).toBe(true);
+    expect(usableFolder('/tmp/backend-que-no-existe-27-11')).toBe(false);
+    expect(usableFolder(undefined)).toBe(false);
+    expect(usableFolder('relativa')).toBe(false);
+    fs.writeFileSync(path.join(dir, 'archivo'), 'x');
+    expect(usableFolder(path.join(dir, 'archivo'))).toBe(false);
+  });
+
+  it('does not learn a folder that is not there (the launch dialog offered /tmp/backend)', async () => {
+    updateJarvisState({ folder }, stateFile);
+    const { k, store } = keeper(at(22, 10), { roles: { s1: CURRENT } });
+    addJarvis(store, 1, { cwd: path.join(dir, 'no-existe') });
+    await k.onOfficeStart();
+    await k.tick();
+    expect(readJarvisState(stateFile).folder).toBe(folder);
+  });
+
+  it('relaunches a supervisor whose MCP was refused, and says so in its notebook', async () => {
+    const { k, store, calls, notes } = keeper(at(22, 10), { roles: { s1: CURRENT } });
+    addJarvis(store, 1);
+    await k.healRefused(1, 's1');
+    expect(calls).toEqual(['relaunch 1']);
+    expect(notes[0]).toContain('sin conexión');
   });
 });

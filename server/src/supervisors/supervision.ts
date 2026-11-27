@@ -398,6 +398,29 @@ export class SupervisorRegistry {
     return ids;
   }
 
+  /**
+   * The session a token was handed to, live or not. A supervisor that woke
+   * before the office knew it again (its background session revived by hand,
+   * or faster than the office's attach) calls with a token that is valid but
+   * has no live agent yet: the MCP route waits for it instead of refusing.
+   */
+  sessionOfToken(token: string | undefined): string | undefined {
+    return token ? this.tokens.get(token) : undefined;
+  }
+
+  /** Supervisors the MCP route had to refuse after waiting (their Claude Code
+   *  marks the server failed and never retries): relaunched once they show. */
+  private readonly mcpRefused = new Set<string>();
+
+  noteMcpRefused(sessionId: string): void {
+    this.mcpRefused.add(sessionId);
+  }
+
+  /** True once per refused session: whoever relaunches it clears the mark. */
+  takeMcpRefused(sessionId: string): boolean {
+    return this.mcpRefused.delete(sessionId);
+  }
+
   /** The live supervisor holding this token, if any. */
   supervisorByToken(token: string | undefined): number | undefined {
     const sessionId = token ? this.tokens.get(token) : undefined;
