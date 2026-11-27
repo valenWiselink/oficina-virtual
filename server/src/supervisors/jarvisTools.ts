@@ -17,6 +17,7 @@ import { identityMessage, runningBackground, spokenName } from '../agentIdentity
 import type { AgentRuntime } from '../agentRuntime.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
+import { describeServer, devServerWatch } from '../devServers.js';
 import { listDirectories, normalizeDirectoryPath, validateDirectoryPath } from '../directories.js';
 import { collectDirectorySuggestions } from '../directorySuggestions.js';
 import { hostDirectory } from '../hostDirectory.js';
@@ -531,6 +532,32 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
       inputSchema: { agente: z.string().describe('Nombre o id del agente') },
     },
     ({ agente }) => text(tools.cerrarAgente(agente)),
+  );
+  server.registerTool(
+    'servidores_sin_agente',
+    {
+      description:
+        'Los servidores de desarrollo (next dev) que quedaron sin el agente que los levantó: puerto, carpeta y memoria. Ocupan memoria hasta que alguien los cierra.',
+    },
+    async () => {
+      const list = await devServerWatch.list();
+      return text(
+        list.length === 0
+          ? 'No hay servidores de desarrollo sin agente.'
+          : list.map((s) => `- ${describeServer(s)}`).join('\n'),
+      );
+    },
+  );
+  server.registerTool(
+    'cerrar_servidor',
+    {
+      description:
+        'Cierra un servidor de desarrollo que quedó sin agente (de servidores_sin_agente), por su puerto. Antes fijate que ningún agente lo use: alguien puede tenerlo abierto en Chrome o trabajar en esa carpeta.',
+      inputSchema: {
+        puerto: z.number().int().describe('El puerto del servidor, por ejemplo 3210'),
+      },
+    },
+    async ({ puerto }) => text(await devServerWatch.close(puerto)),
   );
   server.registerTool(
     'pasar_resultado',

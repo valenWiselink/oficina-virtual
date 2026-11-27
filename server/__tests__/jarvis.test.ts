@@ -444,6 +444,8 @@ describe('the MCP server', () => {
         'pasar_resultado',
         'pendientes',
         'resolver_pendientes',
+        'cerrar_servidor',
+        'servidores_sin_agente',
       ].sort(),
     );
   });
