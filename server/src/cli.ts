@@ -35,6 +35,7 @@ import {
   WILDCARD_HOSTNAMES,
 } from './constants.js';
 import { DayLog } from './dayLog.js';
+import { devServerWatch } from './devServers.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { HookHealth, setCurrentHookHealth } from './hookHealth.js';
 import { AskMerger } from './pendingAsks/askMerger.js';
@@ -50,6 +51,7 @@ import { watchAgentPrs } from './prWatchWiring.js';
 import { PixelAgentsServer } from './server.js';
 import { setSpanishTerminal } from './spinnerSettings.js';
 import { CloseWatch } from './supervisors/closeWatch.js';
+import { liveJarvis } from './supervisors/jarvis.js';
 import { officeJarvisKeeper } from './supervisors/jarvisWiring.js';
 import { supervisors } from './supervisors/supervision.js';
 import { SupervisorRelay } from './supervisors/supervisorRelay.js';
@@ -66,6 +68,10 @@ import { uninstallStatusLine } from './usageLimits/statusLineInstaller.js';
 import { UsageLimitsWatch } from './usageLimits/usageLimitsWatch.js';
 import { gpuEars } from './voice/gpuEars.js';
 import { isLoopbackHost, normalizeHostname, startupUrl } from './wsAuth.js';
+
+/** A refused supervisor is relaunched this long after it shows (ms): its
+ *  attach settles and its first turn starts before the relaunch queues. */
+const MCP_HEAL_DELAY_MS = 5_000;
 
 // ── Argument parsing ──────────────────────────────────────────
 
@@ -385,6 +391,17 @@ async function main(): Promise<void> {
     });
     closeWatch.start();
 
+    // Dev servers whose agent is gone (27/11: they ran Windows out of memory):
+    // Jarvis hears of each once and closes the ones nobody uses.
+    devServerWatch.start({
+      transcripts: () => [...store.values()].map((a) => a.jsonlFile).filter(Boolean),
+      tell: (line) => {
+        const jarvisId = liveJarvis(store);
+        if (jarvisId === undefined) console.log(`[Pixel Agents] ${line}`);
+        else supervisorRelay.notifySupervisor(jarvisId, line);
+      },
+    });
+
     // Whether Claude Code's hooks reach us: the transcripts list every one of
     // ours it cut or saw fail; past a threshold the office says so.
     const hookHealth = new HookHealth((status) => store.broadcast({ ...status }));
@@ -567,6 +584,19 @@ async function main(): Promise<void> {
             permissionBroker.pending().some((p) => p.sessionId === agent.sessionId),
         })
       : undefined;
+    // A supervisor the MCP route had to refuse (it woke before the office knew
+    // it, and did not show in time): relaunched once it shows, so it does not
+    // stay without tools until someone reconnects it by hand.
+    if (jarvisKeeper) {
+      store.on('agentAdded', (id, added) => {
+        setTimeout(() => {
+          const agent = store.get(id);
+          if (!agent?.supervision || agent.sessionId !== added.sessionId) return;
+          if (!supervisors().takeMcpRefused(agent.sessionId)) return;
+          void jarvisKeeper.healRefused(id, agent.sessionId);
+        }, MCP_HEAL_DELAY_MS);
+      });
+    }
     void resumeOfficeSessions(
       { store, runtime, ptyManager, provider: claudeProvider },
       adapter.getSetting('pixel-agents.bypassPermissions', false),
@@ -626,6 +656,7 @@ async function main(): Promise<void> {
       // Before the terminals go: going down is not each agent closing.
       runtime.pendingAsksWatch?.stop();
       closeWatch.stop();
+      devServerWatch.stop();
       runtime.resumableSessions?.freeze();
       terminalAsks.freeze();
       await ptyManager.disposeAll();

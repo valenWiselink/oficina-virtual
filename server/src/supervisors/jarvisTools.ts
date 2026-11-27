@@ -17,6 +17,7 @@ import { identityMessage, runningBackground, spokenName } from '../agentIdentity
 import type { AgentRuntime } from '../agentRuntime.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { LAUNCH_PROMPT_MAX_LENGTH } from '../clientMessageHandler.js';
+import { describeServer, devServerWatch } from '../devServers.js';
 import { listDirectories, normalizeDirectoryPath, validateDirectoryPath } from '../directories.js';
 import { collectDirectorySuggestions } from '../directorySuggestions.js';
 import { hostDirectory } from '../hostDirectory.js';
@@ -28,7 +29,11 @@ import { claudeProvider } from '../providers/index.js';
 import { closeOfficeAgent } from '../terminal/closeAgent.js';
 import { handOffText, sendToTerminal } from '../terminal/handOff.js';
 import type { PtySessionManager } from '../terminal/ptySessionManager.js';
-import { launchAgent } from '../terminal/standaloneAgentLauncher.js';
+import {
+  isResuming,
+  launchAgent,
+  type LaunchStandaloneAgentDeps,
+} from '../terminal/standaloneAgentLauncher.js';
 import { windowEnters } from '../terminal/windowInput.js';
 import type { AgentState } from '../types.js';
 import { JARVIS_NAME, Notebook } from './jarvis.js';
@@ -55,6 +60,10 @@ export interface JarvisDeps extends ToolDeps {
   /** Where an agent can be opened: the office's folders and recent ones. */
   folders?: () => Array<{ name: string; path: string }>;
   notebook?: Notebook;
+  /** Bring back a supervisor the office lost track of (its session runs or
+   *  can be resumed, but no terminal of the office shows it): supervisorMcp
+   *  calls it when a known token arrives with no live supervisor. */
+  reviveSupervisor?: (sessionId: string) => void;
 }
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
@@ -525,6 +534,32 @@ export function registerJarvisTools(server: McpServer, tools: JarvisTools): void
     ({ agente }) => text(tools.cerrarAgente(agente)),
   );
   server.registerTool(
+    'servidores_sin_agente',
+    {
+      description:
+        'Los servidores de desarrollo (next dev) que quedaron sin el agente que los levantó: puerto, carpeta y memoria. Ocupan memoria hasta que alguien los cierra.',
+    },
+    async () => {
+      const list = await devServerWatch.list();
+      return text(
+        list.length === 0
+          ? 'No hay servidores de desarrollo sin agente.'
+          : list.map((s) => `- ${describeServer(s)}`).join('\n'),
+      );
+    },
+  );
+  server.registerTool(
+    'cerrar_servidor',
+    {
+      description:
+        'Cierra un servidor de desarrollo que quedó sin agente (de servidores_sin_agente), por su puerto. Antes fijate que ningún agente lo use: alguien puede tenerlo abierto en Chrome o trabajar en esa carpeta.',
+      inputSchema: {
+        puerto: z.number().int().describe('El puerto del servidor, por ejemplo 3210'),
+      },
+    },
+    async ({ puerto }) => text(await devServerWatch.close(puerto)),
+  );
+  server.registerTool(
     'pasar_resultado',
     {
       description:
@@ -683,10 +718,12 @@ export function jarvisPowers(office: {
   store: AgentStateStore;
   runtime?: AgentRuntime;
   ptyManager?: PtySessionManager;
-}): Pick<JarvisDeps, 'launch' | 'close' | 'folders'> {
+}): Pick<JarvisDeps, 'launch' | 'close' | 'folders' | 'reviveSupervisor'> {
   const { store, runtime, ptyManager } = office;
   if (!runtime || !ptyManager) return {};
   return {
+    reviveSupervisor: (sessionId) =>
+      reviveSupervisor({ store, runtime, ptyManager, provider: claudeProvider }, sessionId),
     launch: (o) =>
       launchAgent(
         { store, runtime, ptyManager, provider: claudeProvider },
@@ -709,4 +746,32 @@ export function jarvisPowers(office: {
       ];
     },
   };
+}
+
+/** Sessions being brought back now: several MCP calls arrive at once. */
+const reviving = new Map<string, number>();
+const REVIVE_GRACE_MS = 60_000;
+
+/**
+ * Attach (or resume) a supervisor the office lost: it is one of the office's
+ * resumable sessions but no live agent shows it. Once per minute per session.
+ */
+export function reviveSupervisor(deps: LaunchStandaloneAgentDeps, sessionId: string): void {
+  const { store, runtime } = deps;
+  for (const agent of store.values()) if (agent.sessionId === sessionId) return;
+  // The office is resuming it right now: its terminal comes with that launch.
+  if (isResuming(sessionId)) return;
+  const record = runtime.resumableSessions?.list().find((s) => s.sessionId === sessionId);
+  if (!record) return;
+  const now = Date.now();
+  if (now - (reviving.get(sessionId) ?? 0) < REVIVE_GRACE_MS) return;
+  reviving.set(sessionId, now);
+  console.log(`[Pixel Agents] MCP: bringing supervisor ${sessionId.slice(0, 8)} back`);
+  const bypassPermissions =
+    store.getAdapter()?.getSetting('pixel-agents.bypassPermissions', false) ?? false;
+  void launchAgent(deps, { resume: record, bypassPermissions }).catch((err: unknown) =>
+    console.warn(
+      `[Pixel Agents] MCP: could not bring ${sessionId.slice(0, 8)} back: ${String(err)}`,
+    ),
+  );
 }

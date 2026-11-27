@@ -30,6 +30,20 @@ export interface JarvisState {
 /** Where it lives (resolved on use: tests move the home directory). */
 const stateFile = () => path.join(os.homedir(), SERVER_JSON_DIR, 'jarvis', 'estado.json');
 
+/**
+ * A folder Jarvis can start in: absolute, there, and a directory. On 27/11 it
+ * learned «/tmp/backend» (a test folder left in the office's config, which
+ * the launch dialog offered) and from then on could not start on its own.
+ */
+export function usableFolder(folder: string | undefined): folder is string {
+  if (!folder || !path.isAbsolute(folder)) return false;
+  try {
+    return fs.statSync(folder).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export function readJarvisState(file = stateFile()): JarvisState {
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
@@ -119,8 +133,19 @@ export class JarvisKeeper {
     return agent.isWaiting && !this.deps.hasPending(agent) && runningBackground(agent).length === 0;
   }
 
+  /** Relaunch a supervisor whose MCP the office had to refuse (supervisorMcp:
+   *  it woke before the office knew it; its Claude Code never retries): a
+   *  relaunch writes a fresh token before it starts, so it comes back whole. */
+  async healRefused(id: number, sessionId: string): Promise<void> {
+    this.deps.notebook?.add(
+      'La oficina me relanzó: me había quedado sin conexión con ella al arrancar.',
+    );
+    console.log(`[Pixel Agents] Relaunching ${sessionId.slice(0, 8)}: its MCP was refused`);
+    await this.deps.relaunch(id);
+  }
+
   private async wake(folder: string, reason: 'manana' | 'arranque'): Promise<boolean> {
-    if (!fs.existsSync(folder)) return false;
+    if (!usableFolder(folder)) return false;
     const id = await this.deps.launch(folder, wakePrompt(reason));
     if (id === null) return false;
     this.update({ day: localDay(this.now), folder });
@@ -134,7 +159,7 @@ export class JarvisKeeper {
     const state = this.state();
     if (found) {
       const [id, agent] = found;
-      if (agent.cwd && state.folder !== agent.cwd) this.update({ folder: agent.cwd });
+      if (usableFolder(agent.cwd) && state.folder !== agent.cwd) this.update({ folder: agent.cwd });
       if (!state.day) this.update({ day: localDay(this.now) });
       if (this.deps.roleOf(agent.sessionId) !== roleHash(jarvisPrompt())) {
         this.deps.notebook?.add(
@@ -156,7 +181,9 @@ export class JarvisKeeper {
       const today = localDay(now);
       const found = this.jarvis();
       const state = this.state();
-      if (found?.[1].cwd && state.folder !== found[1].cwd) this.update({ folder: found[1].cwd });
+      if (usableFolder(found?.[1].cwd) && state.folder !== found?.[1].cwd) {
+        this.update({ folder: found?.[1].cwd });
+      }
       if (state.day === today || now.getHours() < MORNING_HOUR) return;
       if (!found) {
         if (state.auto !== false && state.folder) await this.wake(state.folder, 'manana');

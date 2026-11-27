@@ -192,6 +192,18 @@ export class SupervisorRelay {
     this.tell(id, line);
   }
 
+  /** Queue a line for one supervisor itself (news about no agent of its own:
+   *  a dev server left behind, devServers.ts). */
+  notifySupervisor(supervisorId: number, line: string): void {
+    const lines = this.pending.get(supervisorId);
+    if (lines) {
+      lines.push(line);
+      return;
+    }
+    this.pending.set(supervisorId, [line]);
+    this.schedule(() => this.flush(supervisorId), this.deps.batchMs ?? BATCH_MS);
+  }
+
   /** Queue a line for every supervisor of agent `id`. With `officeOnly`, the
    *  supervisor of everyone (Jarvis) hears it only from agents that run in the
    *  office: a VS Code or desktop-app session is Valentín's own, its turns are

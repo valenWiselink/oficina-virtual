@@ -202,6 +202,22 @@ describe('launchAgent with background sessions', () => {
     expect(spawned[0].args.slice(-2)).toEqual(['attach', '4d1e47e7']);
   });
 
+  it('resumes a failed background session instead of attaching to it (27/11)', async () => {
+    // Its process died (out of memory): `claude attach` would exit 1 at once,
+    // over and over, until the office gave up on it.
+    rows.push({ id: '4d1e47e7', sessionId: SID, kind: 'background', state: 'failed' });
+    const id = await launchAgent(deps(), {
+      resume: { sessionId: SID, cwd, bgId: '4d1e47e7', bgName: 'oficina-jarvis-41f4' },
+    });
+    expect(id).toBe(1);
+    // Bare: Claude Code revives it with the options it saved (the supervisor
+    // files and token it started with); new files would revoke that token.
+    const start = calls.find((c) => c.includes('--bg'))!;
+    expect(start).toEqual(['--resume', SID, '--bg']);
+    expect(spawned[0].args.slice(-2)).toEqual(['attach', '4d1e47e7']);
+    expect(store.get(1)!.sessionId).toBe(SID);
+  });
+
   it('turns a regular session into a background one under the same id', async () => {
     await launchAgent(deps(), { resume: { sessionId: SID, cwd, model: 'sonnet' } });
     const start = calls.find((c) => c.includes('--bg'))!;
