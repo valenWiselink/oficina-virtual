@@ -191,20 +191,21 @@ function AgentRow({ view: v, actions }: { view: AgentView; actions: BoardActions
 }
 
 /**
- * The sessions outside the office that work or need him, folded and closed
- * at first (2026-11-26): «En marcha» is the office's; these only peek in.
+ * The sessions outside the office that work or wait on him where they run,
+ * folded and closed at first (2026-11-26): «En marcha» is the office's; these
+ * only peek in, and never say «te necesita» (2026-11-28).
  */
 function OtherSessions({ views, actions }: { views: AgentView[]; actions: BoardActions }) {
   if (views.length === 0) return null;
-  const needing = views.filter(callsForYou).length;
+  const waiting = views.filter((v) => v.waitsElsewhere).length;
   return (
     <details className="group pt-6">
       <summary className="cursor-pointer text-2xs font-mono uppercase tracking-wider text-text-muted">
         Otras sesiones {views.length}
-        {needing > 0 && (
+        {waiting > 0 && (
           <span className="normal-case tracking-normal font-sans">
             {' · '}
-            {needing === 1 ? '1 te necesita' : `${needing} te necesitan`}
+            {waiting === 1 ? '1 te espera ahí' : `${waiting} te esperan ahí`}
           </span>
         )}
       </summary>

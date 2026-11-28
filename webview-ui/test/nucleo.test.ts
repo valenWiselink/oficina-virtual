@@ -112,8 +112,15 @@ describe('Núcleo: the agents', () => {
       view({ id: 5, kind: 'needs', yourTurnId: 't1' }),
       view({ id: 6, kind: 'done', permission: { requestId: 'r2' } as AgentView['permission'] }),
       view({ id: 7, kind: 'work', lastRecordAt: NOW - OUTSIDE_STILL_MS - MIN }),
+      // Waits on him in the app (never «Te necesita», 2026-11-28): it peeks in.
+      view({
+        id: 8,
+        kind: 'done',
+        statusText: 'Te espera en la app de Claude',
+        waitsElsewhere: true,
+      }),
     ];
-    expect(outsideWorthSeeing(outside, NOW).map((v) => v.id)).toEqual([4, 5, 6]);
+    expect(outsideWorthSeeing(outside, NOW).map((v) => v.id)).toEqual([4, 5, 6, 8]);
   });
 
   it('a new permission or a new first «Te toca» changes what needs him', () => {

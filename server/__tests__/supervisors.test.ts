@@ -15,7 +15,7 @@ import {
 } from '../src/supervisors/supervision.js';
 import { applySupervisionTeam } from '../src/supervisors/supervisionMessages.js';
 import { supervisorMayApprove } from '../src/supervisors/supervisorGuard.js';
-import { relayText, SupervisorRelay } from '../src/supervisors/supervisorRelay.js';
+import { hearsFrom, relayText, SupervisorRelay } from '../src/supervisors/supervisorRelay.js';
 import { SupervisorTools, VALENTIN_DECIDES } from '../src/supervisors/supervisorTools.js';
 import type { AgentState } from '../src/types.js';
 
@@ -340,29 +340,62 @@ describe('SupervisorRelay', () => {
     expect(written.get(11)).toContain('«A2» terminó su turno.');
   });
 
-  it('spares the supervisor of everyone the turns of sessions outside the office', () => {
-    // VS Code and desktop-app sessions: Jarvis got their «terminó su turno»
-    // though Valentín works with them himself (2026-11-16). A team picked by
-    // hand still hears them, and a permission still reaches everyone.
+  it('tells the supervisor of everyone nothing of a session outside the office', () => {
+    // «Optimizar Windows 11…» in the desktop app asked a question; Jarvis got
+    // «[Oficina] … pregunta y espera respuesta» and brought it to Valentín as
+    // «Te toca» while he was answering it in the app (2026-11-28). #42 had
+    // spared only its turns. A team picked by hand still hears all of it.
     const { store, r, run, written } = relay();
     const outside = store.get(1)!;
     outside.officeTerminal = false;
-    outside.lastReply = 'Listo en VS Code.';
-    r.observe({ type: 'agentStatus', id: 1, status: 'active' });
-    r.observe({ type: 'agentStatus', id: 1, status: 'waiting' });
-    run();
-    run();
-    expect(written.get(11)).toBeUndefined();
-    expect(written.get(10)).toContain('«A1» terminó su turno.');
+    outside.lastReply = 'Listo en la app.';
+    r.observeHook({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'AskUserQuestion',
+      session_id: 's1',
+      tool_input: { questions: [{ question: '¿Desactivo la hibernación?' }] },
+    });
+    r.observe({ type: 'agentToolStart', id: 1, toolName: 'AskUserQuestion' });
     r.observe({
       type: 'permissionPending',
       id: 1,
       requestId: 'p-9',
       toolName: 'Bash',
-      toolInput: { command: 'git push' },
+      toolInput: { command: 'powercfg /h off' },
     });
+    r.observe({ type: 'agentStatus', id: 1, status: 'active' });
+    r.observe({ type: 'agentStatus', id: 1, status: 'waiting' });
     run();
-    expect(written.get(11)).toContain('«A1» pide permiso p-9');
+    run();
+    expect(written.get(11)).toBeUndefined();
+    const toJefa = written.get(10) ?? '';
+    expect(toJefa).toContain('«A1» pregunta y espera respuesta:\r¿Desactivo la hibernación?');
+    expect(toJefa).toContain('«A1» pide permiso p-9');
+    expect(toJefa).toContain('«A1» terminó su turno.');
+  });
+
+  it('a question with no hook behind it from outside does not reach Jarvis either', () => {
+    const { store, r, run, written } = relay();
+    store.get(2)!.officeTerminal = false;
+    r.observe({ type: 'agentToolStart', id: 2, toolName: 'AskUserQuestion' });
+    run();
+    expect(written.get(11)).toBeUndefined();
+    // The same question from an office agent does.
+    r.observe({ type: 'agentToolStart', id: 3, toolName: 'AskUserQuestion' });
+    run();
+    expect(written.get(11)).toContain('«Pagos» hace una pregunta con opciones');
+  });
+
+  it('hearsFrom: only the supervisor of everyone skips the sessions outside', () => {
+    const { store } = office(dir);
+    const inside = store.get(1)!;
+    const outside = { ...inside, officeTerminal: false };
+    const jarvis = store.get(11);
+    const byHand = store.get(10);
+    expect(hearsFrom(jarvis, inside)).toBe(true);
+    expect(hearsFrom(jarvis, outside)).toBe(false);
+    expect(hearsFrom(jarvis, { ...inside, officeTerminal: undefined })).toBe(false);
+    expect(hearsFrom(byHand, outside)).toBe(true);
   });
 
   it('leaves a teammate to its lead: it shares the session but is not an agent', () => {

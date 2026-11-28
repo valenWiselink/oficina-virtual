@@ -40,13 +40,15 @@ export const OUTSIDE_STILL_MS = 30 * MIN;
 
 /**
  * The sessions outside the office (VS Code, the desktop app) worth a look in
- * Núcleo's folded «Otras sesiones»: the ones that need Valentín (a permission,
- * a «Te toca») or really work. Finished ones and the ones Jarvis attends stay
+ * Núcleo's folded «Otras sesiones»: the ones that wait on Valentín where they
+ * run (a permission, a question, a «Te toca»: `waitsElsewhere`, never «Te
+ * necesita») or really work. Finished ones and the ones Jarvis attends stay
  * out: they filled «En marcha» and its count (2026-11-26).
  */
 export function outsideWorthSeeing(outside: readonly AgentView[], now: number): AgentView[] {
   return outside.filter(
     (v) =>
+      v.waitsElsewhere ||
       callsForYou(v) ||
       (isWorking(v) && (v.lastRecordAt === undefined || now - v.lastRecordAt < OUTSIDE_STILL_MS)),
   );

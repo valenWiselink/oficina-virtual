@@ -302,8 +302,10 @@ export class JarvisTools extends SupervisorTools {
     this.jarvis.store.broadcast(identityMessage(this.supervisorId, me));
   }
 
+  /** Information only: Valentín answers them where they run, so their
+   *  questions and permissions are nothing to bring him (2026-11-28). */
   protected override outsideNote(): string {
-    return 'No corren en la oficina (VS Code, la app de escritorio): escribiles con SendMessage';
+    return 'No corren en la oficina (VS Code, la app de escritorio): Valentín los atiende ahí, no le pases sus preguntas ni permisos; escribiles con SendMessage';
   }
 
   protected override noTerminal(name: string): string {

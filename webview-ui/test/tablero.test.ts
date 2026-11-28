@@ -31,7 +31,9 @@ function finished(identity: Partial<AgentIdentity>, done: string[] = []): AgentV
     subagentTools: {},
     permissions: [],
     terminalAgentIds: [1],
-    identity: () => ({ type: 'agentIdentity', id: 1, tasks: [], ...identity }) as AgentIdentity,
+    // An office agent (a session from outside never waits on you here).
+    identity: () =>
+      ({ type: 'agentIdentity', id: 1, tasks: [], canSetRun: true, ...identity }) as AgentIdentity,
     finished: () => true,
     yourTurnDone: (t) => done.includes(t),
     inTurn: () => false,

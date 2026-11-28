@@ -6,6 +6,7 @@ import type {
   SupervisionScope,
 } from '../../../core/src/messages.js';
 import { statusText } from '../identity/statusText.js';
+import { outsideNeverNeeds } from './outsideWaits.js';
 import type { Spend } from './usageText.js';
 
 /** What an agent is doing, as the views show it. */
@@ -146,6 +147,9 @@ export interface AgentView {
   /** "Te necesita" only: it blocks the agent (permission or question), as
    *  opposed to something left for you at the end of a turn. */
   blocking?: boolean;
+  /** A session outside the office waiting on Valentín where it runs (the
+   *  desktop app, VS Code): shown as information, never in "Te necesita". */
+  waitsElsewhere?: boolean;
 }
 
 /** Minimal per-character facts the views need (OfficeState's Character). */
@@ -487,7 +491,10 @@ export function buildAgentViews(input: ViewInputs): AgentView[] {
       },
     ];
   });
-  return withSupervisionNames(views);
+  // Known to run outside the office (its identity came, with no office
+  // terminal): it never waits on you here. Before the identity arrives an
+  // office agent is not taken for one from outside.
+  return withSupervisionNames(views.map((v) => (input.identity(v.id) ? outsideNeverNeeds(v) : v)));
 }
 
 /** Who watches over each agent, by name, how many each supervisor has, and

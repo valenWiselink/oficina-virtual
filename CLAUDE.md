@@ -106,8 +106,8 @@ The pre-push hook only checks that `messages.ts` matches `asyncapi.yaml`.
   Ajustes can append/take back the exact block in the global CLAUDE.md.
 - `supervisors/` — supervisor agents: `supervision.ts` (who watches whom,
   launch files), `supervisorRelay.ts` (what reaches them as `[Oficina]`
-  messages; Jarvis hears no «terminó su turno» from sessions outside the
-  office, only their permissions and questions), `supervisorMcp.ts` + `supervisorTools.ts` (their tools at
+  messages; `hearsFrom`: Jarvis hears nothing — no permission, question nor
+  end of turn — from sessions outside the office), `supervisorMcp.ts` + `supervisorTools.ts` (their tools at
   `POST /mcp`, one token each), `supervisorGuard.ts` (what they may approve;
   an `askable` refusal — external tool not on production nor deleting, a
   write outside the folder, an unknown tool — Jarvis may approve on Valentín's
@@ -278,7 +278,9 @@ webview's `OfficeState` (office/engine) is kept as the character registry
   office (`views/inOffice.ts`: `inOfficeOnly` by `canSetRun`,
   `showsOfficeOnly` for the workspace tabs' counts); VS Code and
   desktop-app sessions stay on the board, and Jarvis's `equipo` lists them
-  apart («No corren en la oficina»).
+  apart («No corren en la oficina»). One of them that waits on Valentín
+  (permission, question, «Te toca:») never goes to «Te necesita»
+  (`views/outsideWaits.ts`): «Terminó», «Te espera en la app de Claude».
 - `components/TerminalDrawer.tsx` and friends — the docked panel: agent tabs,
   per-pane header, Chat | Terminal, split with a pinned agent, search.
 - `chat/` — chat view of a transcript; sending pastes into the agent's PTY.

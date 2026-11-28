@@ -8,6 +8,7 @@ import {
   type ViewInputs,
   withSupervisionNames,
 } from '../src/views/agentViews.js';
+import { callsForYou } from '../src/views/controlRules.js';
 
 const ch = (over: Partial<CharacterFacts> = {}): CharacterFacts => ({
   palette: 1,
@@ -177,6 +178,7 @@ describe('buildAgentViews', () => {
         tasks: [],
         yourTurn: 'revisar el PR #77 (webapp)',
         yourTurnId: 'u1',
+        canSetRun: true,
       }) as AgentIdentity;
     expect(one({ identity, finished: () => true })).toMatchObject({
       kind: 'needs',
@@ -189,6 +191,81 @@ describe('buildAgentViews', () => {
     expect(
       one({ identity, finished: () => true, yourTurnDone: (id) => id === 'u1' }),
     ).toMatchObject({ kind: 'done', yourTurnId: undefined });
+  });
+
+  describe('a session outside the office never goes to «Te necesita»', () => {
+    // «Optimizar Windows 11…» asked in the desktop app and reached Valentín
+    // as «Te toca» while he was answering it there (2026-11-28).
+    const outside =
+      (over: Partial<AgentIdentity> = {}) =>
+      (): AgentIdentity =>
+        ({
+          type: 'agentIdentity',
+          id: 1,
+          tasks: [],
+          entrypoint: 'claude-desktop',
+          ...over,
+        }) as AgentIdentity;
+    const permission = { id: 1, requestId: 'p-1', toolName: 'Bash' } as PermissionPending;
+
+    it.each([
+      ['a permission', { identity: outside(), permissions: [permission] }],
+      [
+        'a question',
+        {
+          identity: outside(),
+          agentTools: { 1: [{ status: 'Waiting for your answer', done: false }] },
+        },
+      ],
+      [
+        'a «Te toca:»',
+        {
+          identity: outside({ yourTurn: 'elegir el plan de energía', yourTurnId: 'u9' }),
+          finished: () => true,
+        },
+      ],
+      [
+        'a permission only its terminal can answer',
+        { identity: outside(), askingPermission: () => true },
+      ],
+    ] as Array<[string, Partial<ViewInputs>]>)('%s waits there, as information', (_, over) => {
+      const view = one(over);
+      expect(view).toMatchObject({
+        kind: 'done',
+        statusText: 'Te espera en la app de Claude',
+        waitsElsewhere: true,
+        permission: undefined,
+        yourTurnId: undefined,
+        blocking: undefined,
+      });
+      expect(callsForYou(view)).toBe(false);
+    });
+
+    it('from VS Code it says it waits outside; Jarvis does not «attend» it', () => {
+      const view = withSupervisionNames([
+        {
+          ...one({ identity: outside({ entrypoint: 'claude-vscode' }), permissions: [permission] }),
+          supervisedBy: [10],
+        },
+        { ...one({}), id: 10, name: 'Jarvis', supervision: { kind: 'all' } },
+      ])[0];
+      expect(view).toMatchObject({ kind: 'done', statusText: 'Te espera afuera' });
+      expect(view.askingSupervisor).toBeUndefined();
+    });
+
+    it('an office agent still needs you, and so does one whose identity has not come', () => {
+      expect(one({ identity: outside({ canSetRun: true }), permissions: [permission] }).kind).toBe(
+        'needs',
+      );
+      expect(one({ permissions: [permission] }).kind).toBe('needs');
+    });
+
+    it('working or finished outside, nothing changes', () => {
+      expect(one({ identity: outside(), inTurn: () => true }).kind).toBe('think');
+      const done = one({ identity: outside(), finished: () => true });
+      expect(done).toMatchObject({ kind: 'done' });
+      expect(done.waitsElsewhere).toBeUndefined();
+    });
   });
 
   it('names it by nickname, then title, then folder; folder shown only if different', () => {
