@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 
 import { NucleoView } from '../src/nucleo/NucleoView.tsx';
 import type { AgentView } from '../src/views/agentViews.ts';
+import { outsideNeverNeeds } from '../src/views/outsideWaits.ts';
 
 const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 env.IS_REACT_ACT_ENVIRONMENT = true;
@@ -67,21 +68,26 @@ const attended = agent(6, 'Programas para ver fotos Nikon', {
   hasTerminal: false,
   askingSupervisor: { id: 1, name: 'Jarvis' },
 });
-/** A VS Code session holding a permission: answered in VS Code, not here. */
-const asking = agent(5, 'permiso-vscode', {
-  kind: 'needs',
-  statusText: 'Espera permiso',
-  canSetRun: false,
-  hasTerminal: false,
-  permission: {
-    type: 'permissionPending',
-    requestId: 'r5',
-    id: 5,
-    toolName: 'Bash',
-    toolInput: {},
-    createdAt: 0,
-  },
-});
+/**
+ * A VS Code session holding a permission: answered in VS Code, not here. What
+ * App hands Núcleo has been through `outsideNeverNeeds` (2026-11-28).
+ */
+const asking = outsideNeverNeeds(
+  agent(5, 'permiso-vscode', {
+    kind: 'needs',
+    statusText: 'Espera permiso',
+    canSetRun: false,
+    hasTerminal: false,
+    permission: {
+      type: 'permissionPending',
+      requestId: 'r5',
+      id: 5,
+      toolName: 'Bash',
+      toolInput: {},
+      createdAt: 0,
+    },
+  }),
+);
 
 let root: Root;
 let host: HTMLElement;
@@ -144,7 +150,7 @@ describe('Núcleo shows only the agents that run in the office', () => {
     assert.equal(others.open, false);
     assert.match(
       others.querySelector('summary')?.textContent ?? '',
-      /Otras sesiones 2 · 1 te necesita/,
+      /Otras sesiones 2 · 1 te espera ahí/,
     );
     const inside = [...others.querySelectorAll('li')].map((li) => li.textContent ?? '');
     assert.equal(inside.length, 2);
