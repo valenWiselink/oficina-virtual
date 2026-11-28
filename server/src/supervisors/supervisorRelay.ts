@@ -3,13 +3,27 @@
  * is waiting for, a question with options, and the end of a turn (with what
  * the agent said). The office writes it into the supervisor's own terminal as
  * a message that starts with "[Oficina]"; whatever lands within a few seconds
- * goes in one message, so a busy team does not flood it.
+ * goes in one message, so a busy team does not flood it. Jarvis hears none of
+ * it from a session that runs outside the office (`hearsFrom`).
  */
 
 import { spokenName } from '../agentIdentity.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { sendToTerminal } from '../terminal/handOff.js';
+import type { AgentState } from '../types.js';
 import type { SupervisorRegistry } from './supervision.js';
+
+/**
+ * Whether a supervisor hears the news of `agent`. The supervisor of everyone
+ * (Jarvis) hears nothing from a session outside the office (VS Code, the
+ * desktop app): no permission, no question, no end of turn. Valentín works
+ * with those where they run; Jarvis brought him as «Te toca» a question he
+ * was already answering in the app (2026-11-28; #42 had only spared the
+ * turns). A team picked by hand still hears everyone on it.
+ */
+export function hearsFrom(supervisor: AgentState | undefined, agent: AgentState): boolean {
+  return agent.officeTerminal === true || supervisor?.supervision?.kind !== 'all';
+}
 
 /** Longest piece of an answer forwarded; the supervisor can ask for the rest. */
 export const REPLY_CLIP = 1200;
@@ -177,13 +191,10 @@ export class SupervisorRelay {
     // a row, 2026-10-20.
     if (reply && this.replyTold.get(id) === reply) return;
     if (reply) this.replyTold.set(id, reply);
-    this.tell(
-      id,
-      (name) =>
-        reply
-          ? `«${name}» terminó su turno. Lo último que dijo:\n${clip(reply, REPLY_CLIP)}`
-          : `«${name}» terminó su turno.`,
-      { officeOnly: true },
+    this.tell(id, (name) =>
+      reply
+        ? `«${name}» terminó su turno. Lo último que dijo:\n${clip(reply, REPLY_CLIP)}`
+        : `«${name}» terminó su turno.`,
     );
   }
 
@@ -204,15 +215,8 @@ export class SupervisorRelay {
     this.schedule(() => this.flush(supervisorId), this.deps.batchMs ?? BATCH_MS);
   }
 
-  /** Queue a line for every supervisor of agent `id`. With `officeOnly`, the
-   *  supervisor of everyone (Jarvis) hears it only from agents that run in the
-   *  office: a VS Code or desktop-app session is Valentín's own, its turns are
-   *  no news to pass on (2026-11-16). A team picked by hand still hears them. */
-  private tell(
-    id: number,
-    line: (name: string) => string,
-    { officeOnly = false }: { officeOnly?: boolean } = {},
-  ): void {
+  /** Queue a line for every supervisor of agent `id` that hears it (`hearsFrom`). */
+  private tell(id: number, line: (name: string) => string): void {
     const agent = this.deps.store.get(id);
     // A teammate or sub-agent shares its lead's session, so it would reach the
     // lead's supervisors as an agent of their own: its turns are its lead's
@@ -221,7 +225,7 @@ export class SupervisorRelay {
     if (!agent || agent.leadAgentId !== undefined || agent.spawnToolUseId) return;
     const name = spokenName(agent);
     for (const supervisorId of this.deps.registry.supervisorsOf(agent.sessionId)) {
-      if (officeOnly && !agent.officeTerminal && this.isOfEveryone(supervisorId)) continue;
+      if (!hearsFrom(this.deps.store.get(supervisorId), agent)) continue;
       const lines = this.pending.get(supervisorId);
       if (lines) {
         lines.push(line(name));
@@ -230,10 +234,6 @@ export class SupervisorRelay {
       this.pending.set(supervisorId, [line(name)]);
       this.schedule(() => this.flush(supervisorId), this.deps.batchMs ?? BATCH_MS);
     }
-  }
-
-  private isOfEveryone(supervisorId: number): boolean {
-    return this.deps.store.get(supervisorId)?.supervision?.kind === 'all';
   }
 
   private flush(supervisorId: number): void {

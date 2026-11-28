@@ -395,11 +395,14 @@ describe('JarvisTools', () => {
     expect(t.escribirAAgente('Pagos', 'seguí')).toContain('Listo');
     expect(notebook.read()).toContain('Le escribí a «Pagos»: seguí');
     expect(t.escribirAAgente('Vscode', 'hola')).toContain('SendMessage');
-    // Listed apart, after the ones in the office: Jarvis can still write to it.
+    // Listed apart, after the ones in the office, as information: Jarvis can
+    // still write to it, but its asks are not his to bring Valentín.
     const [inside, outside] = t.equipo().split('No corren en la oficina');
     expect(inside).toContain('«Pagos» (id 4)');
     expect(inside).not.toContain('Vscode');
-    expect(outside).toMatch(/^ \(VS Code, la app de escritorio\): escribiles con SendMessage:/);
+    expect(outside).toMatch(
+      /^ \(VS Code, la app de escritorio\): Valentín los atiende ahí, no le pases sus preguntas ni permisos; escribiles con SendMessage:/,
+    );
     expect(outside).toContain('«Vscode» (id 3) · sin tarea');
     expect(outside).not.toContain('Pagos');
     expect(t.anotar('Valentín decide el merge')).toBe('Anotado.');
